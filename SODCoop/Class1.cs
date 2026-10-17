@@ -10,13 +10,14 @@ using HarmonyLib;
 using LiteNetLib;
 using LiteNetLib.Utils;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
+using Il2CppInterop.Runtime.Injection;
 using UnityEngine;
 
 namespace SodCoop
 {
     public enum NetMode { Off, Host, Client }
 
-    [BepInPlugin("com.yourname.sodcoop", "SodCoop", "0.9.21")]
+    [BepInPlugin("com.yourname.sodcoop", "SodCoop", "0.9.24")]
     public class Plugin : BasePlugin
     {
         internal static ManualLogSource L;
@@ -83,6 +84,7 @@ namespace SodCoop
         internal static ConfigEntry<bool> CfgPuppetLog;
         internal static ConfigEntry<bool> CfgNoFriendlyFire;
         internal static ConfigEntry<bool> CfgPvp;
+        internal static ConfigEntry<string> CfgProbeKey;
         internal static ConfigEntry<float> CfgSeatRadius;
         internal static ConfigEntry<bool> CfgNpcHitHostAttacker;
         internal static ConfigEntry<bool> CfgSeedLook;
@@ -268,6 +270,14 @@ namespace SodCoop
             CfgDumpCitizen = Config.Bind("Debug", "DumpCitizen", false,
                 "Test: log the animator parameters of some NPCs once after the world is loaded");
 
+            try
+            {
+                ClassInjector.RegisterTypeInIl2Cpp<SodCoopDriver>();
+                AddComponent<SodCoopDriver>();
+                L.LogInfo("[DRV] драйвер меню/игры запущен");
+            }
+            catch (Exception e) { L.LogWarning("[DRV] не удалось запустить драйвер: " + e.Message); }
+            CfgProbeKey = Config.Bind("Debug", "ProbeKey", "F4", "Клавиша разведки для редактора персонажа (имя из UnityEngine.KeyCode, например F4, Backslash, Keypad0)");
             Harmony.CreateAndPatchAll(typeof(PlayerPatch));
             Harmony.CreateAndPatchAll(typeof(MeleePatch));
             Harmony.CreateAndPatchAll(typeof(BlockPatch));
@@ -1112,6 +1122,168 @@ namespace SodCoop
             {
                 Plugin.L.LogError($"[ANIM] {label}: {e}");
             }
+        }
+    }
+
+
+    // ---- Разведка для редактора персонажа: Insert в меню или в игре пишет BepInEx\SodCoop_probe.txt ----
+    // Живёт и в меню, и в игре (Harmony-патчи на Update меню не срабатывают от движка)
+    public class SodCoopDriver : MonoBehaviour
+    {
+        public SodCoopDriver(IntPtr ptr) : base(ptr) { }
+        float nextLog; bool alive; KeyCode key = KeyCode.F4; bool keyParsed;
+        public void Update()
+        {
+            try
+            {
+                if (!alive) { alive = true; Plugin.L.LogInfo("[DRV] Update работает"); }
+                if (!keyParsed)
+                {
+                    keyParsed = true;
+                    KeyCode k; if (Enum.TryParse<KeyCode>(Plugin.CfgProbeKey.Value ?? "F4", true, out k)) key = k;
+                    Plugin.L.LogInfo("[DRV] клавиша разведки: " + key);
+                }
+                if (Net.KeyDown(key))
+                {
+                    Plugin.L.LogInfo("[DRV] клавиша нажата, запускаю разведку");
+                    var mm = MainMenuController.Instance;
+                    bool menu = false;
+                    try { menu = mm != null && mm.mainMenuActive; } catch (Exception) { }
+                    Probe.Run(menu ? "главное меню" : "игра");
+                }
+            }
+            catch (Exception e)
+            {
+                if (Time.realtimeSinceStartup > nextLog) { nextLog = Time.realtimeSinceStartup + 30f; Plugin.L.LogWarning("[DRV] " + e); }
+            }
+        }
+    }
+
+    internal static class Probe
+    {
+        static string PathOf(Transform t)
+        {
+            string p = t.name;
+            for (int i = 0; i < 8 && t.parent != null; i++) { t = t.parent; p = t.name + "/" + p; }
+            return p;
+        }
+
+        static string Join<T>(Il2CppSystem.Collections.Generic.List<T> l)
+        {
+            if (l == null) return "-";
+            var sb = new StringBuilder();
+            for (int i = 0; i < l.Count; i++) { if (i > 0) sb.Append(','); sb.Append(l[i].ToString()); }
+            return sb.ToString();
+        }
+
+        internal static void Run(string where)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("=== PROBE " + where + " ===");
+            try
+            {
+                var mm = MainMenuController.Instance;
+                if (mm != null)
+                {
+                    sb.AppendLine("[MENU] mainMenuActive=" + mm.mainMenuActive + " container=" + (mm.mainMenuContainer != null ? PathOf(mm.mainMenuContainer) : "null"));
+                    try { sb.AppendLine("[MENU] components=" + mm.components.Count); } catch (Exception) { }
+                    var bs = mm.GetComponentsInChildren<ButtonController>(true);
+                    for (int i = 0; i < bs.Length && i < 80; i++)
+                    {
+                        var b = bs[i]; if (b == null) continue;
+                        string txt = ""; try { txt = b.text != null ? b.text.text : ""; } catch (Exception) { }
+                        string dict = ""; try { dict = b.textDictionary + "/" + b.textReference + " auto=" + b.useAutomaticText; } catch (Exception) { }
+                        var rt = b.transform as RectTransform;
+                        string rs = rt != null ? ("pos=" + rt.anchoredPosition + " size=" + rt.sizeDelta + " anchors=" + rt.anchorMin + "-" + rt.anchorMax) : "";
+                        sb.AppendLine("[BTN] " + PathOf(b.transform) + " | text='" + txt + "' | " + dict + " | active=" + b.gameObject.activeInHierarchy + " | " + rs);
+                    }
+                    try
+                    {
+                        var cs = mm.components;
+                        for (int i = 0; i < cs.Count; i++) { var c = cs[i]; if (c != null) sb.AppendLine("[COMP] " + c.component + " rect=" + (c.rect != null ? PathOf(c.rect) : "null")); }
+                    }
+                    catch (Exception e) { sb.AppendLine("[COMP] ошибка: " + e.Message); }
+                }
+                else sb.AppendLine("[MENU] MainMenuController.Instance = null");
+            }
+            catch (Exception e) { sb.AppendLine("[MENU] ошибка: " + e); }
+
+            try
+            {
+                var all = Toolbox.Instance.allClothes;
+                sb.AppendLine("[CLOTHES] allClothes=" + (all != null ? all.Count : -1));
+                for (int i = 0; all != null && i < all.Count; i++)
+                {
+                    var c = all[i]; if (c == null) continue;
+                    sb.AppendLine("[CL] " + c.name + " | cat=" + Join(c.outfitCategories) + " | gender=" + Join(c.suitableForGenders) + " | build=" + Join(c.suitableForBuilds) + " | covers=" + Join(c.covers) + " | head=" + c.isHead + " | models=" + (c.models != null ? c.models.Count : -1) + " | tags=" + Join(c.tags) + " | hair=" + Join(c.suitableForHairstyle) + " | chance=" + c.baseChance);
+                }
+            }
+            catch (Exception e) { sb.AppendLine("[CLOTHES] ошибка: " + e); }
+
+            try
+            {
+                var go = PrefabControls.Instance.citizen;
+                sb.AppendLine("[PREFAB] citizen=" + (go != null ? go.name : "null"));
+                if (go != null)
+                {
+                    var comps = go.GetComponents<Component>();
+                    for (int i = 0; i < comps.Length; i++) sb.AppendLine("[PREFAB]   root: " + comps[i]);
+                    sb.AppendLine("[PREFAB] outfitCtrl in children=" + (go.GetComponentInChildren<CitizenOutfitController>(true) != null) + " animator=" + (go.GetComponentInChildren<Animator>(true) != null) + " citizen=" + (go.GetComponent<Citizen>() != null));
+                    var h = new GameObject("SodCoop_ProbeHolder"); h.SetActive(false);
+                    try
+                    {
+                        var inst = UnityEngine.Object.Instantiate<GameObject>(go, h.transform);
+                        var oc = inst.GetComponentInChildren<CitizenOutfitController>(true);
+                        sb.AppendLine("[PREFAB] инстанс создан без города: outfitCtrl=" + (oc != null) + (oc != null ? (" human=" + (oc.human != null) + " anchors=" + oc.anchorConfig.Count) : "") + " renderers=" + inst.GetComponentsInChildren<Renderer>(true).Length);
+                        var anim = inst.GetComponentInChildren<Animator>(true);
+                        if (anim != null) sb.AppendLine("[PREFAB] animator controller=" + (anim.runtimeAnimatorController != null ? anim.runtimeAnimatorController.name : "null"));
+                    }
+                    catch (Exception e) { sb.AppendLine("[PREFAB] инстанс не удался: " + e.Message); }
+                    UnityEngine.Object.Destroy(h);
+                }
+            }
+            catch (Exception e) { sb.AppendLine("[PREFAB] ошибка: " + e); }
+
+            try
+            {
+                var city = CityData.Instance;
+                if (city != null && city.citizenDirectory != null && city.citizenDirectory.Count > 0)
+                {
+                    Citizen cit = null;
+                    for (int i = 0; i < city.citizenDirectory.Count; i++) { var c = city.citizenDirectory[i]; if (c != null && c.outfitController != null && c.descriptors != null) { cit = c; break; } }
+                    if (cit != null)
+                    {
+                        var d = cit.descriptors;
+                        sb.AppendLine("[CIT] " + cit.citizenName + " gender=" + cit.gender + " genderScale=" + cit.genderScale + " build=" + d.build + " height=" + d.height + " heightCM=" + d.heightCM + " skin=" + d.skinColour + " hairStyle=" + d.hairType + " hairCat=" + d.hairColourCategory + " hairCol=" + d.hairColour + " eyes=" + d.eyeColour + " footwear=" + d.footwear + " facial=" + (d.facialFeatures != null ? d.facialFeatures.Count : -1));
+                        var oc = cit.outfitController;
+                        sb.AppendLine("[CIT] currentOutfit=" + oc.currentOutfit + " loaded=" + oc.loadedOutfit + " outfits=" + oc.outfits.Count + " hair=" + (oc.currentHair != null ? oc.currentHair.name : "-") + " hat=" + (oc.currentHat != null ? oc.currentHat.name : "-"));
+                        for (int i = 0; i < oc.outfits.Count; i++)
+                        {
+                            var o = oc.outfits[i]; if (o == null) continue;
+                            var line = new StringBuilder("[OUTFIT] " + o.category + ": ");
+                            for (int k = 0; k < o.clothes.Count; k++) { var oc2 = o.clothes[k]; line.Append(oc2.clothes).Append(" base=").Append(oc2.baseColor).Append(" c1=").Append(oc2.color1).Append("; "); }
+                            sb.AppendLine(line.ToString());
+                        }
+                    }
+                }
+                else sb.AppendLine("[CIT] города нет (это меню) - горожан не смотрю");
+            }
+            catch (Exception e) { sb.AppendLine("[CIT] ошибка: " + e); }
+
+            try
+            {
+                var pl = Player.Instance;
+                if (pl != null) sb.AppendLine("[PLAYER] gender=" + pl.gender + " descriptors=" + (pl.descriptors != null) + " outfitController=" + (pl.outfitController != null));
+            }
+            catch (Exception) { }
+
+            try
+            {
+                string path = System.IO.Path.Combine(BepInEx.Paths.BepInExRootPath, "SodCoop_probe_" + (where.StartsWith("гл") ? "menu" : "game") + ".txt");
+                System.IO.File.WriteAllText(path, sb.ToString());
+                Plugin.L.LogInfo("[PROBE] записано: " + path);
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[PROBE] запись: " + e.Message); }
         }
     }
 
@@ -2193,7 +2365,7 @@ namespace SodCoop
         static System.Reflection.MethodInfo keyDownMethod;
 
         // UnityEngine.Input через рефлексию, чтобы не требовать ссылку на InputLegacyModule
-        static bool KeyDown(KeyCode k)
+        internal static bool KeyDown(KeyCode k)
         {
             if (keyDownMethod == null)
             {
