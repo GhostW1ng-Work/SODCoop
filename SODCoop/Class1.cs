@@ -20,7 +20,7 @@ namespace SodCoop
 {
     public enum NetMode { Off, Host, Client }
 
-    [BepInPlugin("com.yourname.sodcoop", "SodCoop", "0.9.55")]
+    [BepInPlugin("com.yourname.sodcoop", "SodCoop", "0.9.56")]
     public class Plugin : BasePlugin
     {
         internal static ManualLogSource L;
@@ -2269,7 +2269,7 @@ namespace SodCoop
     {
         public SodCoopDriver(IntPtr ptr) : base(ptr) { }
         float nextLog; bool alive; KeyCode key = KeyCode.F4; bool keyParsed;
-        public void OnGUI() { CharEditor.OnGui(); NetMenu.OnGui(); }
+        public void OnGUI() { CharEditor.OnGui(); NetMenu.OnGui(); Net.DrawHud(); }
         public void Update()
         {
             try
@@ -2278,6 +2278,7 @@ namespace SodCoop
                 Lan.Tick();
                 Net.Poll();
                 MenuAuto.Tick();
+                if (Net.Started && Net.KeyDown(KeyCode.F9)) Net.LeaveSession();
                 if (!alive) { alive = true; Plugin.L.LogInfo("[DRV] Update работает"); }
                 if (!keyParsed)
                 {
@@ -2809,8 +2810,78 @@ namespace SodCoop
         internal static string SeedInfo() { try { return "" + CityData.Instance.seed; } catch (Exception) { return ""; } }
         internal static string BuildInfo() { try { return "" + Game.Instance.buildID; } catch (Exception) { return ""; } }
 
+        // ---- уведомления, отключение и переподключение ----
+        static readonly List<KeyValuePair<string, float>> toasts = new List<KeyValuePair<string, float>>();
+        static NetPeer gamePeer;                 // хост: подключённый игрок
+        static float lostAt = -1f;               // клиент: когда потеряна связь с хостом (-1 = связь есть/не терялась)
+        static bool everConnected;               // клиент: уже был в игре на этом сервере
+        static GUIStyle hudStyle, hudShadow;
+
+        internal static void Toast(string text)
+        {
+            try { toasts.Add(new KeyValuePair<string, float>(text, Time.realtimeSinceStartup + 6f)); while (toasts.Count > 4) toasts.RemoveAt(0); } catch (Exception) { }
+            Plugin.L.LogInfo("[HUD] " + text);
+        }
+
+        static bool InMainMenu() { try { var mm = MainMenuController.Instance; return mm != null && mm.mainMenuActive; } catch (Exception) { return false; } }
+
+        internal static void DrawHud()
+        {
+            try
+            {
+                if (manager == null || RtMode == NetMode.Off || xferMode || InMainMenu()) return;
+                if (hudStyle == null)
+                {
+                    hudStyle = new GUIStyle(GUI.skin.label) { fontSize = 18, alignment = TextAnchor.UpperLeft };
+                    hudStyle.normal.textColor = new Color(1f, 0.92f, 0.92f, 1f);
+                    hudShadow = new GUIStyle(hudStyle); hudShadow.normal.textColor = new Color(0f, 0f, 0f, 0.9f);
+                }
+                float sc = Screen.height / 1080f;
+                var old = GUI.matrix; GUI.matrix = Matrix4x4.Scale(new Vector3(sc, sc, 1f));
+                string st = StatusLine();
+                if (st != "")
+                {
+                    GUI.Label(new Rect(21f, 11f, 1400f, 30f), st, hudShadow);
+                    GUI.Label(new Rect(20f, 10f, 1400f, 30f), st, hudStyle);
+                }
+                float now = Time.realtimeSinceStartup; float y = 44f;
+                for (int i = toasts.Count - 1; i >= 0; i--) if (toasts[i].Value < now) toasts.RemoveAt(i);
+                foreach (var t in toasts)
+                {
+                    GUI.Label(new Rect(21f, y + 1f, 1400f, 30f), t.Key, hudShadow);
+                    GUI.Label(new Rect(20f, y, 1400f, 30f), t.Key, hudStyle); y += 28f;
+                }
+                GUI.matrix = old;
+            }
+            catch (Exception) { }
+        }
+
+        // клиент потерял хоста: возвращаем горожанам их собственный ИИ, чтобы игра не стояла
+        static void ClientReleaseWorld()
+        {
+            try { npcTargets.Clear(); } catch (Exception) { }
+            if (npcClientPaused)
+            {
+                try { Game.Instance.SetPauseAI(false); } catch (Exception) { }
+                npcClientPaused = false;
+                Plugin.L.LogInfo("[NPC] клиент: связь с хостом потеряна, ИИ горожан снова включён");
+            }
+        }
+
+        // F9: выйти из мультиплеера (хост закрывает сервер, клиент перестаёт переподключаться)
+        internal static void LeaveSession()
+        {
+            bool wasClient = RtMode == NetMode.Client;
+            Plugin.L.LogInfo("[NET] F9: выход из мультиплеера");
+            ApplyOff();
+            if (wasClient) ClientReleaseWorld();
+            gamePeer = null; lostAt = -1f; everConnected = false;
+            Toast("Multiplayer is off. Use the MULTIPLAYER button in the main menu to start again.");
+        }
+
         internal static void Shutdown()
         {
+            gamePeer = null; lostAt = -1f; everConnected = false;
             try { Lan.StopAdvertise(); } catch (Exception) { }
             try { if (manager != null) manager.Stop(); } catch (Exception) { }
             manager = null; listener = null; serverPeer = null; connecting = false; connectRejected = false; Started = false;
@@ -2843,9 +2914,10 @@ namespace SodCoop
             if (MenuAuto.Notice != "") return MenuAuto.Notice;
             if (RtMode == NetMode.Off) return "";
             if (RtMode == NetMode.Host && sendStage != 0) return "HOSTING: sending the save to a player...";
-            if (RtMode == NetMode.Host) return (manager != null ? "HOSTING" : "HOST (starts when the city has loaded)") + ": " + RtName + " : " + RtPort;
+            if (RtMode == NetMode.Host) return (manager != null ? "HOSTING" : "HOST (starts when the city has loaded)") + ": " + RtName + " : " + RtPort + (manager != null ? (gamePeer != null ? "   [2/2 players]" : "   [1/2 players, waiting]") + "   (F9 = stop)" : "");
             if (connectRejected) return "REJECTED by " + RtAddress + ":" + RtPort + " (wrong password?)";
-            if (serverPeer != null) return "CONNECTED to " + RtAddress + ":" + RtPort;
+            if (serverPeer != null) return "CONNECTED to " + RtAddress + ":" + RtPort + "   (F9 = leave multiplayer)";
+            if (lostAt >= 0f && manager != null) return "CONNECTION LOST, reconnecting to " + RtAddress + ":" + RtPort + " ...   (F9 = leave multiplayer)";
             return (manager != null ? "CONNECTING" : "CLIENT (connects when the city has loaded; load the same save as the host)") + ": " + RtAddress + ":" + RtPort;
         }
 
@@ -3212,6 +3284,11 @@ namespace SodCoop
                         serverPeer = peer;
                         connecting = false;
                         Plugin.L.LogInfo($"[NET] Подключен к хосту: {peer}");
+                        if (!xferMode)
+                        {
+                            Toast(lostAt >= 0f ? "Reconnected to the host." : "Connected to the host.");
+                            lostAt = -1f; everConnected = true;
+                        }
                         var w = new NetDataWriter();
                         if (xferMode)
                         {
@@ -3233,9 +3310,21 @@ namespace SodCoop
                 {
                     Plugin.L.LogInfo($"[NET] Отключение: {peer}, причина: {info.Reason}");
                     DestroyAvatar();
+                    if (IsHost && peer == gamePeer)
+                    {
+                        gamePeer = null;
+                        Toast("The other player left the game (" + info.Reason + ").");
+                    }
                     if (!IsHost)
                     {
+                        bool hadHost = serverPeer != null && !xferMode;
                         serverPeer = null;
+                        if (hadHost && info.Reason != DisconnectReason.ConnectionRejected)
+                        {
+                            lostAt = Time.realtimeSinceStartup;
+                            ClientReleaseWorld();
+                            Toast("Lost connection to the host (" + info.Reason + "). Reconnecting...  F9 = leave.");
+                        }
                         connecting = false;
                         nextAttempt = Time.realtimeSinceStartup + 3f;
                         if (xferMode && xferFailMsg == null && !xferFinish)
@@ -7761,6 +7850,15 @@ namespace SodCoop
                 SetRemoteAppearance(reader.AvailableBytes > 0 ? reader.GetString() : "");
                 string mine = Describe();
                 bool ok = theirs == mine;
+                if (gamePeer != null && gamePeer != peer)
+                {
+                    // старое соединение этого игрока ещё не отвалилось по таймауту: заменяем его новым
+                    var stale = gamePeer; gamePeer = null;
+                    try { stale.Disconnect(); } catch (Exception) { }
+                    Plugin.L.LogInfo("[NET] новое подключение заменило старое соединение игрока");
+                }
+                gamePeer = peer;
+                Toast(ok ? "A player joined the game." : "A player connected, but their world does not match yours.");
                 Plugin.L.LogInfo($"[NET] Handshake от клиента: ok={ok}");
                 Plugin.L.LogInfo($"[NET]   клиент: {theirs}");
                 Plugin.L.LogInfo($"[NET]   хост:   {mine}");
@@ -7779,6 +7877,7 @@ namespace SodCoop
                 string hostInfo = reader.GetString();
                 SetRemoteAppearance(reader.AvailableBytes > 0 ? reader.GetString() : "");
                 Plugin.L.LogInfo($"[NET] Ответ хоста: ok={ok}");
+                if (!ok) Toast("Your world does not match the host's (different city or build). Leave to the main menu and use CONNECT to download the host's save.");
                 Plugin.L.LogInfo($"[NET]   хост:   {hostInfo}");
                 Plugin.L.LogInfo($"[NET]   клиент: {Describe()}");
                 if (ok) SendFurnSnapshot(null);
