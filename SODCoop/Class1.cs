@@ -20,7 +20,7 @@ namespace SodCoop
 {
     public enum NetMode { Off, Host, Client }
 
-    [BepInPlugin("com.yourname.sodcoop", "SodCoop", "0.9.61")]
+    [BepInPlugin("com.yourname.sodcoop", "SodCoop", "0.9.62")]
     public class Plugin : BasePlugin
     {
         internal static ManualLogSource L;
@@ -33,6 +33,7 @@ namespace SodCoop
         internal static ConfigEntry<bool> CfgDumpCitizen;
         internal static ConfigEntry<bool> CfgUseCitizenModel;
         internal static ConfigEntry<float> CfgAvatarYOffset;
+        internal static ConfigEntry<float> CfgAvatarScale;
         internal static ConfigEntry<float> CfgAvatarYawOffset;
         internal static ConfigEntry<float> CfgMaxSpeed;
         internal static ConfigEntry<int> CfgArmsState;
@@ -123,6 +124,8 @@ namespace SodCoop
                 "Use a cloned NPC model for the other player (false = green capsule)");
             CfgAvatarYOffset = Config.Bind("Avatar", "YOffset", 0f,
                 "Extra vertical offset of the avatar in meters (if it floats above or sinks into the floor)");
+            CfgAvatarScale = Config.Bind("Avatar", "Scale", 0.92f,
+                "Size of the other player's avatar relative to the model (1 = as is). Lower it if the avatar looks taller than NPCs; edit while the game runs");
             CfgAvatarYawOffset = Config.Bind("Avatar", "YawOffset", 0f,
                 "Extra rotation of the avatar in degrees (if it faces the wrong way, try 180)");
 
@@ -3623,6 +3626,7 @@ namespace SodCoop
                     {
                         // Корпус вниз (ноги уходят в пол) и наклон по Q/E
                         sitK = Mathf.MoveTowards(sitK, poseAnimSit ? 1f : 0f, dt * 4f);
+                        avatarModel.localScale = modelBaseScale * Mathf.Clamp(Plugin.CfgAvatarScale.Value, 0.3f, 2f);
                         avatarModel.localPosition = modelBasePos + new Vector3(0f, -(Plugin.CfgCrouchDrop.Value * crouchBoneK + Plugin.CfgDropWithAnim.Value * crouchAnimK + Plugin.CfgSitDrop.Value * sitK), 0f);
                         leanSmooth = Mathf.Lerp(leanSmooth, remoteLean, 1f - Mathf.Exp(-10f * dt));
                         avatarModel.localRotation = Quaternion.Euler(0f, 0f, -leanSmooth * (poseAnimLean ? Plugin.CfgTiltWithAnim.Value : Plugin.CfgLeanScale.Value)) * modelBaseRot;
