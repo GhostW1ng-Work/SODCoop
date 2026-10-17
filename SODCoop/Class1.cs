@@ -20,7 +20,7 @@ namespace SodCoop
 {
     public enum NetMode { Off, Host, Client }
 
-    [BepInPlugin("com.yourname.sodcoop", "SodCoop", "0.9.40")]
+    [BepInPlugin("com.yourname.sodcoop", "SodCoop", "0.9.41")]
     public class Plugin : BasePlugin
     {
         internal static ManualLogSource L;
@@ -28,6 +28,7 @@ namespace SodCoop
         internal static ConfigEntry<NetMode> CfgMode;
         internal static ConfigEntry<string> CfgAddress;
         internal static ConfigEntry<int> CfgPort;
+        internal static ConfigEntry<string> CfgPassword, CfgServerName;
         internal static ConfigEntry<bool> CfgDebugAvatar;
         internal static ConfigEntry<bool> CfgDumpCitizen;
         internal static ConfigEntry<bool> CfgUseCitizenModel;
@@ -112,6 +113,8 @@ namespace SodCoop
             CfgMode = Config.Bind("Network", "Mode", NetMode.Off, "Off, Host or Client");
             CfgAddress = Config.Bind("Network", "Address", "127.0.0.1", "Host IP address (used by Client)");
             CfgPort = Config.Bind("Network", "Port", 9050, "UDP port");
+            CfgPassword = Config.Bind("Network", "Password", "", "Server password (empty = no password)");
+            CfgServerName = Config.Bind("Network", "ServerName", "SodCoop server", "Server name shown in the LAN list");
 
             CfgUseCitizenModel = Config.Bind("Avatar", "UseCitizenModel", true,
                 "Use a cloned NPC model for the other player (false = green capsule)");
@@ -1759,7 +1762,7 @@ namespace SodCoop
                 GUI.matrix = Matrix4x4.Scale(new Vector3(s, s, 1f));
                 if (!Open)
                 {
-                    if (MenuVisible() && GUI.Button(new Rect(278f, 940f, 297f, 48f), "CHARACTER CREATE", btnStyle)) OpenEditor();
+                    if (MenuVisible() && !NetMenu.Open && GUI.Button(new Rect(278f, 940f, 297f, 48f), "CHARACTER CREATE", btnStyle)) OpenEditor();
                     GUI.matrix = old; return;
                 }
                 float W = Screen.width / s, H = Screen.height / s;
@@ -1883,16 +1886,336 @@ namespace SodCoop
         }
     }
 
+
+    // Поиск серверов в локальной сети: свой UDP-обмен (порт 47777), не зависит от версии LiteNetLib
+    internal static class Lan
+    {
+        const int DiscPort = 47777;
+        const string Q = "SODCOOP?1", A = "SODCOOP!1";
+        internal class Server { public string Name = "", Seed = "", Build = "", Ip = ""; public bool Pw; public int Players, Max = 2, Port; public float Seen; }
+        internal static readonly List<Server> Servers = new List<Server>();
+        static UdpClient hostSock, scanSock;
+        static float nextScan;
+
+        internal static void StartAdvertise()
+        {
+            StopAdvertise();
+            try
+            {
+                var u = new UdpClient(AddressFamily.InterNetwork);
+                u.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+                u.Client.Bind(new IPEndPoint(IPAddress.Any, DiscPort));
+                u.Client.Blocking = false;
+                hostSock = u;
+                Plugin.L.LogInfo("[LAN] Сервер виден в локальной сети (UDP " + DiscPort + ")");
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[LAN] Не удалось открыть порт поиска " + DiscPort + ": " + e.Message); hostSock = null; }
+        }
+
+        internal static void StopAdvertise()
+        {
+            try { if (hostSock != null) hostSock.Close(); } catch (Exception) { }
+            hostSock = null;
+        }
+
+        internal static void CloseScan()
+        {
+            try { if (scanSock != null) scanSock.Close(); } catch (Exception) { }
+            scanSock = null;
+        }
+
+        internal static void Scan()
+        {
+            try
+            {
+                if (scanSock == null)
+                {
+                    scanSock = new UdpClient(new IPEndPoint(IPAddress.Any, 0));
+                    scanSock.EnableBroadcast = true;
+                    scanSock.Client.Blocking = false;
+                }
+                var data = Encoding.UTF8.GetBytes(Q);
+                var targets = new HashSet<string> { "255.255.255.255", "127.0.0.1" };
+                try
+                {
+                    foreach (var ni in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+                    {
+                        if (ni.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) continue;
+                        foreach (var ua in ni.GetIPProperties().UnicastAddresses)
+                        {
+                            if (ua.Address.AddressFamily != AddressFamily.InterNetwork || ua.IPv4Mask == null) continue;
+                            var ip = ua.Address.GetAddressBytes(); var mk = ua.IPv4Mask.GetAddressBytes();
+                            var bc = new byte[4]; for (int i = 0; i < 4; i++) bc[i] = (byte)(ip[i] | ~mk[i]);
+                            targets.Add(new IPAddress(bc).ToString());
+                        }
+                    }
+                }
+                catch (Exception) { }
+                foreach (var t in targets)
+                {
+                    try { scanSock.Send(data, data.Length, new IPEndPoint(IPAddress.Parse(t), DiscPort)); } catch (Exception) { }
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[LAN] Scan: " + e.Message); }
+        }
+
+        internal static void Tick()
+        {
+            try
+            {
+                // хост отвечает на запросы
+                if (hostSock != null)
+                {
+                    int guard = 0;
+                    while (hostSock.Client.Available > 0 && guard++ < 20)
+                    {
+                        var ep = new IPEndPoint(IPAddress.Any, 0);
+                        var d = hostSock.Receive(ref ep);
+                        if (Encoding.UTF8.GetString(d) != Q) continue;
+                        using (var ms = new MemoryStream())
+                        {
+                            using (var bw = new BinaryWriter(ms))
+                            {
+                                bw.Write(A); bw.Write(Net.RtName ?? ""); bw.Write(!string.IsNullOrEmpty(Net.RtPassword));
+                                bw.Write(Net.PlayerCount); bw.Write(2); bw.Write(Net.RtPort); bw.Write(Net.SeedInfo()); bw.Write(Net.BuildInfo());
+                            }
+                            var rb = ms.ToArray();
+                            hostSock.Send(rb, rb.Length, ep);
+                        }
+                    }
+                }
+                // клиент собирает ответы
+                if (scanSock != null)
+                {
+                    int guard = 0;
+                    while (scanSock.Client.Available > 0 && guard++ < 50)
+                    {
+                        var ep = new IPEndPoint(IPAddress.Any, 0);
+                        var d = scanSock.Receive(ref ep);
+                        try
+                        {
+                            using (var br = new BinaryReader(new MemoryStream(d)))
+                            {
+                                if (br.ReadString() != A) continue;
+                                var sv = new Server();
+                                sv.Name = br.ReadString(); sv.Pw = br.ReadBoolean(); sv.Players = br.ReadInt32(); sv.Max = br.ReadInt32();
+                                sv.Port = br.ReadInt32(); sv.Seed = br.ReadString(); sv.Build = br.ReadString();
+                                sv.Ip = ep.Address.ToString(); sv.Seen = Time.realtimeSinceStartup;
+                                int idx = Servers.FindIndex(x => x.Ip == sv.Ip && x.Port == sv.Port);
+                                if (idx >= 0) Servers[idx] = sv; else Servers.Add(sv);
+                            }
+                        }
+                        catch (Exception) { }
+                    }
+                    Servers.RemoveAll(x => Time.realtimeSinceStartup - x.Seen > 8f);
+                }
+                if (NetMenu.Open && Time.realtimeSinceStartup >= nextScan) { nextScan = Time.realtimeSinceStartup + 2.5f; Scan(); }
+                if (!NetMenu.Open && scanSock != null) { CloseScan(); Servers.Clear(); }
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[LAN] Tick: " + e.Message); }
+        }
+    }
+
+    // Меню «Мультиплеер» (IMGUI поверх главного меню): категория LAN, список серверов, HOST / CONNECT / DIRECT
+    internal static class NetMenu
+    {
+        internal static bool Open;
+        static int page;                 // 0 список, 1 хост, 2 прямое подключение, 3 пароль выбранного сервера
+        static GameObject menuCanvas;
+        static string fName = "", fPass = "", fPort = "9050", fAddr = "127.0.0.1", fAPort = "9050", fAPass = "";
+        static string selIp = ""; static int selPort; static string msg = "";
+        static GUIStyle btn, lab, title, field, rowBtn;
+
+        static void Styles()
+        {
+            if (btn != null) return;
+            btn = new GUIStyle(GUI.skin.button) { fontSize = 20 };
+            lab = new GUIStyle(GUI.skin.label) { fontSize = 20 };
+            lab.normal.textColor = new Color(0.95f, 0.85f, 0.9f, 1f);
+            title = new GUIStyle(GUI.skin.label) { fontSize = 34, fontStyle = FontStyle.Bold };
+            title.normal.textColor = new Color(0.95f, 0.3f, 0.35f, 1f);
+            field = new GUIStyle(GUI.skin.textField) { fontSize = 22 };
+            rowBtn = new GUIStyle(GUI.skin.button) { fontSize = 20, alignment = TextAnchor.MiddleLeft };
+        }
+
+        static bool MenuVisible()
+        {
+            try { var mm = MainMenuController.Instance; return mm != null && mm.mainMenuActive; } catch (Exception) { return false; }
+        }
+
+        static void OpenMenu()
+        {
+            Net.EnsureRt();
+            Open = true; page = 0; msg = ""; selIp = ""; selPort = 0;
+            fName = Net.RtName; fPass = Net.RtPassword; fPort = "" + Net.RtPort; fAddr = Net.RtAddress; fAPort = "" + Net.RtPort; fAPass = "";
+            try { menuCanvas = GameObject.Find("MenuCanvas"); if (menuCanvas != null) menuCanvas.SetActive(false); } catch (Exception) { }
+            Lan.Servers.Clear(); Lan.Scan();
+        }
+
+        static void CloseMenu()
+        {
+            Open = false;
+            try { if (menuCanvas != null) menuCanvas.SetActive(true); } catch (Exception) { }
+            menuCanvas = null;
+        }
+
+        static bool Port(string t, out int p) { return int.TryParse(t, out p) && p >= 1024 && p <= 65535; }
+
+        internal static void OnGui()
+        {
+            try
+            {
+                if (CharEditor.Open) return;
+                Styles();
+                float s = Screen.height / 1080f;
+                var old = GUI.matrix;
+                GUI.matrix = Matrix4x4.Scale(new Vector3(s, s, 1f));
+                if (!Open)
+                {
+                    if (MenuVisible())
+                    {
+                        if (GUI.Button(new Rect(585f, 940f, 297f, 48f), "MULTIPLAYER", btn)) OpenMenu();
+                        string st = Net.StatusLine();
+                        if (st != "") GUI.Label(new Rect(278f, 994f, 1400f, 34f), st, lab);
+                    }
+                    GUI.matrix = old; return;
+                }
+                float W = Screen.width / s, H = Screen.height / s;
+                GUI.color = Color.black; GUI.DrawTexture(new Rect(0f, 0f, W, H), Texture2D.whiteTexture); GUI.color = Color.white;
+                GUI.Label(new Rect(40f, 20f, 900f, 50f), page == 1 ? "HOST A GAME" : page == 2 ? "DIRECT CONNECT" : page == 3 ? "PASSWORD" : "MULTIPLAYER", title);
+                if (page == 0) Page0(W, H);
+                else if (page == 1) PageHost();
+                else if (page == 2) PageDirect();
+                else PagePass();
+                string cur = Net.StatusLine();
+                if (cur != "") GUI.Label(new Rect(40f, H - 100f, W - 80f, 34f), "Now: " + cur, lab);
+                if (msg != "") GUI.Label(new Rect(40f, H - 140f, W - 80f, 34f), msg, lab);
+                GUI.matrix = old;
+            }
+            catch (Exception) { }
+        }
+
+        static void Page0(float W, float H)
+        {
+            GUI.enabled = true;
+            GUI.Button(new Rect(40f, 90f, 140f, 40f), "LAN", btn);
+            GUI.enabled = false; GUI.Button(new Rect(190f, 90f, 160f, 40f), "INTERNET", btn); GUI.enabled = true;
+
+            float y = 150f;
+            GUI.Label(new Rect(50f, y, 420f, 30f), "SERVER", lab);
+            GUI.Label(new Rect(480f, y, 160f, 30f), "PLAYERS", lab);
+            GUI.Label(new Rect(640f, y, 300f, 30f), "ADDRESS", lab);
+            GUI.Label(new Rect(950f, y, 400f, 30f), "CITY SEED", lab);
+            y += 36f;
+            var list = Lan.Servers;
+            if (list.Count == 0) GUI.Label(new Rect(50f, y, 1200f, 34f), "No servers found yet. The host must have loaded a city. Use DIRECT to type an address.", lab);
+            for (int i = 0; i < list.Count && i < 12; i++)
+            {
+                var sv = list[i];
+                bool sel = sv.Ip == selIp && sv.Port == selPort;
+                GUI.color = sel ? new Color(1f, 0.55f, 0.55f, 1f) : Color.white;
+                if (GUI.Button(new Rect(40f, y, 1340f, 40f), "", rowBtn)) { selIp = sv.Ip; selPort = sv.Port; }
+                GUI.color = Color.white;
+                GUI.Label(new Rect(50f, y + 4f, 420f, 32f), (sv.Pw ? "[lock] " : "") + sv.Name, lab);
+                GUI.Label(new Rect(480f, y + 4f, 160f, 32f), sv.Players + " / " + sv.Max, lab);
+                GUI.Label(new Rect(640f, y + 4f, 300f, 32f), sv.Ip + ":" + sv.Port, lab);
+                GUI.Label(new Rect(950f, y + 4f, 420f, 32f), sv.Seed, lab);
+                y += 44f;
+            }
+
+            float by = H - 70f;
+            if (GUI.Button(new Rect(40f, by, 200f, 50f), "HOST", btn)) { page = 1; msg = ""; }
+            Server_Connect(new Rect(250f, by, 200f, 50f));
+            if (GUI.Button(new Rect(460f, by, 200f, 50f), "DIRECT", btn)) { page = 2; msg = ""; }
+            if (GUI.Button(new Rect(670f, by, 200f, 50f), "REFRESH", btn)) { Lan.Servers.Clear(); Lan.Scan(); }
+            if (GUI.Button(new Rect(880f, by, 240f, 50f), "DISABLE MULTIPLAYER", btn)) { Net.ApplyOff(); msg = "Multiplayer disabled."; }
+            if (GUI.Button(new Rect(W - 240f, by, 200f, 50f), "BACK", btn)) CloseMenu();
+        }
+
+        static void Server_Connect(Rect r)
+        {
+            Lan.Server sv = null;
+            foreach (var x in Lan.Servers) if (x.Ip == selIp && x.Port == selPort) sv = x;
+            GUI.enabled = sv != null;
+            if (GUI.Button(r, "CONNECT", btn) && sv != null)
+            {
+                if (sv.Pw) { fAPass = ""; page = 3; msg = ""; }
+                else { Net.ApplyClient(sv.Ip, sv.Port, ""); Done("Connecting to '" + sv.Name + "'. Now load the same save as the host (seed " + sv.Seed + ")."); }
+            }
+            GUI.enabled = true;
+        }
+
+        static void Done(string m) { msg = m; CloseMenu(); }
+
+        static void PageHost()
+        {
+            float x = 40f, y = 110f;
+            GUI.Label(new Rect(x, y, 600f, 30f), "Server name", lab); y += 32f;
+            fName = GUI.TextField(new Rect(x, y, 600f, 40f), fName ?? "", 32, field); y += 56f;
+            GUI.Label(new Rect(x, y, 600f, 30f), "Password (empty = no password)", lab); y += 32f;
+            fPass = GUI.PasswordField(new Rect(x, y, 600f, 40f), fPass ?? "", '*', 32, field); y += 56f;
+            GUI.Label(new Rect(x, y, 600f, 30f), "Port", lab); y += 32f;
+            fPort = GUI.TextField(new Rect(x, y, 200f, 40f), fPort ?? "", 5, field); y += 56f;
+            GUI.Label(new Rect(x, y, 800f, 30f), "Max players: 2 (more in a future version)", lab); y += 60f;
+            if (GUI.Button(new Rect(x, y, 260f, 50f), "START HOSTING", btn))
+            {
+                int p;
+                if (string.IsNullOrWhiteSpace(fName)) msg = "Enter a server name.";
+                else if (!Port(fPort, out p)) msg = "Port must be a number from 1024 to 65535.";
+                else { Net.ApplyHost(fName.Trim(), fPass ?? "", p); Done("Hosting '" + fName.Trim() + "'. Start or load a game; the server goes live when the city has loaded."); }
+            }
+            if (GUI.Button(new Rect(x + 280f, y, 200f, 50f), "BACK", btn)) { page = 0; msg = ""; }
+        }
+
+        static void PageDirect()
+        {
+            float x = 40f, y = 110f;
+            GUI.Label(new Rect(x, y, 600f, 30f), "Host IP address", lab); y += 32f;
+            fAddr = GUI.TextField(new Rect(x, y, 400f, 40f), fAddr ?? "", 40, field); y += 56f;
+            GUI.Label(new Rect(x, y, 600f, 30f), "Port", lab); y += 32f;
+            fAPort = GUI.TextField(new Rect(x, y, 200f, 40f), fAPort ?? "", 5, field); y += 56f;
+            GUI.Label(new Rect(x, y, 600f, 30f), "Password (if the server has one)", lab); y += 32f;
+            fAPass = GUI.PasswordField(new Rect(x, y, 600f, 40f), fAPass ?? "", '*', 32, field); y += 70f;
+            if (GUI.Button(new Rect(x, y, 260f, 50f), "CONNECT", btn))
+            {
+                int p;
+                if (string.IsNullOrWhiteSpace(fAddr)) msg = "Enter the host IP address.";
+                else if (!Port(fAPort, out p)) msg = "Port must be a number from 1024 to 65535.";
+                else { Net.ApplyClient(fAddr.Trim(), p, fAPass ?? ""); Done("Connecting to " + fAddr.Trim() + ":" + p + ". Now load the same save as the host."); }
+            }
+            if (GUI.Button(new Rect(x + 280f, y, 200f, 50f), "BACK", btn)) { page = 0; msg = ""; }
+        }
+
+        static void PagePass()
+        {
+            Lan.Server sv = null;
+            foreach (var x in Lan.Servers) if (x.Ip == selIp && x.Port == selPort) sv = x;
+            float px = 40f, y = 110f;
+            GUI.Label(new Rect(px, y, 900f, 30f), sv != null ? "Server: " + sv.Name + "  (" + sv.Ip + ":" + sv.Port + ")" : "Server is gone", lab); y += 50f;
+            GUI.Label(new Rect(px, y, 600f, 30f), "Password", lab); y += 32f;
+            fAPass = GUI.PasswordField(new Rect(px, y, 600f, 40f), fAPass ?? "", '*', 32, field); y += 70f;
+            GUI.enabled = sv != null;
+            if (GUI.Button(new Rect(px, y, 260f, 50f), "CONNECT", btn) && sv != null)
+            {
+                Net.ApplyClient(sv.Ip, sv.Port, fAPass ?? "");
+                Done("Connecting to '" + sv.Name + "'. Now load the same save as the host (seed " + sv.Seed + ").");
+            }
+            GUI.enabled = true;
+            if (GUI.Button(new Rect(px + 280f, y, 200f, 50f), "BACK", btn)) { page = 0; msg = ""; }
+        }
+    }
+
     public class SodCoopDriver : MonoBehaviour
     {
         public SodCoopDriver(IntPtr ptr) : base(ptr) { }
         float nextLog; bool alive; KeyCode key = KeyCode.F4; bool keyParsed;
-        public void OnGUI() { CharEditor.OnGui(); }
+        public void OnGUI() { CharEditor.OnGui(); NetMenu.OnGui(); }
         public void Update()
         {
             try
             {
                 CharEditor.Tick();
+                Lan.Tick();
                 if (!alive) { alive = true; Plugin.L.LogInfo("[DRV] Update работает"); }
                 if (!keyParsed)
                 {
@@ -2313,7 +2636,63 @@ namespace SodCoop
         static float animSpeed;       // сглаженная скорость аватара, м/с
 
         internal static bool Started { get; private set; }
-        static bool IsHost { get { return Plugin.CfgMode.Value == NetMode.Host; } }
+        static bool IsHost { get { EnsureRt(); return RtMode == NetMode.Host; } }
+
+        // ---- параметры сессии на лету (из меню «Мультиплеер»); по умолчанию берутся из конфига ----
+        internal static NetMode RtMode = NetMode.Off;
+        internal static string RtAddress = "127.0.0.1", RtPassword = "", RtName = "SodCoop server";
+        internal static int RtPort = 9050;
+        static bool rtInit, connectRejected;
+
+        internal static void EnsureRt()
+        {
+            if (rtInit) return;
+            rtInit = true;
+            try { RtMode = Plugin.CfgMode.Value; RtAddress = Plugin.CfgAddress.Value; RtPort = Plugin.CfgPort.Value; RtPassword = Plugin.CfgPassword.Value ?? ""; RtName = Plugin.CfgServerName.Value ?? "SodCoop server"; }
+            catch (Exception) { }
+        }
+
+        internal static int PlayerCount { get { try { return manager == null ? 1 : manager.ConnectedPeersCount + 1; } catch (Exception) { return 1; } } }
+        internal static string SeedInfo() { try { return "" + CityData.Instance.seed; } catch (Exception) { return ""; } }
+        internal static string BuildInfo() { try { return "" + Game.Instance.buildID; } catch (Exception) { return ""; } }
+
+        internal static void Shutdown()
+        {
+            try { Lan.StopAdvertise(); } catch (Exception) { }
+            try { if (manager != null) manager.Stop(); } catch (Exception) { }
+            manager = null; listener = null; serverPeer = null; connecting = false; connectRejected = false; Started = false;
+            try { DestroyAvatar(); } catch (Exception) { }
+            remoteApp = null; remoteAppJson = "";
+        }
+
+        internal static void ApplyHost(string name, string pass, int port)
+        {
+            EnsureRt(); Shutdown();
+            RtName = name; RtPassword = pass ?? ""; RtPort = port; RtMode = NetMode.Host;
+            try { Plugin.CfgServerName.Value = name; Plugin.CfgPassword.Value = RtPassword; Plugin.CfgPort.Value = port; } catch (Exception) { }
+            Plugin.L.LogInfo($"[NET] Из меню: хост «{name}», порт {port}, пароль={(RtPassword != "" ? "да" : "нет")}");
+        }
+
+        internal static void ApplyClient(string addr, int port, string pass)
+        {
+            EnsureRt(); Shutdown();
+            RtAddress = addr; RtPort = port; RtPassword = pass ?? ""; RtMode = NetMode.Client;
+            try { Plugin.CfgAddress.Value = addr; } catch (Exception) { }
+            Plugin.L.LogInfo($"[NET] Из меню: подключение к {addr}:{port}, пароль={(RtPassword != "" ? "да" : "нет")}");
+        }
+
+        internal static void ApplyOff() { EnsureRt(); Shutdown(); RtMode = NetMode.Off; Plugin.L.LogInfo("[NET] Из меню: мультиплеер выключен"); }
+
+        internal static string StatusLine()
+        {
+            EnsureRt();
+            if (RtMode == NetMode.Off) return "";
+            if (RtMode == NetMode.Host) return (manager != null ? "HOSTING" : "HOST (starts when the city has loaded)") + ": " + RtName + " : " + RtPort;
+            if (connectRejected) return "REJECTED by " + RtAddress + ":" + RtPort + " (wrong password?)";
+            if (serverPeer != null) return "CONNECTED to " + RtAddress + ":" + RtPort;
+            return (manager != null ? "CONNECTING" : "CLIENT (connects when the city has loaded; load the same save as the host)") + ": " + RtAddress + ":" + RtPort;
+        }
+
 
         static Appearance remoteApp;
         static string remoteAppJson = "";
@@ -2375,7 +2754,8 @@ namespace SodCoop
         internal static void Start()
         {
             Started = true;
-            var mode = Plugin.CfgMode.Value;
+            EnsureRt();
+            var mode = RtMode;
             if (mode == NetMode.Off)
             {
                 Plugin.L.LogInfo("[NET] Сеть выключена (Mode=Off)");
@@ -2387,7 +2767,23 @@ namespace SodCoop
                 listener = new EventBasedNetListener();
                 manager = new NetManager(listener);
 
-                listener.ConnectionRequestEvent += request => request.AcceptIfKey(Key);
+                listener.ConnectionRequestEvent += request =>
+                {
+                    try
+                    {
+                        if (!IsHost) { request.Reject(); return; }
+                        string k = request.Data.GetString();
+                        string pw = request.Data.AvailableBytes > 0 ? request.Data.GetString() : "";
+                        if (k != Key) { request.Reject(); return; }
+                        if (!string.IsNullOrEmpty(RtPassword) && pw != RtPassword)
+                        {
+                            Plugin.L.LogWarning("[NET] Неверный пароль при подключении, отклоняю");
+                            request.Reject(); return;
+                        }
+                        request.Accept();
+                    }
+                    catch (Exception) { try { request.Reject(); } catch (Exception) { } }
+                };
 
                 listener.PeerConnectedEvent += peer =>
                 {
@@ -2417,6 +2813,11 @@ namespace SodCoop
                         serverPeer = null;
                         connecting = false;
                         nextAttempt = Time.realtimeSinceStartup + 3f;
+                        if (info.Reason == DisconnectReason.ConnectionRejected)
+                        {
+                            connectRejected = true;
+                            Plugin.L.LogWarning("[NET] Хост отклонил подключение (неверный пароль?). Повторов не будет, выберите сервер заново");
+                        }
                     }
                 };
 
@@ -2431,13 +2832,14 @@ namespace SodCoop
 
                 if (IsHost)
                 {
-                    manager.Start(Plugin.CfgPort.Value);
-                    Plugin.L.LogInfo($"[NET] Хост запущен, UDP-порт {Plugin.CfgPort.Value}. {Describe()}");
+                    manager.Start(RtPort);
+                    Plugin.L.LogInfo($"[NET] Хост запущен, UDP-порт {RtPort}. {Describe()}");
+                    Lan.StartAdvertise();
                 }
                 else
                 {
                     manager.Start();
-                    Plugin.L.LogInfo($"[NET] Клиент запущен, цель {Plugin.CfgAddress.Value}:{Plugin.CfgPort.Value}");
+                    Plugin.L.LogInfo($"[NET] Клиент запущен, цель {RtAddress}:{RtPort}");
                 }
             }
             catch (Exception e)
@@ -2454,11 +2856,13 @@ namespace SodCoop
                 manager.PollEvents();
 
                 // Клиент пробует подключиться, пока хост не станет доступен
-                if (!IsHost && serverPeer == null && !connecting &&
+                if (!IsHost && serverPeer == null && !connecting && !connectRejected &&
                     Time.realtimeSinceStartup >= nextAttempt)
                 {
                     connecting = true;
-                    manager.Connect(Plugin.CfgAddress.Value, Plugin.CfgPort.Value, Key);
+                    var cw = new NetDataWriter();
+                    cw.Put(Key); cw.Put(RtPassword ?? "");
+                    manager.Connect(RtAddress, RtPort, cw);
                 }
             }
             catch (Exception e)
