@@ -1,0 +1,6032 @@
+﻿using System;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using BepInEx;
+using BepInEx.Configuration;
+using BepInEx.Logging;
+using BepInEx.Unity.IL2CPP;
+using HarmonyLib;
+using LiteNetLib;
+using LiteNetLib.Utils;
+using Il2CppInterop.Runtime.InteropTypes.Arrays;
+using UnityEngine;
+
+namespace SodCoop
+{
+    public enum NetMode { Off, Host, Client }
+
+    [BepInPlugin("com.yourname.sodcoop", "SodCoop", "0.9.21")]
+    public class Plugin : BasePlugin
+    {
+        internal static ManualLogSource L;
+        internal static void Dbg(string m) { try { if (CfgDebugLog != null && CfgDebugLog.Value) L.LogInfo(m); } catch (System.Exception) { } }
+        internal static ConfigEntry<NetMode> CfgMode;
+        internal static ConfigEntry<string> CfgAddress;
+        internal static ConfigEntry<int> CfgPort;
+        internal static ConfigEntry<bool> CfgDebugAvatar;
+        internal static ConfigEntry<bool> CfgDumpCitizen;
+        internal static ConfigEntry<bool> CfgUseCitizenModel;
+        internal static ConfigEntry<float> CfgAvatarYOffset;
+        internal static ConfigEntry<float> CfgAvatarYawOffset;
+        internal static ConfigEntry<float> CfgMaxSpeed;
+        internal static ConfigEntry<int> CfgArmsState;
+        internal static ConfigEntry<int> CfgIdleState;
+        internal static ConfigEntry<float> CfgCrouchDrop;
+        internal static ConfigEntry<float> CfgCrouchHip;
+        internal static ConfigEntry<float> CfgCrouchKnee;
+        internal static ConfigEntry<float> CfgCrouchTorso;
+        internal static ConfigEntry<string> CfgCrouchAxis;
+        internal static ConfigEntry<float> CfgLeanScale;
+        internal static ConfigEntry<int> CfgCombatArms;
+        internal static ConfigEntry<bool> CfgPlayBlock;
+        internal static ConfigEntry<bool> CfgDebugCycle;
+        internal static ConfigEntry<int> CfgBlockCao;
+        internal static ConfigEntry<int> CfgBlockArms;
+        internal static ConfigEntry<string> CfgItemMap;
+        internal static ConfigEntry<int> CfgForceCao;
+        internal static ConfigEntry<int> CfgForceArms;
+        internal static ConfigEntry<int> CfgForceIdle;
+        internal static ConfigEntry<int> CfgForceCombat;
+        internal static ConfigEntry<string> CfgForceLayers;
+        internal static ConfigEntry<bool> CfgLiveReload;
+        internal static BepInEx.Configuration.ConfigFile Cfg;
+        internal static ConfigEntry<bool> CfgHeldShow;
+        internal static ConfigEntry<string> CfgHeldHand;
+        internal static ConfigEntry<string> CfgHeldPos;
+        internal static ConfigEntry<string> CfgHeldRot;
+        internal static ConfigEntry<float> CfgHeldScale;
+        internal static ConfigEntry<bool> CfgCarryAnim;
+        internal static ConfigEntry<bool> CfgObjSync;
+        internal static ConfigEntry<bool> CfgTimeSync;
+        internal static ConfigEntry<bool> CfgDoorSync;
+        internal static ConfigEntry<bool> CfgCheatKeys;
+        internal static ConfigEntry<int> CfgAddMoney;
+        internal static ConfigEntry<int> CfgMoneyAmount;
+        internal static ConfigEntry<string> CfgItemPreset;
+        internal static ConfigEntry<bool> CfgSpawnNow;
+        internal static ConfigEntry<string> CfgSearchPreset;
+        internal static ConfigEntry<bool> CfgPauseNpc;
+        internal static ConfigEntry<bool> CfgGod;
+        internal static ConfigEntry<int> CfgAddSocial;
+        internal static ConfigEntry<int> CfgSocialAmount;
+        internal static ConfigEntry<bool> CfgInvisible;
+        internal static ConfigEntry<bool> CfgTraceBreak;
+        internal static ConfigEntry<string> CfgTypeRegex;
+        internal static ConfigEntry<bool> CfgAvatarLightFix;
+        internal static ConfigEntry<bool> CfgDoorSnap;
+        internal static ConfigEntry<bool> CfgNpcSync;
+        internal static ConfigEntry<bool> CfgPuppet;
+        internal static ConfigEntry<bool> CfgDebugLog;
+        internal static ConfigEntry<int> CfgPuppetId;
+        internal static ConfigEntry<bool> CfgPuppetNoAI;
+        internal static ConfigEntry<bool> CfgPuppetLog;
+        internal static ConfigEntry<bool> CfgNoFriendlyFire;
+        internal static ConfigEntry<bool> CfgPvp;
+        internal static ConfigEntry<float> CfgSeatRadius;
+        internal static ConfigEntry<bool> CfgNpcHitHostAttacker;
+        internal static ConfigEntry<bool> CfgSeedLook;
+        internal static ConfigEntry<float> CfgNpcRate;
+        internal static ConfigEntry<float> CfgNpcRange;
+        internal static ConfigEntry<bool> CfgMapIcon;
+        internal static ConfigEntry<float> CfgMapIconSize;
+        internal static ConfigEntry<int> CfgCarryObjValue;
+        internal static ConfigEntry<int> CfgConsumeArms;
+        internal static ConfigEntry<string> CfgConsumeStates, CfgConsumeDefault;
+        internal static ConfigEntry<string> CfgSitState, CfgSitKeywords, CfgThrowState;
+        internal static ConfigEntry<float> CfgSitDrop;
+        internal static ConfigEntry<int> CfgSitIdleValue, CfgCrouchIdleValue;
+        internal static ConfigEntry<string> CfgCrouchIdleState, CfgCrouchWalkState, CfgLeanLeftState, CfgLeanRightState, CfgPlayState;
+        internal static ConfigEntry<int> CfgStateLayer;
+        internal static ConfigEntry<float> CfgStateFade, CfgLeanThreshold, CfgDropWithAnim, CfgTiltWithAnim;
+        internal static ConfigEntry<int> CfgCarryValue;
+
+        public override void Load()
+        {
+            L = Log;
+            CfgMode = Config.Bind("Network", "Mode", NetMode.Off, "Off, Host or Client");
+            CfgAddress = Config.Bind("Network", "Address", "127.0.0.1", "Host IP address (used by Client)");
+            CfgPort = Config.Bind("Network", "Port", 9050, "UDP port");
+
+            CfgUseCitizenModel = Config.Bind("Avatar", "UseCitizenModel", true,
+                "Use a cloned NPC model for the other player (false = green capsule)");
+            CfgAvatarYOffset = Config.Bind("Avatar", "YOffset", 0f,
+                "Extra vertical offset of the avatar in meters (if it floats above or sinks into the floor)");
+            CfgAvatarYawOffset = Config.Bind("Avatar", "YawOffset", 0f,
+                "Extra rotation of the avatar in degrees (if it faces the wrong way, try 180)");
+
+            CfgMaxSpeed = Config.Bind("Avatar", "MaxSpeed", 5f,
+                "Speed in m/s that maps to moveSpeed=1 of the animator (lower = legs move faster)");
+
+            CfgArmsState = Config.Bind("Avatar", "ArmsState", 0,
+                "Animator int ArmsState (try 0,1,2,... if the arms pose looks wrong)");
+            CfgIdleState = Config.Bind("Avatar", "IdleAnimationState", 0,
+                "Animator int IdleAnimationState (try 0,1,2,... if the idle pose looks wrong)");
+
+            CfgCrouchDrop = Config.Bind("Avatar", "CrouchDrop", 0.35f,
+                "How many meters the avatar body is lowered while crouched");
+            CfgCrouchHip = Config.Bind("Avatar", "CrouchHipAngle", 60f,
+                "Upper-leg (hip) bend in degrees while crouched. Negative = other direction");
+            CfgCrouchKnee = Config.Bind("Avatar", "CrouchKneeAngle", -100f,
+                "Lower-leg (knee) bend in degrees while crouched. Usually the opposite sign of the hip angle");
+            CfgCrouchTorso = Config.Bind("Avatar", "CrouchTorsoAngle", 15f,
+                "Forward torso lean in degrees while crouched");
+            CfgCrouchAxis = Config.Bind("Avatar", "CrouchAxis", "X",
+                "Local axis (X, Y or Z) the bones are bent around; change it if legs bend sideways");
+            CfgLeanScale = Config.Bind("Avatar", "LeanScale", 1f,
+                "Multiplier of the Q/E lean tilt on the avatar (negative = tilt the other way, 0 = off)");
+
+            CfgCombatArms = Config.Bind("Avatar", "FistsArmsOverride", 0,
+                "Animator int combatArmsOverride for fists (found by testing: 0=fists, 1=pistol, 2=block, 3=rifle, 4=melee weapon, 5=wounded)");
+            CfgPlayBlock = Config.Bind("Avatar", "PlayBlock", false,
+                "Play the block animation on the avatar (false = ignore block)");
+
+            CfgDebugCycle = Config.Bind("Debug", "CycleCombatPoses", false,
+                "Test: cycle combatArmsOverride 0..5 every 5 s and play an attack every 2 s (use with ShowAvatarInFront)");
+
+            Cfg = Config;
+            CfgHeldShow = Config.Bind("HeldItems", "Show", true,
+                "Show the item the other player holds (cola, burger, watch...) in his hand");
+            CfgHeldHand = Config.Bind("HeldItems", "Hand", "Auto",
+                "Auto = the same hand as the sender, or force Right / Left");
+            CfgHeldPos = Config.Bind("HeldItems", "Position", "0,0,0",
+                "Local offset x,y,z from the forearm bone (live reload works)");
+            CfgHeldRot = Config.Bind("HeldItems", "Rotation", "0,0,0",
+                "Local rotation x,y,z in degrees");
+            CfgCrouchIdleState = Config.Bind("Poses", "CrouchClip", "",
+                "Animator state (clip name) played while the other player is crouched and standing still. Empty = bone-based crouch. The log lists names that work: [ANIM] состояния");
+            CfgCrouchWalkState = Config.Bind("Poses", "CrouchWalkClip", "",
+                "State played while crouched AND moving. Empty = use CrouchIdleState");
+            CfgLeanLeftState = Config.Bind("Poses", "LeanLeftState", "",
+                "State played while leaning (Q). Empty = just tilt the body");
+            CfgLeanRightState = Config.Bind("Poses", "LeanRightState", "",
+                "State played while leaning (E). Empty = just tilt the body");
+            CfgStateLayer = Config.Bind("Poses", "StateLayer", -1,
+                "Animator layer for these states. -1 = find automatically");
+            CfgStateFade = Config.Bind("Poses", "Fade", 0.2f, "Cross-fade time in seconds");
+            CfgLeanThreshold = Config.Bind("Poses", "LeanThreshold", 5f, "Lean angle (degrees) from which the lean state starts");
+            CfgDropWithAnim = Config.Bind("Poses", "CrouchDropWithAnim", 0f,
+                "Extra body lowering (m) when a crouch STATE is playing (CrouchDrop is used only without a state)");
+            CfgTiltWithAnim = Config.Bind("Poses", "LeanTiltWithAnim", 0f,
+                "Body tilt multiplier when a lean STATE is playing (LeanScale is used only without a state)");
+            CfgPlayState = Config.Bind("Debug", "PlayState", "",
+                "Test: play this state on the avatar all the time (any clip name from the list, e.g. Leaning, KneelDown). Empty = off");
+            CfgConsumeArms = Config.Bind("Poses", "ConsumeArmsState", 6,
+                "ArmsState while the other player eats/drinks: 6 = armsConsuming (the game's own parameter). -1 = off. ConsumeStates (clip names) is an alternative but may flicker");
+            CfgConsumeStates = Config.Bind("Poses", "ConsumeClips", "",
+                "Held item name (substring) -> animator state played while eating/drinking. First match wins, e.g. food_drink -> Arms_Consume1");
+            CfgConsumeDefault = Config.Bind("Poses", "ConsumeDefaultClip", "", "State when no ConsumeStates entry matches (empty = use ConsumeArmsState instead)");
+            CfgSitState = Config.Bind("Poses", "SitClip", "",
+                "Animator state played while the other player sits on a chair/sofa (try SitDown, SitDownHunched, SatAgainstWall). Empty = no sit animation");
+            CfgSitKeywords = Config.Bind("Poses", "SitKeywords", "booth,sit,seat,chair,couch,sofa,stool,bench,armchair,toilet",
+                "Player sits down when the name of his current transition (see log [SIT]) contains one of these words; a name with 'exit' ends it");
+            CfgSitIdleValue = Config.Bind("Poses", "SitIdleAnimationState", 1,
+                "IdleAnimationState while sitting (the game's own parameter: 1 sitting, 10 sitAgainstWall, 11 leanAgainstWall, 14 cowering). -1 = off");
+            CfgCrouchIdleValue = Config.Bind("Poses", "CrouchAnimState", -1,
+                "IdleAnimationState while crouched AND standing still (21 = stackingObjectsCrouching). -1 = bone-based crouch only. While moving, the bone crouch is used");
+            CfgSitDrop = Config.Bind("Poses", "SitDropMeters", 0.35f,
+                "Lower the sitting avatar by this many meters (adjust if he floats above / sinks into the chair)");
+            CfgThrowState = Config.Bind("Poses", "ThrowTrigger", "throw",
+                "Animator trigger played when the other player throws / puts down the item in his hands");
+            CfgTimeSync = Config.Bind("World", "TimeWeatherSync", true,
+                "Host sends game time, time speed and weather to the client every few seconds");
+            CfgObjSync = Config.Bind("Objects", "Sync", true,
+                "Sync world objects the player carries (garbage bags, boxes...) and drops/throws: the other player sees them move");
+            CfgCheatKeys = Config.Bind("Cheats", "Hotkeys", true,
+                "F6 = add money (MoneyAmount), F7 = spawn item ItemPreset in front of you, F8 = toggle NPC AI pause, F9 = toggle god mode, F10 = add social credit (SocialCreditAmount), F11 = toggle NPCs-cannot-see-me");
+            CfgAddMoney = Config.Bind("Cheats", "AddMoney", 0,
+                "Set to a number while the game runs: that much money is added once, then it resets to 0");
+            CfgMoneyAmount = Config.Bind("Cheats", "MoneyAmount", 1000, "How much money the F6 key adds");
+            CfgItemPreset = Config.Bind("Cheats", "ItemPreset", "StarchKola",
+                "Item preset name spawned by F7 (see SearchPreset to find names)");
+            CfgSpawnNow = Config.Bind("Cheats", "SpawnNow", false,
+                "Set to true while the game runs: spawns ItemPreset in front of you, then resets to false");
+            CfgSearchPreset = Config.Bind("Cheats", "SearchPreset", "",
+                "Type part of a name (e.g. kola): matching item preset names are written to the log, then this resets");
+            CfgPauseNpc = Config.Bind("Cheats", "PauseNpcAI", false,
+                "Pause NPC AI (they freeze and stop reacting to you). F8 toggles");
+            CfgGod = Config.Bind("Cheats", "GodMode", false,
+                "The local player takes no damage. F9 toggles");
+            CfgAddSocial = Config.Bind("Cheats", "AddSocialCredit", 0,
+                "Set to a number while the game runs: that much social credit is added once, then it resets to 0");
+            CfgSocialAmount = Config.Bind("Cheats", "SocialCreditAmount", 10, "How much social credit the F10 key adds");
+            CfgInvisible = Config.Bind("Cheats", "NpcCannotSee", false,
+                "NPCs cannot see you (no spotting, no illegal-activity witnesses). F11 toggles");
+            CfgAvatarLightFix = Config.Bind("Poses", "AvatarLightFix", true,
+                "Keep the other player's model lit after room lights are switched off and on (sets the renderers' light layer mask to all layers)");
+            CfgTypeRegex = Config.Bind("Debug", "TypeRegex", "apartment|residen|purchas|forsale|realestate|estate|landlord|lease|ownership|sale",
+                "Regex (case-insensitive) for class names listed in the log as [TYPES] ~25 s after entering the game when TraceBreak=true");
+            CfgTraceBreak = Config.Bind("Debug", "TraceBreak", false,
+                "Diagnostics: once, ~25 s after you are in the game, log game classes whose names contain Window/Glass/Break/Shatter (no patching). Used to find how windows break");
+            CfgDoorSync = Config.Bind("Doors", "Sync", true,
+                "Sync doors the players open/close/lock/jam (room doors, cupboards, drawers): the other player sees the same state");
+            CfgSeedLook = Config.Bind("Npc", "SeedAppearance", true, "Make the look of every citizen (clothes, colours) depend only on the citizen, so both players see the same people. Both players must use the same value");
+            CfgNpcHitHostAttacker = Config.Bind("Npc", "ClientHitsAsHost", true, "Hits from the client are applied on the host as if the host player dealt them (safe). false = no attacker is passed (the citizen does not know who hit him; may cause errors)");
+            CfgDebugLog = Config.Bind("Debug", "VerboseLog", false, "Подробный журнал: двери, свет, анимации, звуки, бой, посадка и т.д. (шумно). По умолчанию выключен");
+            CfgPuppet = Config.Bind("Npc", "SecondPlayerPuppet", true, "Host: an invisible 'double' of the client (a spare citizen) stands where the client avatar is, so the other citizens notice, fear, fight and report the client like a normal person. Damage to the double is forwarded to the client");
+            CfgPuppetId = Config.Bind("Npc", "PuppetCitizenId", -1, "humanID of the citizen used as the double. -1 = pick automatically (a homeless one first). The log prints the chosen one");
+            CfgPuppetNoAI = Config.Bind("Npc", "PuppetDisableAI", true, "Switch off the double's own AI so that only the client controls it");
+            CfgPuppetLog = Config.Bind("Npc", "PuppetLog", true, "Log when a citizen notices / chases / attacks the second player");
+            CfgNoFriendlyFire = Config.Bind("Npc", "NoFriendlyFire", true, "Citizens fighting the second player do not hurt bystanders (prevents NPC vs NPC brawls)");
+            CfgSeatRadius = Config.Bind("Seat", "GuardRadius", 0.6f, "Нельзя сесть, если другой игрок сидит ближе этого расстояния (м) до места; 0 = выключить");
+            CfgPvp = Config.Bind("Npc", "PlayerVsPlayer", true, "Players can damage each other (client hits the host through its hidden double citizen)");
+            CfgNpcSync = Config.Bind("Npc", "Sync", true, "The host controls the citizens: their positions and animations are sent to the client (the client's NPC AI is paused)");
+            CfgNpcRate = Config.Bind("Npc", "SendInterval", 0.1f, "Seconds between citizen updates sent by the host");
+            CfgNpcRange = Config.Bind("Npc", "NearRange", 120f, "Citizens closer than this many meters to any player are sent every update, the rest are sent in a slow rotation");
+            CfgMapIcon = Config.Bind("Map", "ShowOtherPlayer", true, "Show the other player as a green circle on the minimap and the big map");
+            CfgMapIconSize = Config.Bind("Map", "IconSize", 18f, "Size of the other player's icon on the map (pixels)");
+            CfgDoorSnap = Config.Bind("Doors", "InitialSnapshot", true,
+                "When the client connects the host sends the current state of all doors once");
+            CfgCarryObjValue = Config.Bind("Objects", "CarryObjectValue", 2,
+                "Animator int carryItem while the other player carries a big world object (1 = Arms_Carry1, 2 = Arms_CarryHeavy)");
+            CfgCarryAnim = Config.Bind("HeldItems", "CarryAnimation", true,
+                "While the other player holds an item, play the carry pose (carryingItem=true, arms layer on)");
+            CfgCarryValue = Config.Bind("HeldItems", "CarryItemValue", 1,
+                "Animator int carryItem while carrying (try 0,1,2: Arms_Carry1 / Arms_CarryHeavy)");
+            CfgHeldScale = Config.Bind("HeldItems", "Scale", 1f,
+                "Scale multiplier of the item model");
+            CfgBlockCao = Config.Bind("Avatar", "BlockCombatArmsOverride", 2,
+                "combatArmsOverride while the other player holds block (RMB). 0 fists,1 pistol,2 block?,3 rifle,4 melee,5 wounded");
+            CfgBlockArms = Config.Bind("Avatar", "BlockArmsState", -1,
+                "ArmsState while blocking (-1 = use Avatar.ArmsState)");
+            CfgItemMap = Config.Bind("Avatar", "ItemArmsMap", "watch:10,time:10",
+                "Held item name (substring, case-insensitive) -> ArmsState, comma separated. Item name is in the log: [NET] Предмет в руках");
+            CfgLiveReload = Config.Bind("Debug", "LiveReload", true,
+                "Re-read this cfg file while the game runs (edit, save, see the result at once)");
+            CfgForceCombat = Config.Bind("Debug", "ForceInCombat", -1,
+                "-1 = off, 0/1 = force the inCombat bool on the avatar (always, for testing)");
+            CfgForceCao = Config.Bind("Debug", "ForceCombatArmsOverride", -1,
+                "-1 = off, 0..N = force combatArmsOverride on the avatar");
+            CfgForceArms = Config.Bind("Debug", "ForceArmsState", -1,
+                "-1 = off, 0..11 = force ArmsState (10 reading, 3 use, 6 consuming, 8 smoking ...)");
+            CfgForceIdle = Config.Bind("Debug", "ForceIdleAnimationState", -1,
+                "-1 = off, force IdleAnimationState");
+            CfgForceLayers = Config.Bind("Debug", "ForceLayerWeights", "",
+                "Empty = off. Weights for layers 1,2,.. e.g. \"1,0\" or \"1,1\" (layer 0 is always on)");
+            CfgDebugAvatar = Config.Bind("Debug", "ShowAvatarInFront", false,
+                "Test: show the avatar 3 m in front of the camera (no network needed)");
+            CfgDumpCitizen = Config.Bind("Debug", "DumpCitizen", false,
+                "Test: log the animator parameters of some NPCs once after the world is loaded");
+
+            Harmony.CreateAndPatchAll(typeof(PlayerPatch));
+            Harmony.CreateAndPatchAll(typeof(MeleePatch));
+            Harmony.CreateAndPatchAll(typeof(BlockPatch));
+            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch) })
+            {
+                try { Harmony.CreateAndPatchAll(t); }
+                catch (Exception e) { L.LogWarning($"[PATCH] {t.Name}: {e.Message}"); }
+            }
+            L.LogInfo($"SodCoop загружен! Режим: {CfgMode.Value}");
+        }
+    }
+
+    // Диагностика: какие методы игры вызываются, когда разбивается окно
+    public static class BreakTrace
+    {
+        static readonly System.Collections.Generic.Dictionary<string, int> counts = new System.Collections.Generic.Dictionary<string, int>();
+
+        static bool tried; static float firstSeen;
+
+        // ставим перехват не при запуске, а через ~25 с после входа в игру, чтобы не тормозить загрузку
+        public static void MaybeInstall()
+        {
+            if (tried || !Plugin.CfgTraceBreak.Value) return;
+            float now = UnityEngine.Time.realtimeSinceStartup;
+            if (firstSeen == 0f) { firstSeen = now; return; }
+            if (now - firstSeen < 25f) return;
+            tried = true;
+            Install();
+        }
+
+        // Ничего не перехватываем: только перечисляем классы игры, похожие на окна/стекло/разбиваемое
+        static void Install()
+        {
+            try
+            {
+                var asm = typeof(Player).Assembly;
+                var rx = new System.Text.RegularExpressions.Regex(Plugin.CfgTypeRegex.Value, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                var flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.DeclaredOnly;
+                int n = 0;
+                foreach (var t in asm.GetTypes())
+                {
+                    try
+                    {
+                        if (t.Namespace != null || t.IsGenericType || t.Name.Contains("<") || t.Name.Contains("__")) continue;
+                        if (!rx.IsMatch(t.Name)) continue;
+                        var ms = new System.Collections.Generic.List<string>();
+                        foreach (var m in t.GetMethods(flags))
+                        {
+                            string mn = m.Name;
+                            if (mn.StartsWith("get_") || mn.StartsWith("set_") || mn.StartsWith("add_") || mn.StartsWith("remove_") || mn.StartsWith("NativeMethodInfoPtr")) continue;
+                            if (mn == "Equals" || mn == "GetHashCode" || mn == "ToString" || mn == "GetType" || mn == "Finalize" || mn == "MemberwiseClone") continue;
+                            ms.Add(mn);
+                        }
+                        string bt = t.BaseType != null ? t.BaseType.Name : "";
+                        var ps = new System.Collections.Generic.List<string>();
+                        foreach (var p in t.GetProperties(flags)) ps.Add(p.Name);
+                        Plugin.Dbg($"[TYPES] {t.Name} : {bt} | методы: {string.Join(", ", ms.ToArray())} | поля: {string.Join(", ", ps.ToArray())}");
+                        n++;
+                    }
+                    catch (Exception) { }
+                }
+                Plugin.Dbg($"[TYPES] найдено классов: {n}");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[TYPES] {e.Message}"); }
+        }
+
+        public static void Prefix(System.Reflection.MethodBase __originalMethod)
+        {
+            try
+            {
+                string key = __originalMethod.DeclaringType.Name + "." + __originalMethod.Name;
+                int c; counts.TryGetValue(key, out c);
+                if (c >= 6) return;
+                counts[key] = c + 1;
+                Plugin.Dbg($"[TRACE] вызван {key}");
+            }
+            catch (Exception) { }
+        }
+    }
+
+    // Бросок / положить предмет -> событие по сети
+    [HarmonyPatch(typeof(FirstPersonItemController), "ThrowFood")]
+    public static class ThrowFoodPatch { [HarmonyPostfix] public static void Postfix() { Net.SendAction(3); } }
+    [HarmonyPatch(typeof(FirstPersonItemController), "ThrowGrenade")]
+    public static class ThrowGrenadePatch { [HarmonyPostfix] public static void Postfix() { Net.SendAction(3); } }
+    [HarmonyPatch(typeof(FirstPersonItemController), "ThrowCoin")]
+    public static class ThrowCoinPatch { [HarmonyPostfix] public static void Postfix() { Net.SendAction(3); } }
+    [HarmonyPatch(typeof(FirstPersonItemController), "PutDown")]
+    public static class PutDownPatch { [HarmonyPostfix] public static void Postfix() { Net.SendAction(4); } }
+    [HarmonyPatch(typeof(FirstPersonItemController), "EmptySlot")]
+    public static class EmptySlotPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(bool throwObject)
+        {
+            Plugin.Dbg($"[ITEM] EmptySlot throw={throwObject}");
+            if (throwObject) Net.SendAction(3);
+        }
+    }
+    [HarmonyPatch(typeof(FirstPersonItemController), "PickUpItem")]
+    public static class PickUpPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(Interactable pickUpThis, bool __result)
+        {
+            try { Plugin.Dbg($"[ITEM] PickUpItem: {(pickUpThis != null ? pickUpThis.name : "null")} успех={__result}"); } catch (Exception) { }
+            if (__result && pickUpThis != null) Net.OnItemPickedUp(pickUpThis);
+        }
+    }
+
+    // Предмет из инвентаря игрока выброшен/поставлен в мир
+    [HarmonyPatch(typeof(Interactable), "SetAsNotInventory")]
+    public static class DropPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(Interactable __instance, ref bool __state)
+        {
+            __state = false;
+            try { var inv = __instance.inInventory; __state = inv != null && inv.isPlayer; } catch (Exception) { }
+        }
+        [HarmonyPostfix]
+        public static void Postfix(Interactable __instance, bool __state)
+        {
+            if (__state) Net.OnItemDropped(__instance);
+        }
+    }
+
+    // Тестовый бессмертный режим
+    [HarmonyPatch(typeof(Player), "RecieveDamage")]
+    public static class GodPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix() { return !Plugin.CfgGod.Value; }
+    }
+
+    // Двери комнат: открыл / запер / заклинил (только действия локального игрока)
+    [HarmonyPatch(typeof(NewDoor), "SetOpen")]
+    public static class DoorOpenPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(NewDoor __instance, float newAjar, Actor actor, bool skipAnimation)
+        {
+            Net.OnDoorOpen(__instance, newAjar, actor, skipAnimation);
+        }
+    }
+
+    [HarmonyPatch(typeof(NewDoor), "SetLocked")]
+    public static class DoorLockPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(NewDoor __instance, bool val, Actor actor)
+        {
+            Net.OnDoorFlag(2, __instance, val, actor);
+        }
+    }
+
+    [HarmonyPatch(typeof(NewDoor), "SetJammed")]
+    public static class DoorJamPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(NewDoor __instance, bool val)
+        {
+            Net.OnDoorFlag(3, __instance, val, null);
+        }
+    }
+
+    // Подвижные интерактивные двери (шкафы, ящики, холодильники)
+    [HarmonyPatch(typeof(DoorMovementController), "OnOpen")]
+    public static class DoorMoveOpenPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(DoorMovementController __instance, Actor interactor)
+        {
+            Net.OnMoveDoor(__instance, true, interactor);
+        }
+    }
+
+    [HarmonyPatch(typeof(DoorMovementController), "OnClose")]
+    public static class DoorMoveClosePatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(DoorMovementController __instance, Actor interactor)
+        {
+            Net.OnMoveDoor(__instance, false, interactor);
+        }
+    }
+
+    [HarmonyPatch(typeof(DoorMovementController), "SetOpen")]
+    public static class DoorMoveSetOpenPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(DoorMovementController __instance, float newAjar, Actor interactor)
+        {
+            Net.OnMoveDoor(__instance, newAjar > 0.01f, interactor);
+        }
+    }
+
+    [HarmonyPatch(typeof(Interactable), "SetSwitchState")]
+    public static class SwitchStatePatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(Interactable __instance, bool val, Actor interactor)
+        {
+            Net.OnSwitchState(__instance, 0, val, interactor);
+        }
+    }
+
+    // Основной свет комнаты (выключатель): синхронизируем целиком комнату по roomID
+    [HarmonyPatch(typeof(NewRoom), "SetMainLights")]
+    public static class RoomLightsPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(NewRoom __instance, bool newVal, Actor actor)
+        {
+            Net.OnRoomLights(__instance, newVal, actor);
+        }
+    }
+
+    // Окно "игрок только что что-то нажал": только в нём изменения света без актёра считаются переключением
+    [HarmonyPatch(typeof(Interactable), "OnInteraction", new System.Type[] { typeof(InteractablePreset.InteractionAction), typeof(Actor), typeof(bool), typeof(float) })]
+    public static class InteractActionPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(Actor who) { Net.MarkPlayerPress(who); }
+    }
+
+    [HarmonyPatch(typeof(Interactable), "OnInteraction", new System.Type[] { typeof(InteractablePreset.InteractionKey), typeof(Actor) })]
+    public static class InteractKeyPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(Actor who) { Net.MarkPlayerPress(who); }
+    }
+
+    [HarmonyPatch(typeof(Interactable), "SetCustomState1")]
+    public static class CustomState1Patch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(Interactable __instance, bool val, Actor interactor) { Net.OnSwitchState(__instance, 1, val, interactor); }
+    }
+
+    [HarmonyPatch(typeof(Interactable), "SetCustomState2")]
+    public static class CustomState2Patch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(Interactable __instance, bool val, Actor interactor) { Net.OnSwitchState(__instance, 2, val, interactor); }
+    }
+
+    [HarmonyPatch(typeof(Interactable), "SetCustomState3")]
+    public static class CustomState3Patch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(Interactable __instance, bool val, Actor interactor) { Net.OnSwitchState(__instance, 3, val, interactor); }
+    }
+
+    // Электрощиток (BreakerController) переопределяет SetOpen
+    [HarmonyPatch(typeof(BreakerController), "SetOpen")]
+    public static class BreakerSetOpenPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(BreakerController __instance, float newAjar, Actor interactor)
+        {
+            Net.OnMoveDoor(__instance, newAjar > 0.01f, interactor);
+        }
+    }
+
+    [HarmonyPatch(typeof(Interactable), "SetLockedState")]
+    public static class LockStatePatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(Interactable __instance, bool val, Actor interactor)
+        {
+            Net.OnLockState(__instance, val, interactor);
+        }
+    }
+
+    // Чит "NPC меня не видят"
+    [HarmonyPatch(typeof(Actor), "SightingCheck")]
+    public static class InvisSightPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(Actor __instance)
+        {
+            if (!Plugin.CfgInvisible.Value) return true;
+            try { return __instance.isPlayer; } catch (Exception) { return true; }
+        }
+    }
+
+    [HarmonyPatch(typeof(Actor), "AddToSeesIllegal")]
+    public static class InvisIllegalPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(Actor newTarget)
+        {
+            if (!Plugin.CfgInvisible.Value) return true;
+            try { return newTarget == null || !newTarget.isPlayer; } catch (Exception) { return true; }
+        }
+    }
+
+    // Предмет удалён (съеден, разбит и т.д.) -> второй игрок удаляет свою копию
+    [HarmonyPatch(typeof(Interactable), "SafeDelete")]
+    public static class SafeDeletePatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(Interactable __instance) { Net.OnItemDeleting(__instance); }
+    }
+
+    // Предмет разбился (брошенная бутылка и т.п.)
+    [HarmonyPatch(typeof(InteractableController), "BreakObject")]
+    public static class BreakPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(InteractableController __instance, Vector3 contactPoint, Vector3 normal, float magnitude)
+        {
+            Net.OnItemBroken(__instance, contactPoint, normal, magnitude);
+        }
+    }
+
+    // Стекло (окна и т.п.) разбилось
+    [HarmonyPatch(typeof(InteractableController), "Shatter")]
+    public static class ShatterPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(InteractableController __instance, Vector3 contact, float force)
+        {
+            Plugin.L.LogInfo($"[BREAK] вызван Shatter: {__instance.gameObject.name} сила={force:F1}");
+            Net.OnWorldBreak(__instance, 0, contact, Vector3.up, force);
+        }
+    }
+
+    // Погоду на клиенте меняет только хост
+    [HarmonyPatch(typeof(SessionData), "ExecuteWeatherChange")]
+    public static class WeatherChangePatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix()
+        {
+            return !Net.ClientFollowsHostWeather();
+        }
+    }
+
+    // Диагностика: что игра делает при покупке и обустройстве квартиры (только действия игрока, не каждый кадр)
+    [HarmonyPatch]
+    public static class AptTrace
+    {
+        static readonly string[] playerNames = { "BuyNewResidence", "ExecutePlacement", "ApplyDecor", "RevertDecor", "SellFurniture", "MoveFurnitureToStorage", "RemoveFromStorage", "MoveItemToStorage", "RemoveItemFromStorage", "SellItem", "PlaceIndividualCluster", "SetDecoratingMode" };
+        static readonly string[] roomNames = { "AddFurnitureCustom" };
+
+        public static System.Collections.Generic.IEnumerable<System.Reflection.MethodBase> TargetMethods()
+        {
+            var flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.DeclaredOnly;
+            foreach (var m in typeof(PlayerApartmentController).GetMethods(flags))
+                if (System.Array.IndexOf(playerNames, m.Name) >= 0) yield return m;
+            foreach (var m in typeof(NewRoom).GetMethods(flags))
+                if (System.Array.IndexOf(roomNames, m.Name) >= 0) yield return m;
+        }
+
+        static string Show(object o)
+        {
+            if (o == null) return "null";
+            try
+            {
+                var t = o.GetType();
+                if (t.IsPrimitive || t.IsEnum || o is string || o is Vector3 || o is Vector3Int) return o.ToString();
+                var sb = new System.Text.StringBuilder(t.Name);
+                foreach (var pn in new[] { "name", "roomID", "id", "presetName", "preset", "angle", "anchorNode", "nodeCoord", "worldPos", "wPos" })
+                {
+                    var p = t.GetProperty(pn);
+                    if (p == null || p.GetIndexParameters().Length > 0) continue;
+                    object v = null;
+                    try { v = p.GetValue(o, null); } catch (Exception) { continue; }
+                    if (v == null) continue;
+                    string sv = (v is string || v.GetType().IsPrimitive || v.GetType().IsEnum || v is Vector3 || v is Vector3Int) ? v.ToString() : v.GetType().Name;
+                    sb.Append(' ').Append(pn).Append('=').Append(sv);
+                }
+                return sb.ToString();
+            }
+            catch (Exception) { return o.GetType().Name; }
+        }
+
+        [HarmonyPostfix]
+        public static void Postfix(System.Reflection.MethodBase __originalMethod, object __instance, object[] __args)
+        {
+            try
+            {
+                var sb = new System.Text.StringBuilder();
+                sb.Append("[APTTRACE] ").Append(__originalMethod.DeclaringType.Name).Append('.').Append(__originalMethod.Name).Append('(');
+                if (__args != null) for (int i = 0; i < __args.Length; i++) { if (i > 0) sb.Append(", "); sb.Append(Show(__args[i])); }
+                sb.Append(')');
+                if (__originalMethod.DeclaringType == typeof(NewRoom)) sb.Append(" | room: ").Append(Show(__instance));
+                if (__originalMethod.DeclaringType == typeof(PlayerApartmentController))
+                {
+                    foreach (var fn in new[] { "furnPlacement", "decoratingRoom", "furnPlacementRoom", "decoratingType", "decoratingMaterial" })
+                    {
+                        var p = __instance.GetType().GetProperty(fn);
+                        if (p == null) continue;
+                        object v = null; try { v = p.GetValue(__instance, null); } catch (Exception) { }
+                        sb.Append(" | ").Append(fn).Append('=').Append(Show(v));
+                    }
+                }
+                Plugin.Dbg(sb.ToString());
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[APTTRACE] {e.Message}"); }
+        }
+    }
+
+    // Во время покупки игра убирает хлам из комнат квартиры: запоминаем эти вызовы, чтобы повторить у второго игрока
+    [HarmonyPatch(typeof(NewRoom), "RemoveAllInhabitantFurniture")]
+    public static class RoomClearPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(NewRoom __instance, bool removeSkipAddressInhabitantsFurniture, FurnitureClusterLocation.RemoveInteractablesOption spawnedOnFurnitureRemovalOption)
+        {
+            Net.OnRoomCleared(__instance, removeSkipAddressInhabitantsFurniture, (int)spawnedOnFurnitureRemovalOption);
+        }
+    }
+
+    // Отделка (обои, пол, потолок) в своей квартире
+    [HarmonyPatch(typeof(PlayerApartmentController), "ApplyDecor")]
+    public static class DecorPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(PlayerApartmentController __instance, MaterialGroupPreset.MaterialType decorType, MaterialGroupPreset material, Toolbox.MaterialKey key, bool saveChanges)
+        {
+            Net.OnDecorApplied(__instance, decorType, material, key, saveChanges);
+        }
+    }
+
+
+    // Диагностика двойника: кто заметил / преследует / бьёт второго игрока
+    [HarmonyPatch(typeof(NewAIController), "AddTrackedTarget")]
+    public static class PuppetTrackPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(NewAIController __instance, Actor __0) { Net.PuppetNote("заметил", __instance, __0); }
+    }
+
+    [HarmonyPatch(typeof(NewAIController), "SetPersue")]
+    public static class PuppetPersuePatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(NewAIController __instance, Actor __0) { Net.PuppetNote("преследует", __instance, __0); }
+    }
+
+    [HarmonyPatch(typeof(NewAIController), "StartAttack")]
+    public static class PuppetAttackPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(NewAIController __instance, Actor __0) { Net.PuppetNote("нападает на", __instance, __0); }
+    }
+
+    [HarmonyPatch(typeof(NewAIController), "Investigate")]
+    public static class PuppetInvestigatePatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(NewAIController __instance, Actor __2) { Net.PuppetNote("проверяет", __instance, __2); }
+    }
+
+
+    // Разовые действия горожан: хост шлёт клиенту, чтобы тот видел драку и стрельбу
+    [HarmonyPatch(typeof(CitizenAnimationController), "AttackTrigger")]
+    public static class NpcActAttackPatch { [HarmonyPostfix] public static void Postfix(CitizenAnimationController __instance) { Net.NpcActAc(__instance, 1, 0f, false, Vector3.zero); } }
+    [HarmonyPatch(typeof(CitizenAnimationController), "ThrowTrigger")]
+    public static class NpcActThrowPatch { [HarmonyPostfix] public static void Postfix(CitizenAnimationController __instance) { Net.NpcActAc(__instance, 2, 0f, false, Vector3.zero); } }
+    [HarmonyPatch(typeof(CitizenAnimationController), "AbortAttackTrigger")]
+    public static class NpcActAbortPatch { [HarmonyPostfix] public static void Postfix(CitizenAnimationController __instance) { Net.NpcActAc(__instance, 3, 0f, false, Vector3.zero); } }
+    [HarmonyPatch(typeof(CitizenAnimationController), "BlockTrigger")]
+    public static class NpcActBlockPatch { [HarmonyPostfix] public static void Postfix(CitizenAnimationController __instance, float __0, bool __1) { Net.NpcActAc(__instance, 4, __0, __1, Vector3.zero); } }
+    [HarmonyPatch(typeof(CitizenAnimationController), "TakeDamageRecoil")]
+    public static class NpcActRecoilPatch { [HarmonyPostfix] public static void Postfix(CitizenAnimationController __instance, Vector3 __0) { Net.NpcActAc(__instance, 5, 0f, false, __0); } }
+    [HarmonyPatch(typeof(NewAIController), "UpdateHeldItems")]
+    public static class NpcActHeldPatch { [HarmonyPostfix] public static void Postfix(NewAIController __instance, AIActionPreset.ActionStateFlag __0) { Net.NpcActAi(__instance, 10, (int)__0); } }
+    [HarmonyPatch(typeof(NewAIController), "DespawnRightItem")]
+    public static class NpcActDespawnRPatch { [HarmonyPostfix] public static void Postfix(NewAIController __instance) { Net.NpcActAi(__instance, 11, 0); } }
+    [HarmonyPatch(typeof(NewAIController), "DespawnLeftItem")]
+    public static class NpcActDespawnLPatch { [HarmonyPostfix] public static void Postfix(NewAIController __instance) { Net.NpcActAi(__instance, 12, 0); } }
+    [HarmonyPatch(typeof(NewAIController), "UpdateCurrentWeapon")]
+    public static class NpcActWeaponPatch { [HarmonyPostfix] public static void Postfix(NewAIController __instance) { Net.NpcActAi(__instance, 13, 0); } }
+
+
+    [HarmonyPatch(typeof(AudioController), "PlayWorldOneShot")]
+    public static class WorldSoundPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(AudioEvent __0, Actor __1, Vector3 __3) { Net.OnWorldSound(__0, __1, __3); }
+    }
+
+    // Моё тело получило удар / упало / умерло -> другому игроку для анимации аватара
+    [HarmonyPatch(typeof(Player), "RecieveDamage")]
+    public static class SelfHurtFxPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(float __0, Vector3 __3) { if (__0 > 0.001f) Net.SendBodyFx(1, __3); }
+    }
+
+    [HarmonyPatch(typeof(Player), "TriggerPlayerKO")]
+    public static class SelfKoFxPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix() { Net.SendBodyFx(2, Vector3.zero); }
+    }
+
+    [HarmonyPatch(typeof(Player), "TriggerPlayerRecovery")]
+    public static class SelfRecoverFxPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix() { Net.SendBodyFx(3, Vector3.zero); }
+    }
+
+    [HarmonyPatch(typeof(Player), "KillPlayer")]
+    public static class SelfDeathFxPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix() { Net.SendBodyFx(4, Vector3.zero); }
+    }
+
+    // Не даём сесть на место, где уже сидит другой игрок
+    [HarmonyPatch(typeof(Player), "TransformPlayerController")]
+    public static class SeatGuardPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(PlayerTransitionPreset __0, Interactable __2) { return !Net.SeatTaken(__0, __2); }
+    }
+
+    // Клиент бьёт горожанина: урон считает хост (у клиента ИИ горожан остановлен), результат вернётся в потоке состояния
+    [HarmonyPatch(typeof(Citizen), "RecieveDamage")]
+    public static class NpcDamagePatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(Citizen __instance, float amount, Actor fromWho, Vector3 damagePosition, Vector3 damageDirection, SpatterPatternPreset forwardSpatter, SpatterPatternPreset backSpatter, SpatterSimulation.EraseMode spatterErase, bool alertSurrounding, bool forceRagdoll, float forcedRagdollDuration, float shockMP, bool enableKill, bool allowRecoil, float ragdollForceMP)
+        {
+            return Net.OnClientHitsNpc(__instance, amount, fromWho, damagePosition, damageDirection, forwardSpatter, backSpatter, (int)spatterErase, alertSurrounding, forceRagdoll, forcedRagdollDuration, shockMP, enableKill, allowRecoil, ragdollForceMP);
+        }
+    }
+
+    // Внешность горожан: игра выбирает одежду и цвета «случайно» в момент показа, у каждого игрока по-своему.
+    // Привязываем случайность к самому горожанину, чтобы у обоих игроков выглядел одинаково
+    [HarmonyPatch]
+    public static class OutfitSeedPatch
+    {
+        static readonly string[] names = { "GenerateOutfits", "MakeClothed", "SetCurrentOutfit", "LoadCurrentOutfit", "SelectRandomOutfits" };
+        public static System.Collections.Generic.IEnumerable<System.Reflection.MethodBase> TargetMethods()
+        {
+            foreach (var m in typeof(CitizenOutfitController).GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.DeclaredOnly))
+                if (System.Array.IndexOf(names, m.Name) >= 0) yield return m;
+        }
+        [HarmonyPrefix] public static void Prefix(CitizenOutfitController __instance) { Net.LookSeedBegin(__instance != null ? __instance.human : null); }
+        [HarmonyPostfix] public static void Postfix() { Net.LookSeedEnd(); }
+    }
+
+    [HarmonyPatch(typeof(Human), "SetPhysicalModelParams")]
+    public static class PhysSeedPatch
+    {
+        [HarmonyPrefix] public static void Prefix(Human __instance) { Net.LookSeedBegin(__instance); }
+        [HarmonyPostfix] public static void Postfix() { Net.LookSeedEnd(); }
+    }
+
+    // Мебель, которую владелец ставит / двигает / продаёт / убирает на склад
+    [HarmonyPatch(typeof(NewRoom), "AddFurnitureCustom", new System.Type[] { typeof(PlayerApartmentController.FurniturePlacement) })]
+    public static class FurnAddPatch1
+    {
+        [HarmonyPostfix]
+        public static void Postfix(NewRoom __instance, PlayerApartmentController.FurniturePlacement __0, FurnitureLocation __result)
+        {
+            Net.OnFurnAdded(__instance, __result, __0);
+        }
+    }
+
+    [HarmonyPatch(typeof(NewRoom), "AddFurnitureCustom", new System.Type[] { typeof(FurnitureLocation) })]
+    public static class FurnAddPatch2
+    {
+        [HarmonyPostfix]
+        public static void Postfix(NewRoom __instance, FurnitureLocation __result)
+        {
+            Net.OnFurnAdded(__instance, __result, null);
+        }
+    }
+
+    [HarmonyPatch(typeof(PlayerApartmentController), "ExecutePlacement")]
+    public static class ExecPlacePatch
+    {
+        [HarmonyPrefix] public static void Prefix() { Net.BeginExecute(); }
+        [HarmonyPostfix] public static void Postfix() { Net.EndExecute(); }
+    }
+
+    [HarmonyPatch(typeof(PlayerApartmentController), "SellFurniture")]
+    public static class SellFurnPatch
+    {
+        [HarmonyPrefix] public static void Prefix(FurnitureLocation __0) { Net.OnFurnRemoved(__0, "продал"); }
+    }
+
+    [HarmonyPatch(typeof(PlayerApartmentController), "MoveFurnitureToStorage")]
+    public static class StoreFurnPatch
+    {
+        [HarmonyPrefix] public static void Prefix(FurnitureLocation __0) { Net.OnFurnRemoved(__0, "убрал на склад"); }
+    }
+
+    // Покупка квартиры с доски объявлений
+    [HarmonyPatch(typeof(PlayerApartmentController), "BuyNewResidence")]
+    public static class BuyResidencePatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(ResidenceController newHome)
+        {
+            if (Net.IsApartmentSoldElsewhere(newHome)) return false;
+            Net.BeginBuy();
+            return true;
+        }
+
+        [HarmonyPostfix]
+        public static void Postfix(ResidenceController newHome)
+        {
+            Net.OnApartmentBought(newHome);
+        }
+    }
+
+    // Окна: BreakableWindowController.BreakWindow
+    [HarmonyPatch(typeof(BreakableWindowController), "BreakWindow")]
+    public static class WindowBreakPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(BreakableWindowController __instance, Vector3 contactPosition, Vector3 relativeVelocity)
+        {
+            Net.OnWindowBreak(__instance, contactPosition, relativeVelocity);
+        }
+    }
+
+    [HarmonyPatch(typeof(Interactable), "Delete")]
+    public static class DeletePatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(Interactable __instance) { Net.OnItemDeleting(__instance); }
+    }
+
+    // Удар / блок игрока -> событие по сети
+    [HarmonyPatch(typeof(FirstPersonItemController), "MeleeAttack")]
+    public static class MeleePatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix() { Net.SendAction(1); }
+    }
+
+    [HarmonyPatch(typeof(FirstPersonItemController), "Block")]
+    public static class BlockPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix() { Net.NoteBlock(); Net.SendAction(2); }
+    }
+
+    [HarmonyPatch(typeof(Player), "Update")]
+    public static class PlayerPatch
+    {
+        static float timer;
+        static DateTime cfgStamp;
+        static string lastSeed;
+        static int lastNpc = -1;
+        static int lastDoors = -1;
+        static float lastChange;
+        static bool dumped;
+
+        [HarmonyPostfix]
+        public static void Postfix(Player __instance)
+        {
+            // Каждый кадр: сеть, отправка позиции, движение аватара
+            Net.Poll();
+            Net.Tick(__instance);
+            Net.CheatKeys();
+
+            // Остальное проверяем раз в секунду
+            timer += Time.unscaledDeltaTime;
+            if (timer < 1f) return;
+            timer = 0f;
+
+            // Чтобы неактивное окно (вторая копия игры) не вставало на паузу
+            Application.runInBackground = true;
+
+            try
+            {
+                if (Plugin.CfgLiveReload.Value && Plugin.Cfg != null)
+                {
+                    string path = Plugin.Cfg.ConfigFilePath;
+                    var wt = System.IO.File.GetLastWriteTimeUtc(path);
+                    if (cfgStamp == default(DateTime)) cfgStamp = wt;
+                    else if (wt != cfgStamp)
+                    {
+                        cfgStamp = wt;
+                        Plugin.Cfg.Reload();
+                        Plugin.L.LogInfo("[CFG] конфиг перечитан");
+                    }
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[CFG] {e.Message}"); }
+            Net.CheatsSecond();
+
+            var city = CityData.Instance;
+            if (city == null) return;
+
+            string seed = city.seed;
+            if (seed != lastSeed)
+            {
+                lastSeed = seed;
+                lastNpc = -1;
+                lastDoors = -1;
+                lastChange = Time.realtimeSinceStartup;
+                Plugin.L.LogInfo($"[CITY] seed={seed} name={city.cityName} size={city.citySize} " +
+                                 $"builtWith={city.cityBuiltWith} buildID={Game.Instance.buildID}");
+            }
+
+            int npc = city.citizenDictionary.Count;
+            int doors = city.doorDictionary.Count;
+            if (npc != lastNpc || doors != lastDoors)
+            {
+                lastNpc = npc;
+                lastDoors = doors;
+                lastChange = Time.realtimeSinceStartup;
+                Plugin.L.LogInfo($"[WORLD] npc={npc} doors={doors}");
+            }
+
+            // Мир считается загруженным, если счётчики не менялись 5 секунд
+            bool worldReady = npc > 0 && doors > 0 &&
+                              Time.realtimeSinceStartup - lastChange >= 5f;
+
+            if (!Net.Started && worldReady)
+            {
+                Net.Start();
+            }
+
+            if (Plugin.CfgDumpCitizen.Value && !dumped && worldReady)
+            {
+                dumped = true;
+                Dumper.Run();
+            }
+        }
+    }
+
+    // Диагностика: параметры аниматора NPC (нужны, чтобы оживить модель второго игрока)
+    internal static class Dumper
+    {
+        internal static void Run()
+        {
+            try
+            {
+                var city = CityData.Instance;
+                bool first = false, moving = false, running = false;
+
+                for (int i = 0; i < city.citizenDirectory.Count; i++)
+                {
+                    var c = city.citizenDirectory[i];
+                    if (c == null) continue;
+
+                    if (!first)
+                    {
+                        first = true;
+                        DumpAnimator("первый NPC", c, true);
+                    }
+                    if (!moving && c.isMoving && !c.isRunning)
+                    {
+                        moving = true;
+                        DumpAnimator("идущий NPC", c, false);
+                    }
+                    if (!running && c.isRunning)
+                    {
+                        running = true;
+                        DumpAnimator("бегущий NPC", c, false);
+                    }
+                    if (first && moving && running) break;
+                }
+
+                if (!moving) Plugin.Dbg("[ANIM] идущих NPC на момент дампа не нашлось");
+                if (!running) Plugin.Dbg("[ANIM] бегущих NPC на момент дампа не нашлось");
+                Plugin.Dbg("[ANIM] ===== END =====");
+            }
+            catch (Exception e)
+            {
+                Plugin.L.LogError($"[ANIM] {e}");
+            }
+        }
+
+        static void DumpAnimator(string label, Citizen c, bool full)
+        {
+            try
+            {
+                var ac = c.animationController;
+                if (ac == null || ac.mainAnimator == null)
+                {
+                    Plugin.Dbg($"[ANIM] {label}: у {c.citizenName} нет аниматора");
+                    return;
+                }
+
+                var a = ac.mainAnimator;
+                string ctrl = a.runtimeAnimatorController != null ? a.runtimeAnimatorController.name : "null";
+                Plugin.Dbg($"[ANIM] ===== {label}: {c.citizenName} moving={c.isMoving} running={c.isRunning} " +
+                                 $"crouched={c.isCrouched} controller={ctrl} layers={a.layerCount} speed={a.speed} =====");
+
+                var ps = a.parameters;
+                var line = new StringBuilder();
+                for (int i = 0; i < ps.Length; i++)
+                {
+                    var p = ps[i];
+                    string val;
+                    switch (p.type)
+                    {
+                        case AnimatorControllerParameterType.Float:
+                            val = a.GetFloat(p.name).ToString("0.###");
+                            break;
+                        case AnimatorControllerParameterType.Int:
+                            val = a.GetInteger(p.name).ToString();
+                            break;
+                        case AnimatorControllerParameterType.Bool:
+                            val = a.GetBool(p.name).ToString();
+                            break;
+                        default:
+                            val = "(trigger)";
+                            break;
+                    }
+
+                    if (full)
+                        Plugin.Dbg($"[ANIM]   {p.name} : {p.type} = {val}");
+                    else
+                        line.Append(p.name).Append('=').Append(val).Append("; ");
+                }
+
+                if (!full) Plugin.Dbg("[ANIM]   " + line);
+
+                if (full)
+                {
+                    for (int i = 0; i < a.layerCount; i++)
+                        Plugin.Dbg($"[ANIM]   слой {i}: {a.GetLayerName(i)} вес={a.GetLayerWeight(i):0.##}");
+
+                    // Все клипы контроллера: по названиям видно, какие есть кулаки, удары, пистолет и т.д.
+                    var rc = a.runtimeAnimatorController;
+                    if (rc != null)
+                    {
+                        var clips = rc.animationClips;
+                        var sb = new StringBuilder();
+                        for (int i = 0; i < clips.Length; i++)
+                            if (clips[i] != null) sb.Append(clips[i].name).Append(" | ");
+                        Plugin.Dbg($"[ANIM] клипов={clips.Length}: {sb}");
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Plugin.L.LogError($"[ANIM] {label}: {e}");
+            }
+        }
+    }
+
+    internal static class Net
+    {
+        const string Key = "sodcoop-1";
+        const byte MsgHello = 1;
+        const byte MsgHelloReply = 2;
+        const byte MsgPos = 3;
+        const byte MsgAction = 4;     // 1 = удар, 2 = блок
+        static float combatUntil;     // до какого момента держим боевую стойку
+        static bool attackAlt;
+        static bool itemLogged;
+
+        static float fistsCheckAt;
+        static bool fistsCached;
+        static string lastItemName;
+        static string curItem = "";
+        static string sentItem = null;
+        static float itemSendAt;
+        static string remoteItem = "";
+        static string layersStr = null;
+        static float[] layersVal = new float[0];
+        static int lastForceLog = -2;
+        const byte MsgItem = 5;
+        const byte MsgHeld = 6;
+        const byte MsgObj = 7;
+        const byte MsgItemEv = 8;
+        const byte MsgDoor = 9;
+        const byte MsgNpc = 10;
+        const byte MsgNpcHit = 11;
+        const byte MsgPuppet = 12;      // хост -> клиент: humanID горожанина-двойника
+        const byte MsgNpcAct = 15;      // хост -> клиент: разовые действия горожанина (удар, бросок, блок, оружие в руках)
+        const byte MsgBodyFx = 17;      // игрок -> игрок: меня ударили / я упал / я встал / я умер (для анимации аватара)
+        const byte MsgSound = 16;       // хост -> клиент: звук горожанина в бою
+        const byte MsgPuppetHurt = 13;  // хост -> клиент: горожанин ударил двойника = ударил тебя
+
+        static int ItemArms(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return -1;
+            try
+            {
+                foreach (var pair in (Plugin.CfgItemMap.Value ?? "").Split(','))
+                {
+                    int c = pair.IndexOf(':');
+                    if (c <= 0) continue;
+                    string key = pair.Substring(0, c).Trim();
+                    int v;
+                    if (key.Length == 0 || !int.TryParse(pair.Substring(c + 1).Trim(), out v)) continue;
+                    if (name.IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0) return v;
+                }
+            }
+            catch (Exception) { }
+            return -1;
+        }
+
+        // Кулаки в руках: у предмета есть действие со SpecialAction.punch
+        static bool FistsDrawn()
+        {
+            if (Time.realtimeSinceStartup < fistsCheckAt) return fistsCached;
+            fistsCheckAt = Time.realtimeSinceStartup + 0.2f;
+            bool res = false;
+            try
+            {
+                var fp = FirstPersonItemController.Instance;
+                var it = fp != null ? fp.currentItem : null;
+                curItem = "";
+                if (it != null && !fp.forceHolstered)
+                {
+                    string nm = it.name ?? "";
+                    curItem = nm;
+                    res = nm.IndexOf("fist", StringComparison.OrdinalIgnoreCase) >= 0;
+                    if (nm != lastItemName)
+                    {
+                        lastItemName = nm;
+                        Plugin.L.LogInfo($"[NET] Предмет в руках: {nm}, кулаки={res}");
+                    }
+                }
+            }
+            catch (Exception) { }
+            fistsCached = res;
+            return res;
+        }
+
+        // Крен камеры игрока (наклон Q/E), градусы -180..180
+        static float LeanRoll()
+        {
+            try
+            {
+                var cam = Camera.main;
+                if (cam == null) return 0f;
+                float z = cam.transform.eulerAngles.z;
+                if (z > 180f) z -= 360f;
+                return Mathf.Clamp(z, -45f, 45f);
+            }
+            catch (Exception) { return 0f; }
+        }
+
+        // Блок удерживается: ПКМ зажата. Если читать кнопку не получается, держим блок 0.5 с после вызова Block()
+        static bool inputBroken;
+        static bool LocalBlocking()
+        {
+            if (!inputBroken)
+            {
+                try { return Input.GetMouseButton(1); }
+                catch (Exception) { inputBroken = true; }
+            }
+            return Time.realtimeSinceStartup < blockUntil;
+        }
+
+        internal static void NoteBlock() { blockUntil = Time.realtimeSinceStartup + 0.5f; }
+
+        static Transform FindDeep(Transform t, string name)
+        {
+            if (t == null) return null;
+            if (t.name == name) return t;
+            for (int i = 0; i < t.childCount; i++)
+            {
+                var r = FindDeep(t.GetChild(i), name);
+                if (r != null) return r;
+            }
+            return null;
+        }
+
+        static Quaternion AxisRot(float deg)
+        {
+            switch ((Plugin.CfgCrouchAxis.Value ?? "X").Trim().ToUpperInvariant())
+            {
+                case "Y": return Quaternion.Euler(0f, deg, 0f);
+                case "Z": return Quaternion.Euler(0f, 0f, deg);
+                default: return Quaternion.Euler(deg, 0f, 0f);
+            }
+        }
+
+        static float lastSeatLog;
+        internal static bool SeatTaken(PlayerTransitionPreset enter, Interactable it)
+        {
+            try
+            {
+                if (!remoteSitting || avatar == null || it == null || enter == null) return false;
+                string tn = enter.name ?? "";
+                if (tn.IndexOf("exit", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+                bool match = false;
+                foreach (var kw in ((Plugin.CfgSitKeywords.Value ?? "") + ",booth,sofa,couch,armchair,bench,stool,seat,chair,sit,toilet").Split(','))
+                {
+                    string k = kw.Trim();
+                    if (k.Length > 0 && tn.IndexOf(k, StringComparison.OrdinalIgnoreCase) >= 0) { match = true; break; }
+                }
+                if (!match) return false;
+                Vector3 d = it.wPos - avatar.transform.position; d.y = 0f;
+                float rad = Plugin.CfgSeatRadius.Value;
+                if (rad <= 0f || d.sqrMagnitude > rad * rad)
+                {
+                    if (Time.realtimeSinceStartup - lastSeatLog > 1f) { lastSeatLog = Time.realtimeSinceStartup; Plugin.Dbg($"[SIT] сажусь рядом с другим игроком, расстояние до места {Mathf.Sqrt(d.sqrMagnitude):F2} м"); }
+                    return false;
+                }
+                if (Time.realtimeSinceStartup - lastSeatLog > 1f)
+                {
+                    lastSeatLog = Time.realtimeSinceStartup;
+                    Plugin.Dbg($"[SIT] место занято другим игроком ('{tn}', {Mathf.Sqrt(d.sqrMagnitude):F2} м) - посадка отменена");
+                }
+                return true;
+            }
+            catch (Exception) { return false; }
+        }
+
+        static string lastSitLog = "";
+        static bool sitLatched;
+        static Vector3 sitLastPos;
+        // Игрок сидит: переход "...Enter" с именем из SitKeywords включает сидение, переход "...Exit" или ходьба выключают
+        static bool SittingNow(Player p)
+        {
+            try
+            {
+                string tn = "", inm = "";
+                bool act = p.transitionActive;
+                if (act)
+                {
+                    var ct = p.currentTransition;
+                    tn = ct != null ? ct.name : "";
+                    var ti = p.transitionInteractable;
+                    inm = ti != null ? ti.name : "";
+                    bool exit = tn.IndexOf("exit", StringComparison.OrdinalIgnoreCase) >= 0;
+                    bool match = false;
+                    foreach (var kw in ((Plugin.CfgSitKeywords.Value ?? "") + ",booth,sofa,couch,armchair,bench,stool,seat,chair,sit,toilet").Split(','))
+                    {
+                        string k = kw.Trim();
+                        if (k.Length > 0 && tn.IndexOf(k, StringComparison.OrdinalIgnoreCase) >= 0) { match = true; break; }
+                    }
+                    if (exit) sitLatched = false;
+                    else if (match) { sitLatched = true; sitLastPos = p.transform.position; }
+                }
+                if (sitLatched && !act)
+                {
+                    // Переход закончился, а мы всё ещё сидим: сбрасываем, только если игрок ушёл от места
+                    Vector3 d = p.transform.position - sitLastPos; d.y = 0f;
+                    if (d.sqrMagnitude > 1.5f) sitLatched = false;
+                }
+                string sig = act + "|" + tn + "|" + inm + "|" + sitLatched;
+                if (sig != lastSitLog)
+                {
+                    lastSitLog = sig;
+                    Plugin.Dbg($"[SIT] переход активен={act} имя='{tn}' объект='{inm}' сидит={sitLatched}");
+                }
+            }
+            catch (Exception) { }
+            return sitLatched;
+        }
+
+        static float lastThrowSent;
+        internal static void SendAction(byte kind)
+        {
+            try
+            {
+                if (kind == 3 || kind == 4)
+                {
+                    if (Time.realtimeSinceStartup - lastThrowSent < 0.4f) return;
+                    lastThrowSent = Time.realtimeSinceStartup;
+                    Plugin.Dbg($"[ITEM] бросок/положил (kind={kind})");
+                }
+                if (!itemLogged)
+                {
+                    itemLogged = true;
+                    try
+                    {
+                        var it = FirstPersonItemController.Instance.currentItem;
+                        Plugin.L.LogInfo($"[NET] Первое действие kind={kind}, предмет в руках: {(it != null ? it.name : "null")}");
+                    }
+                    catch (Exception) { }
+                }
+                if (manager == null || manager.ConnectedPeersCount == 0) return;
+                var w = new NetDataWriter();
+                w.Put(MsgAction);
+                w.Put(kind);
+                manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[NET] SendAction: {e.Message}"); }
+        }
+
+        static EventBasedNetListener listener;
+        static NetManager manager;
+        static NetPeer serverPeer;
+        static bool connecting;
+        static float nextAttempt;
+        static bool errorLogged;
+
+        // Отправка позиции и удалённый игрок
+        static float sendTimer;
+        static GameObject avatar;     // корень аватара: стоит на уровне ног игрока
+        static Vector3 targetPos;     // позиция ног
+        static float targetYaw;       // куда смотрит игрок
+        static bool avatarSnap;
+        static Animator avatarAnim;
+        static Transform avatarModel;
+        static Vector3 modelBaseScale = Vector3.one;
+        static Vector3 modelBasePos;
+        static Quaternion modelBaseRot = Quaternion.identity;
+        static Transform boneUL, boneUR, boneLL, boneLR, boneTorso;
+        static float remoteLean, leanSmooth;
+        static bool remoteBlocking;
+        static bool remoteConsuming, remoteSitting, paramSit, paramCrouch, remoteCarryObj;
+        static float sitK;
+        static float blockUntil;
+        static float crouchBoneK, crouchAnimK;
+        static float crouchK;         // 0 = стоит, 1 = присел
+        static bool remoteCrouched, remoteRunning, remoteFists;
+        static float armsW;
+        static int lastCycleCao = -1;
+        static float nextCycleAttack;
+        static float animSpeed;       // сглаженная скорость аватара, м/с
+
+        internal static bool Started { get; private set; }
+        static bool IsHost { get { return Plugin.CfgMode.Value == NetMode.Host; } }
+
+        static string Describe()
+        {
+            var c = CityData.Instance;
+            return $"seed={c.seed} build={Game.Instance.buildID} " +
+                   $"npc={c.citizenDictionary.Count} doors={c.doorDictionary.Count}";
+        }
+
+        // Высота ног игрока (нижняя точка капсулы контроллера)
+        static Vector3 lastSendPos; static bool haveSendPos, talkLogged, talkHold; static float talkHoldAt, talkLogAt;
+
+        // пол под игроком: луч вниз от тела (попадает в пол или мебель, на которой он стоит)
+        static float GroundBelow(Vector3 pos, float fallback)
+        {
+            try
+            {
+                RaycastHit hit;
+                if (Physics.Raycast(pos + new Vector3(0f, 0.3f, 0f), Vector3.down, out hit, 4f, ~0, QueryTriggerInteraction.Ignore)) return hit.point.y;
+            }
+            catch (Exception) { }
+            return fallback;
+        }
+        static float FeetY(Player p)
+        {
+            try
+            {
+                var cc = p.charController;
+                if (cc != null) return cc.bounds.min.y;
+            }
+            catch (Exception) { }
+            return p.transform.position.y - 0.9f;
+        }
+
+        // Куда смотрит игрок (по камере)
+        static float LookYaw(Player p)
+        {
+            var cam = Camera.main;
+            return cam != null ? cam.transform.eulerAngles.y : p.transform.eulerAngles.y;
+        }
+
+        internal static void Start()
+        {
+            Started = true;
+            var mode = Plugin.CfgMode.Value;
+            if (mode == NetMode.Off)
+            {
+                Plugin.L.LogInfo("[NET] Сеть выключена (Mode=Off)");
+                return;
+            }
+
+            try
+            {
+                listener = new EventBasedNetListener();
+                manager = new NetManager(listener);
+
+                listener.ConnectionRequestEvent += request => request.AcceptIfKey(Key);
+
+                listener.PeerConnectedEvent += peer =>
+                {
+                    if (IsHost)
+                    {
+                        Plugin.L.LogInfo($"[NET] Клиент подключился: {peer}");
+                    }
+                    else
+                    {
+                        serverPeer = peer;
+                        connecting = false;
+                        Plugin.L.LogInfo($"[NET] Подключен к хосту: {peer}");
+                        var w = new NetDataWriter();
+                        w.Put(MsgHello);
+                        w.Put(Describe());
+                        peer.Send(w, DeliveryMethod.ReliableOrdered);
+                    }
+                };
+
+                listener.PeerDisconnectedEvent += (peer, info) =>
+                {
+                    Plugin.L.LogInfo($"[NET] Отключение: {peer}, причина: {info.Reason}");
+                    DestroyAvatar();
+                    if (!IsHost)
+                    {
+                        serverPeer = null;
+                        connecting = false;
+                        nextAttempt = Time.realtimeSinceStartup + 3f;
+                    }
+                };
+
+                listener.NetworkErrorEvent += (ep, err) =>
+                    Plugin.L.LogWarning($"[NET] Ошибка сети: {err} ({ep})");
+
+                listener.NetworkReceiveEvent += (peer, reader, channel, method) =>
+                {
+                    try { OnReceive(peer, reader); }
+                    finally { reader.Recycle(); }
+                };
+
+                if (IsHost)
+                {
+                    manager.Start(Plugin.CfgPort.Value);
+                    Plugin.L.LogInfo($"[NET] Хост запущен, UDP-порт {Plugin.CfgPort.Value}. {Describe()}");
+                }
+                else
+                {
+                    manager.Start();
+                    Plugin.L.LogInfo($"[NET] Клиент запущен, цель {Plugin.CfgAddress.Value}:{Plugin.CfgPort.Value}");
+                }
+            }
+            catch (Exception e)
+            {
+                Plugin.L.LogError($"[NET] Не удалось запустить сеть: {e}");
+            }
+        }
+
+        internal static void Poll()
+        {
+            if (manager == null) return;
+            try
+            {
+                manager.PollEvents();
+
+                // Клиент пробует подключиться, пока хост не станет доступен
+                if (!IsHost && serverPeer == null && !connecting &&
+                    Time.realtimeSinceStartup >= nextAttempt)
+                {
+                    connecting = true;
+                    manager.Connect(Plugin.CfgAddress.Value, Plugin.CfgPort.Value, Key);
+                }
+            }
+            catch (Exception e)
+            {
+                if (!errorLogged)
+                {
+                    errorLogged = true;
+                    Plugin.L.LogError($"[NET] Ошибка в Poll: {e}");
+                }
+            }
+        }
+
+        // Вызывается каждый кадр из Player.Update
+        internal static void Tick(Player p)
+        {
+            bool debug = Plugin.CfgDebugAvatar.Value;
+            if (manager == null && !debug) return;
+            try
+            {
+                float dt = Time.unscaledDeltaTime;
+
+                // Тестовый режим: аватар всегда в 3 м перед камерой лицом к игроку, сеть не нужна
+                if (debug)
+                {
+                    var cam = Camera.main;
+                    Vector3 origin = cam != null ? cam.transform.position : p.transform.position;
+                    Vector3 fwd = cam != null ? cam.transform.forward : p.transform.forward;
+                    fwd.y = 0f;
+                    if (fwd.sqrMagnitude < 0.001f) fwd = Vector3.forward;
+                    fwd = fwd.normalized;
+                    Vector3 flat = origin + fwd * 3f;
+                    targetPos = new Vector3(flat.x, FeetY(p), flat.z);
+                    targetYaw = LookYaw(p) + 180f;
+                    if (avatar == null) CreateAvatar();
+                }
+
+                // Отправка своей позиции ~20 раз в секунду
+                if (manager != null)
+                {
+                    sendTimer += dt;
+                    if (sendTimer >= 0.05f && manager.ConnectedPeersCount > 0)
+                    {
+                        sendTimer = 0f;
+                        Vector3 pos = p.transform.position;
+                        float feetSend = FeetY(p);
+                        // во время разговора игра двигает/поднимает камеру и тело: аватар остаётся там, где игрок стоял
+                        bool talkNow = false;
+                        try { var ic0 = InteractionController.Instance; talkNow = ic0 != null && (ic0.dialogMode || ic0.talkingTo != null); } catch (Exception) { }
+                        // после разговора тело ещё несколько кадров/секунд возвращается на землю: ждём, пока высота вернётся
+                        float groundY = GroundBelow(pos, lastSendPos.y);
+                        if (!talkNow && talkHold)
+                        {
+                            bool back = Mathf.Abs(feetSend - groundY) < 0.3f;
+                            if (Time.realtimeSinceStartup - talkLogAt > 1f) { talkLogAt = Time.realtimeSinceStartup; Plugin.Dbg($"[TALK] после разговора: тело y={feetSend:F2}, пол y={groundY:F2}, y трансформа={pos.y:F2}"); }
+                            if (back || Time.realtimeSinceStartup - talkHoldAt > 8f) { talkHold = false; Plugin.Dbg($"[TALK] разговор закончен, отпускаю аватар (тело y={feetSend:F2}, пол y={groundY:F2}, вернулось={back})"); }
+                            else talkNow = true;
+                        }
+                        if (talkNow && haveSendPos)
+                        {
+                            if (!talkHold) { talkHold = true; }
+                            talkHoldAt = talkHoldAt > 0f && talkLogged ? talkHoldAt : Time.realtimeSinceStartup;
+                            if (!talkLogged) { talkLogged = true; Plugin.Dbg($"[TALK] разговор: тело y={feetSend:F2} (держу {lastSendPos.y:F2}), x={pos.x:F2} z={pos.z:F2} (держу {lastSendPos.x:F2}, {lastSendPos.z:F2})"); }
+                            pos = new Vector3(lastSendPos.x, pos.y, lastSendPos.z); feetSend = groundY;
+                        }
+                        else { talkLogged = false; lastSendPos = new Vector3(pos.x, feetSend, pos.z); haveSendPos = true; }
+                        var w = new NetDataWriter();
+                        w.Put(MsgPos);
+                        w.Put(pos.x);
+                        w.Put(feetSend);
+                        w.Put(pos.z);
+                        w.Put(LookYaw(p));
+                        byte fl = 0;
+                        try { if (p.isCrouched) fl |= 1; if (p.isRunning) fl |= 2; } catch (Exception) { }
+                        bool fistsNow = FistsDrawn();
+                        if (fistsNow) fl |= 4;
+                        try { var fpc = FirstPersonItemController.Instance; if (fpc != null && fpc.isConsuming && !fpc.forceHolstered && !string.IsNullOrEmpty(curItem) && curItem != "nothing") fl |= 16; } catch (Exception) { }
+                        if (SittingNow(p)) fl |= 32;
+                        try { if (InteractionController.Instance != null && InteractionController.Instance.carryingObject != null) fl |= 64; } catch (Exception) { }
+
+                        w.Put(fl);
+                        w.Put(LeanRoll());
+                        manager.SendToAll(w, DeliveryMethod.Sequenced);
+                        if (curItem != sentItem || Time.realtimeSinceStartup > itemSendAt)
+                        {
+                            sentItem = curItem;
+                            itemSendAt = Time.realtimeSinceStartup + 3f;
+                            var wi = new NetDataWriter();
+                            wi.Put(MsgItem);
+                            wi.Put(curItem ?? "");
+                            manager.SendToAll(wi, DeliveryMethod.ReliableOrdered);
+                        }
+                        SendHeldIfChanged();
+                    }
+                }
+
+                try { NpcTick(dt); } catch (Exception e) { if (!npcErrLogged) { npcErrLogged = true; Plugin.L.LogWarning($"[NPC] {e.Message}"); } }
+
+                // Синхронизация предметов мира (которые несёт игрок)
+                if (Plugin.CfgObjSync.Value)
+                {
+                    if (manager != null && manager.ConnectedPeersCount > 0) LocalObjects(dt);
+                    RemoteObjectsTick(dt);
+                    HiddenTick();
+                    DoorTick();
+                }
+
+                // Плавное движение удалённого игрока
+                if (avatar != null)
+                {
+                    var tr = avatar.transform;
+                    Vector3 tp = targetPos + new Vector3(0f, Plugin.CfgAvatarYOffset.Value, 0f);
+                    Quaternion tq = Quaternion.Euler(0f, targetYaw + Plugin.CfgAvatarYawOffset.Value, 0f);
+
+                    Vector3 before = tr.position;
+                    if (avatarSnap || (tr.position - tp).sqrMagnitude > 25f)
+                    {
+                        avatarSnap = false;
+                        tr.position = tp;
+                        tr.rotation = tq;
+                        animSpeed = 0f;
+                    }
+                    else
+                    {
+                        float k = 1f - Mathf.Exp(-15f * dt);
+                        tr.position = Vector3.Lerp(tr.position, tp, k);
+                        tr.rotation = Quaternion.Slerp(tr.rotation, tq, k);
+                        Vector3 d = tr.position - before;
+                        d.y = 0f;
+                        float inst = dt > 0.0001f ? d.magnitude / dt : 0f;
+                        animSpeed = Mathf.Lerp(animSpeed, inst, 1f - Mathf.Exp(-8f * dt));
+                    }
+
+                    // Анимация ходьбы: параметр moveSpeed (0..1) по скорости перемещения
+                    if (avatarAnim != null)
+                    {
+                        float ms = Mathf.Clamp01(animSpeed / Plugin.CfgMaxSpeed.Value);
+                        if (remoteRunning && animSpeed > 0.5f) ms = 1f;
+                        if (ms < 0.03f) ms = 0f;
+                        avatarAnim.SetFloat("moveSpeed", ms);
+                        bool combat = remoteFists || Time.realtimeSinceStartup < combatUntil;
+                        int cao = Plugin.CfgCombatArms.Value;
+                        int armsSt = Plugin.CfgArmsState.Value;
+                        if (remoteBlocking)
+                        {
+                            combat = true; cao = Plugin.CfgBlockCao.Value;
+                            if (Plugin.CfgBlockArms.Value >= 0) armsSt = Plugin.CfgBlockArms.Value;
+                        }
+                        int itemArms = remoteBlocking ? -1 : ItemArms(remoteItem);
+                        if (remoteConsuming && remoteHeld.Count > 0 && !combat && Plugin.CfgConsumeArms.Value >= 0) itemArms = Plugin.CfgConsumeArms.Value;
+                        if (itemArms >= 0 && !combat) armsSt = itemArms;
+                        if (Plugin.CfgDebugCycle.Value)
+                        {
+                            // Подбор: каждые 5 с следующее значение combatArmsOverride, каждые 2 с удар
+                            combat = true;
+                            float t = Time.realtimeSinceStartup;
+                            cao = (int)(t / 5f) % 6;
+                            if (cao != lastCycleCao) { lastCycleCao = cao; Plugin.Dbg($"[ANIM] подбор: combatArmsOverride={cao}"); }
+                            if (t >= nextCycleAttack)
+                            {
+                                nextCycleAttack = t + 2f;
+                                avatarAnim.SetTrigger("attack");
+                            }
+                        }
+                        avatarAnim.SetBool("inCombat", combat);
+                        avatarAnim.SetInteger("combatArmsOverride", combat ? cao : 0);
+
+                        // Руки свободны: отключаем слои-оверрайды (ArmsOverride, UmbrellaOverride)
+                        // и состояния "несёт предмет"
+                        int lc = avatarAnim.layerCount;
+                        armsW = Mathf.MoveTowards(armsW, ((combat || itemArms >= 0 || (Plugin.CfgCarryAnim.Value && (remoteHeld.Count > 0 || remoteCarryObj))) && lc > 1) ? 1f : 0f, dt * 5f);
+                        for (int li = 1; li < lc; li++)
+                            avatarAnim.SetLayerWeight(li, li == 1 ? armsW : 0f);
+                        bool carrying = Plugin.CfgCarryAnim.Value && !combat && ((remoteHeld.Count > 0 && (itemArms < 0 || remoteConsuming)) || remoteCarryObj);
+                        avatarAnim.SetBool("carryingItem", carrying);
+                        avatarAnim.SetInteger("carryItem", carrying ? (remoteCarryObj ? Plugin.CfgCarryObjValue.Value : Plugin.CfgCarryValue.Value) : 0);
+                        avatarAnim.SetBool("armsLock", false);
+                        avatarAnim.SetInteger("ArmsState", armsSt);
+                        int idleVal = Plugin.CfgIdleState.Value;
+                        paramSit = remoteSitting && Plugin.CfgSitIdleValue.Value >= 0;
+                        paramCrouch = !paramSit && remoteCrouched && Plugin.CfgCrouchIdleValue.Value >= 0 && animSpeed < 0.3f;
+                        if (paramSit) idleVal = Plugin.CfgSitIdleValue.Value;
+                        else if (paramCrouch) idleVal = Plugin.CfgCrouchIdleValue.Value;
+                        avatarAnim.SetInteger("IdleAnimationState", idleVal);
+
+                        // Ручной подбор из конфига (Debug.Force*)
+                        if (Plugin.CfgForceCombat.Value >= 0) avatarAnim.SetBool("inCombat", Plugin.CfgForceCombat.Value > 0);
+                        if (Plugin.CfgForceCao.Value >= 0) avatarAnim.SetInteger("combatArmsOverride", Plugin.CfgForceCao.Value);
+                        if (Plugin.CfgForceArms.Value >= 0) avatarAnim.SetInteger("ArmsState", Plugin.CfgForceArms.Value);
+                        if (Plugin.CfgForceIdle.Value >= 0) avatarAnim.SetInteger("IdleAnimationState", Plugin.CfgForceIdle.Value);
+                        string ls = Plugin.CfgForceLayers.Value ?? "";
+                        if (ls != layersStr)
+                        {
+                            layersStr = ls;
+                            var parts = ls.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                            layersVal = new float[parts.Length];
+                            for (int pi = 0; pi < parts.Length; pi++)
+                            {
+                                float fv;
+                                float.TryParse(parts[pi], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out fv);
+                                layersVal[pi] = fv;
+                            }
+                        }
+                        for (int pi = 0; pi < layersVal.Length && pi + 1 < lc; pi++)
+                            avatarAnim.SetLayerWeight(pi + 1, layersVal[pi]);
+                    }
+
+                    // Аниматор выключен и обновляется вручную: так мы можем поверх анимации
+                    // довернуть кости (присед), и игра не перезапишет их до следующего кадра
+                    if (avatarAnim != null) UpdatePose(dt);
+                    if (avatarAnim != null) avatarAnim.Update(dt);
+
+                    crouchK = Mathf.MoveTowards(crouchK, remoteCrouched ? 1f : 0f, dt * 6f);
+                    crouchBoneK = Mathf.MoveTowards(crouchBoneK, (remoteCrouched && !poseAnimCrouch) ? 1f : 0f, dt * 6f);
+                    crouchAnimK = Mathf.MoveTowards(crouchAnimK, (remoteCrouched && poseAnimCrouch) ? 1f : 0f, dt * 6f);
+                    if (avatarModel != null)
+                    {
+                        // Корпус вниз (ноги уходят в пол) и наклон по Q/E
+                        sitK = Mathf.MoveTowards(sitK, poseAnimSit ? 1f : 0f, dt * 4f);
+                        avatarModel.localPosition = modelBasePos + new Vector3(0f, -(Plugin.CfgCrouchDrop.Value * crouchBoneK + Plugin.CfgDropWithAnim.Value * crouchAnimK + Plugin.CfgSitDrop.Value * sitK), 0f);
+                        leanSmooth = Mathf.Lerp(leanSmooth, remoteLean, 1f - Mathf.Exp(-10f * dt));
+                        avatarModel.localRotation = Quaternion.Euler(0f, 0f, -leanSmooth * (poseAnimLean ? Plugin.CfgTiltWithAnim.Value : Plugin.CfgLeanScale.Value)) * modelBaseRot;
+                    }
+                    UpdateHeld();
+
+                    if (crouchBoneK > 0.001f)
+                    {
+                        float hip = Plugin.CfgCrouchHip.Value * crouchBoneK;
+                        float knee = Plugin.CfgCrouchKnee.Value * crouchBoneK;
+                        if (boneUL != null) boneUL.localRotation = boneUL.localRotation * AxisRot(hip);
+                        if (boneUR != null) boneUR.localRotation = boneUR.localRotation * AxisRot(hip);
+                        if (boneLL != null) boneLL.localRotation = boneLL.localRotation * AxisRot(knee);
+                        if (boneLR != null) boneLR.localRotation = boneLR.localRotation * AxisRot(knee);
+                        if (boneTorso != null) boneTorso.localRotation = boneTorso.localRotation * AxisRot(Plugin.CfgCrouchTorso.Value * crouchBoneK);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                if (!errorLogged)
+                {
+                    errorLogged = true;
+                    Plugin.L.LogError($"[NET] Ошибка в Tick: {e}");
+                }
+            }
+        }
+
+        // ---------------- Аватар ----------------
+
+        // Есть ли уже загруженный NPC, у которого можно взять модель (в меню города ещё нет)
+        static bool CitizenModelAvailable()
+        {
+            try
+            {
+                var list = CityData.Instance.citizenDirectory;
+                if (list == null) return false;
+                for (int i = 0; i < list.Count; i++)
+                {
+                    var c = list[i];
+                    if (c == null) continue;
+                    var ac = c.animationController;
+                    if (ac != null && ac.mainAnimator != null) return true;
+                }
+            }
+            catch (Exception) { }
+            return false;
+        }
+
+        static void CreateAvatar()
+        {
+            // Пока мир не загружен, аватар не создаём: иначе вместо персонажа останется капсула
+            if (Plugin.CfgUseCitizenModel.Value && !CitizenModelAvailable()) return;
+
+            avatar = new GameObject("SodCoop_RemotePlayer");
+
+            bool ok = false;
+            if (Plugin.CfgUseCitizenModel.Value)
+                ok = TryCreateCitizenModel(avatar);
+
+            if (!ok)
+                CreateCapsule(avatar);
+
+            avatarSnap = true;
+        }
+
+        // Клонирует модель одного из NPC (только внешний вид и аниматор, без ИИ)
+        static bool TryCreateCitizenModel(GameObject root)
+        {
+            try
+            {
+                var city = CityData.Instance;
+                GameObject src = null;
+                Citizen srcCit = null;
+
+                for (int i = 0; i < city.citizenDirectory.Count; i++)
+                {
+                    var c = city.citizenDirectory[i];
+                    if (c == null) continue;
+                    var ac = c.animationController;
+                    if (ac == null || ac.mainAnimator == null) continue;
+                    src = ac.mainAnimator.gameObject;
+                    srcCit = c;
+                    break;
+                }
+
+                if (src == null)
+                {
+                    Plugin.L.LogWarning("[NET] Не нашёл NPC с моделью, использую капсулу");
+                    return false;
+                }
+
+                // Клон создаём под выключенным родителем: пока он неактивен, Awake/OnEnable
+                // игровых скриптов не срабатывают, и мы успеваем убрать лишние компоненты
+                var holder = new GameObject("SodCoop_Holder");
+                holder.SetActive(false);
+                var clone = UnityEngine.Object.Instantiate<GameObject>(src, holder.transform);
+
+                try
+                {
+                    var sac = srcCit.animationController;
+                    handNameR = sac.rightHandJoint != null ? sac.rightHandJoint.transform.name : "";
+                    handNameL = sac.leftHandJoint != null ? sac.leftHandJoint.transform.name : "";
+                    var jr = sac.rightHandJoint != null ? sac.rightHandJoint.transform : null;
+                    string chainR = "";
+                    for (int d = 0; jr != null && d < 6; d++, jr = jr.parent) chainR += jr.name + " < ";
+                    Plugin.Dbg($"[HELD] суставы рук NPC: правая='{handNameR}' левая='{handNameL}' цепочка={chainR}");
+                }
+                catch (Exception e) { Plugin.L.LogWarning($"[HELD] суставы рук: {e.Message}"); }
+                Strip<CapsuleCollider>(clone);
+                Strip<InteractableController>(clone);
+                Strip<OutlineController>(clone);
+                Strip<CitizenOutfitController>(clone);
+                Strip<CitizenAnimationEvents>(clone);
+
+                clone.transform.SetParent(root.transform, false);
+                clone.transform.localPosition = src.transform.localPosition;
+                clone.transform.localRotation = src.transform.localRotation;
+                clone.transform.localScale = src.transform.localScale;
+                clone.name = "SodCoop_Model";
+                avatarModel = clone.transform;
+                modelBaseScale = clone.transform.localScale;
+                modelBasePos = clone.transform.localPosition;
+                modelBaseRot = clone.transform.localRotation;
+                boneUL = FindDeep(clone.transform, "UpperLegLeft");
+                boneUR = FindDeep(clone.transform, "UpperLegRight");
+                boneLL = FindDeep(clone.transform, "LowerLegLeft");
+                boneLR = FindDeep(clone.transform, "LowerLegRight");
+                boneTorso = FindDeep(clone.transform, "Midriff");
+                Plugin.L.LogInfo($"[NET] Кости: UL={boneUL != null} UR={boneUR != null} LL={boneLL != null} LR={boneLR != null} torso={boneTorso != null}");
+                clone.SetActive(true);
+                UnityEngine.Object.Destroy(holder);
+
+                var anim = clone.GetComponent<Animator>();
+                if (anim != null)
+                {
+                    anim.enabled = false;   // обновляем вручную в Tick
+                    anim.fireEvents = false;
+                    anim.applyRootMotion = false;
+                    anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+                    avatarAnim = anim;
+                    try
+                    {
+                        // Гасим «руки заняты»: оверрайд-слои рук/зонта и связанные параметры
+                        for (int li = 1; li < anim.layerCount; li++) anim.SetLayerWeight(li, 0f);
+                        anim.SetBool("armsLock", false);
+                        anim.SetBool("carryingItem", false);
+                        anim.SetBool("restrained", false);
+                        anim.SetInteger("carryItem", 0);
+                        anim.SetInteger("ArmsState", Plugin.CfgArmsState.Value);
+                        anim.SetInteger("IdleAnimationState", Plugin.CfgIdleState.Value);
+                        Plugin.L.LogInfo($"[NET] Аниматор: слоёв={anim.layerCount} ArmsState={Plugin.CfgArmsState.Value} IdleAnimationState={Plugin.CfgIdleState.Value}");
+                    }
+                    catch (Exception ex) { Plugin.L.LogWarning($"[NET] Не удалось настроить аниматор: {ex.Message}"); }
+                }
+
+                // Включаем рендереры модели (кроме служебных LOD-копий)
+                var rends = clone.GetComponentsInChildren<MeshRenderer>(true);
+                int total = 0, on = 0;
+                for (int i = 0; i < rends.Length; i++)
+                {
+                    var r = rends[i];
+                    if (r == null) continue;
+                    total++;
+                    if (!IsLodPart(r.transform)) r.enabled = true;
+                    if (r.enabled) on++;
+                }
+
+                Plugin.L.LogInfo($"[NET] Аватар: клон модели NPC {srcCit.citizenName}, " +
+                                 $"рендереров {on}/{total}, аниматор={(anim != null)}");
+                return true;
+            }
+            catch (Exception e)
+            {
+                Plugin.L.LogError($"[NET] Не удалось клонировать модель, использую капсулу: {e}");
+                return false;
+            }
+        }
+
+        static void Strip<T>(GameObject go) where T : Component
+        {
+            var arr = go.GetComponentsInChildren<T>(true);
+            for (int i = 0; i < arr.Length; i++)
+            {
+                if (arr[i] != null) UnityEngine.Object.DestroyImmediate(arr[i]);
+            }
+        }
+
+        static bool IsLodPart(Transform t)
+        {
+            for (int d = 0; d < 20 && t != null; d++)
+            {
+                string n = t.name;
+                if (n.Contains("LODS") || n.StartsWith("Level0")) return true;
+                t = t.parent;
+            }
+            return false;
+        }
+
+        // Запасной вариант: зелёная капсула с "носом"
+        static void CreateCapsule(GameObject root)
+        {
+            var body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+            body.name = "Capsule";
+            RemoveCollider(body);
+            body.transform.SetParent(root.transform, false);
+            body.transform.localPosition = new Vector3(0f, 0.9f, 0f);
+            body.transform.localScale = new Vector3(0.6f, 0.9f, 0.6f);
+
+            var mat = MakeMaterial();
+            var r = body.GetComponent<Renderer>();
+            if (r != null && mat != null) r.material = mat;
+
+            var nose = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            nose.name = "Nose";
+            RemoveCollider(nose);
+            nose.transform.SetParent(body.transform, false);
+            nose.transform.localPosition = new Vector3(0f, 0.5f, 0.6f);
+            nose.transform.localScale = new Vector3(0.5f, 0.3f, 0.6f);
+            var nr = nose.GetComponent<Renderer>();
+            if (nr != null && mat != null) nr.material = mat;
+
+            Plugin.L.LogInfo("[NET] Аватар: капсула");
+        }
+
+        static Material MakeMaterial()
+        {
+            // Игра на HDRP: берём шейдер HDRP напрямую
+            Shader shader = Shader.Find("HDRP/Unlit");
+            if (shader == null) shader = Shader.Find("HDRP/Lit");
+            if (shader == null)
+            {
+                Plugin.L.LogWarning("[NET] Шейдеры HDRP не найдены");
+                return null;
+            }
+            var m = new Material(shader);
+            m.SetColor("_UnlitColor", Color.green);
+            m.SetColor("_BaseColor", Color.green);
+            m.SetColor("_Color", Color.green);
+            return m;
+        }
+
+        static void RemoveCollider(GameObject go)
+        {
+            var col = go.GetComponent<Collider>();
+            if (col != null) UnityEngine.Object.Destroy(col);
+        }
+
+        // ---------- Объекты мира (которые несёт игрок) ----------
+        static System.Collections.Generic.Dictionary<int, Interactable> idCache;
+        static float idCacheAt;
+        static InteractableController objTrackIc;
+        static Interactable objTrackIt;
+        static int objTrackId = -1;
+        static float objSendTimer, objSettleUntil, objStillSince = -1f;
+        static Interactable pendingDrop;
+        static int objTrackHash;
+        static float pendingDropUntil;
+        static System.Collections.Generic.Dictionary<int, Interactable> idMap = new System.Collections.Generic.Dictionary<int, Interactable>();
+        static System.Collections.Generic.Dictionary<string, InteractablePreset> presetCache;
+        // Общий (глобальный) id предмета: у созданных копий он равен id у того, кто их выбросил первым.
+        // Во всех сообщениях ходит только глобальный id, поэтому оба игрока говорят об одном и том же предмете
+        static System.Collections.Generic.Dictionary<int, int> gidOf = new System.Collections.Generic.Dictionary<int, int>();
+        static int GidOf(Interactable it)
+        {
+            if (it == null) return -1;
+            int g;
+            if (gidOf.TryGetValue(it.id, out g)) return g;
+            // предметы, созданные во время игры, нумеруются у каждого игрока по-своему и совпадают с чужими:
+            // помечаем их стороной-создателем, чтобы общий номер был уникальным
+            if (it.id >= RuntimeIdStart && (it.id & (SideHost | SideClient)) == 0) return it.id | (IsHost ? SideHost : SideClient);
+            return it.id;
+        }
+        const int RuntimeIdStart = 10000000;
+        const int SideHost = 1 << 29;
+        const int SideClient = 1 << 30;
+
+        static string PresetNameOf(Interactable it)
+        {
+            try { return it != null && it.preset != null ? (it.preset.name ?? "") : ""; } catch (Exception) { return ""; }
+        }
+
+        static int NameHash(string s)
+        {
+            unchecked { int h = 17; foreach (char c in (s ?? "")) h = h * 31 + c; return h; }
+        }
+
+        // id у предметов, созданных во время игры (купленные, выброшенные), у игроков разные и могут совпасть
+        // с чужим предметом: поэтому найденный по id объект принимаем, только если пресет совпадает
+        static Interactable ResolveChecked(int id, string preset, int presetHash)
+        {
+            var it = ResolveId(id);
+            if (it == null) return null;
+            string pn = PresetNameOf(it);
+            bool ok = preset != null ? pn == preset : NameHash(pn) == presetHash;
+            if (!ok)
+            {
+                Plugin.L.LogWarning($"[ITEM] id={id}: у меня это '{pn}', а у отправителя '{preset ?? presetHash.ToString()}' (id не совпали) — игнорирую");
+                return null;
+            }
+            return it;
+        }
+
+        static Interactable ResolveId(int id)
+        {
+            Interactable it;
+            if (idMap.TryGetValue(id, out it) && it != null) return it;
+            int side = id & (SideHost | SideClient);
+            if (side != 0)
+            {
+                // номер чужого рантайм-предмета: у меня он может быть только в виде созданной копии (idMap)
+                if (side != (IsHost ? SideHost : SideClient)) return null;
+                return FindById(id & ~(SideHost | SideClient));
+            }
+            return FindById(id);
+        }
+
+        static InteractablePreset FindPreset(string name)
+        {
+            if (presetCache == null)
+            {
+                presetCache = new System.Collections.Generic.Dictionary<string, InteractablePreset>();
+                try
+                {
+                    foreach (var p in Resources.FindObjectsOfTypeAll<InteractablePreset>())
+                        if (p != null && !string.IsNullOrEmpty(p.name) && !presetCache.ContainsKey(p.name)) presetCache[p.name] = p;
+                    Plugin.Dbg($"[ITEM] пресетов предметов: {presetCache.Count}");
+                }
+                catch (Exception e) { Plugin.L.LogWarning($"[ITEM] пресеты: {e.Message}"); }
+            }
+            InteractablePreset r;
+            return presetCache.TryGetValue(name ?? "", out r) ? r : null;
+        }
+
+        static void SendItemEvent(byte kind, Interactable it, bool withPose)
+        {
+            try
+            {
+                if (manager == null || manager.ConnectedPeersCount == 0 || it == null) return;
+                var w = new NetDataWriter();
+                w.Put(MsgItemEv);
+                w.Put(kind);
+                w.Put(GidOf(it));
+                w.Put(PresetNameOf(it));
+                sharedLocal.Add(it.id);
+                if (withPose)
+                {
+                    Vector3 p = it.wPos; Vector3 e = it.wEuler;
+                    try { if (it.controller != null) { var tr = RootOf(it.controller); p = tr.position; e = tr.eulerAngles; } } catch (Exception) { }
+                    w.Put(p.x); w.Put(p.y); w.Put(p.z);
+                    w.Put(e.x); w.Put(e.y); w.Put(e.z);
+                    WriteState(w, it);
+                }
+                manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+            }
+            catch (Exception ex) { Plugin.L.LogWarning($"[ITEM] отправка: {ex.Message}"); }
+        }
+
+        static System.Collections.Generic.HashSet<int> sharedLocal = new System.Collections.Generic.HashSet<int>();
+        static bool applyingRemote;
+
+        class PassedVal { public int type; public float value; public string str; }
+        class ItemState { public float val, cs; public System.Collections.Generic.List<PassedVal> pv = new System.Collections.Generic.List<PassedVal>(); }
+
+        // состояние предмета: сколько осталось выпить/съесть и прочие переменные
+        static void WriteState(NetDataWriter w, Interactable it)
+        {
+            float v = 0f, c = 0f; int n = 0;
+            try { v = it.val; c = it.cs; } catch (Exception) { }
+            var list = new System.Collections.Generic.List<PassedVal>();
+            try
+            {
+                var pv = it.pv;
+                if (pv != null)
+                    for (int i = 0; i < pv.Count && i < 30; i++)
+                    {
+                        var x = pv[i];
+                        if (x == null) continue;
+                        list.Add(new PassedVal { type = (int)x.varType, value = x.value, str = x.str ?? "" });
+                    }
+            }
+            catch (Exception) { }
+            n = list.Count;
+            w.Put(v); w.Put(c); w.Put((byte)n);
+            foreach (var x in list) { w.Put(x.type); w.Put(x.value); w.Put(x.str); }
+        }
+
+        static ItemState ReadState(NetDataReader r)
+        {
+            var st = new ItemState();
+            st.val = r.GetFloat(); st.cs = r.GetFloat();
+            int n = r.GetByte();
+            for (int i = 0; i < n; i++) st.pv.Add(new PassedVal { type = r.GetInt(), value = r.GetFloat(), str = r.GetString() });
+            return st;
+        }
+
+        static void ApplyState(Interactable it, ItemState st)
+        {
+            if (it == null || st == null) return;
+            try { it.val = st.val; it.cs = st.cs; } catch (Exception) { }
+            try
+            {
+                var pv = it.pv;
+                if (pv == null)
+                {
+                    pv = new Il2CppSystem.Collections.Generic.List<Interactable.Passed>();
+                    it.pv = pv;
+                }
+                foreach (var x in st.pv)
+                {
+                    bool found = false;
+                    for (int i = 0; i < pv.Count; i++)
+                    {
+                        var e = pv[i];
+                        if (e != null && (int)e.varType == x.type) { e.value = x.value; if (!string.IsNullOrEmpty(x.str)) e.str = x.str; found = true; break; }
+                    }
+                    if (!found) pv.Add(new Interactable.Passed((Interactable.PassedVarType)x.type, x.value, string.IsNullOrEmpty(x.str) ? null : x.str));
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[ITEM] состояние: {e.Message}"); }
+        }
+
+        internal static void OnItemDeleting(Interactable it)
+        {
+            try
+            {
+                if (applyingRemote || it == null || !Plugin.CfgObjSync.Value) return;
+                if (!sharedLocal.Remove(it.id)) return;
+                if (manager == null || manager.ConnectedPeersCount == 0) return;
+                var w = new NetDataWriter();
+                w.Put(MsgItemEv); w.Put((byte)4); w.Put(GidOf(it)); w.Put(PresetNameOf(it));
+                manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+                Plugin.Dbg($"[ITEM] предмет id={it.id} (общий id={GidOf(it)}) удалён, сообщаю второму игроку");
+            }
+            catch (Exception) { }
+        }
+
+        // ---------- Тестовые читы ----------
+        static bool cheatKeysBroken;
+        static bool lastPause;
+        static bool moneyDumped;
+
+        internal static void CheatKeys()
+        {
+            if (cheatKeysBroken || !Plugin.CfgCheatKeys.Value) return;
+            try
+            {
+                if (KeyDown(KeyCode.F6)) GiveMoney(Plugin.CfgMoneyAmount.Value);
+                if (KeyDown(KeyCode.F7)) SpawnItem(Plugin.CfgItemPreset.Value);
+                if (KeyDown(KeyCode.F8)) { Plugin.CfgPauseNpc.Value = !Plugin.CfgPauseNpc.Value; ApplyPause(); Plugin.L.LogInfo($"[CHEAT] пауза ИИ NPC: {Plugin.CfgPauseNpc.Value}"); }
+                if (KeyDown(KeyCode.F10)) GiveSocial(Plugin.CfgSocialAmount.Value);
+                if (KeyDown(KeyCode.F11)) { Plugin.CfgInvisible.Value = !Plugin.CfgInvisible.Value; Plugin.L.LogInfo($"[CHEAT] NPC не видят меня: {Plugin.CfgInvisible.Value}"); }
+                if (KeyDown(KeyCode.F9)) { Plugin.CfgGod.Value = !Plugin.CfgGod.Value; Plugin.L.LogInfo($"[CHEAT] бессмертие: {Plugin.CfgGod.Value}"); }
+            }
+            catch (Exception e)
+            {
+                cheatKeysBroken = true;
+                Plugin.L.LogWarning($"[CHEAT] горячие клавиши недоступны ({e.GetType().Name}); используйте значения в конфиге");
+            }
+        }
+
+        static System.Reflection.MethodInfo keyDownMethod;
+
+        // UnityEngine.Input через рефлексию, чтобы не требовать ссылку на InputLegacyModule
+        static bool KeyDown(KeyCode k)
+        {
+            if (keyDownMethod == null)
+            {
+                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    try
+                    {
+                        var t = asm.GetType("UnityEngine.Input");
+                        if (t == null) continue;
+                        keyDownMethod = t.GetMethod("GetKeyDown", new[] { typeof(KeyCode) });
+                        if (keyDownMethod != null) break;
+                    }
+                    catch (Exception) { }
+                }
+                if (keyDownMethod == null) throw new InvalidOperationException("Input.GetKeyDown не найден");
+            }
+            return (bool)keyDownMethod.Invoke(null, new object[] { k });
+        }
+
+        // раз в секунду: команды, которые можно задать в конфиге во время игры
+        internal static void CheatsSecond()
+        {
+            try
+            {
+                if (Plugin.CfgAddMoney.Value != 0)
+                {
+                    int a = Plugin.CfgAddMoney.Value;
+                    Plugin.CfgAddMoney.Value = 0;
+                    GiveMoney(a);
+                    Plugin.Cfg.Save();
+                }
+                if (Plugin.CfgAddSocial.Value != 0)
+                {
+                    int a = Plugin.CfgAddSocial.Value;
+                    Plugin.CfgAddSocial.Value = 0;
+                    GiveSocial(a);
+                    Plugin.Cfg.Save();
+                }
+                if (Plugin.CfgSpawnNow.Value)
+                {
+                    Plugin.CfgSpawnNow.Value = false;
+                    SpawnItem(Plugin.CfgItemPreset.Value);
+                    Plugin.Cfg.Save();
+                }
+                string q = Plugin.CfgSearchPreset.Value;
+                if (!string.IsNullOrEmpty(q))
+                {
+                    Plugin.CfgSearchPreset.Value = "";
+                    SearchPresets(q);
+                    Plugin.Cfg.Save();
+                }
+                ApplyPause();
+                AvatarLightFix(false);
+                BreakTrace.MaybeInstall();
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[CHEAT] {e.Message}"); }
+        }
+
+        static void ApplyPause()
+        {
+            bool v = Plugin.CfgPauseNpc.Value;
+            if (v == lastPause) return;
+            lastPause = v;
+            try { Game.Instance.SetPauseAI(v); Plugin.L.LogInfo($"[CHEAT] ИИ NPC {(v ? "остановлен" : "включён")}"); }
+            catch (Exception e) { Plugin.L.LogWarning($"[CHEAT] SetPauseAI: {e.Message}"); }
+        }
+
+        static Type FindType(string name)
+        {
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                try
+                {
+                    foreach (var t in asm.GetTypes())
+                        if (t.Name == name && t.Namespace == null) return t;
+                }
+                catch (Exception) { }
+            }
+            return null;
+        }
+
+        static void GiveMoney(int amount)
+        {
+            try
+            {
+                var t = FindType("GameplayController");
+                if (t == null) { Plugin.L.LogWarning("[CHEAT] класс GameplayController не найден"); return; }
+                var flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance;
+                if (!moneyDumped)
+                {
+                    moneyDumped = true;
+                    var names = new System.Collections.Generic.List<string>();
+                    foreach (var m in t.GetMembers(flags))
+                        if (m.Name.IndexOf("oney", StringComparison.OrdinalIgnoreCase) >= 0 && !m.Name.StartsWith("NativeFieldInfoPtr") && !m.Name.StartsWith("NativeMethodInfoPtr")) names.Add(m.MemberType + " " + m.Name);
+                    Plugin.L.LogInfo("[CHEAT] члены GameplayController про деньги: " + string.Join(", ", names.ToArray()));
+                }
+                object inst = null;
+                var ip = t.GetProperty("Instance", flags);
+                if (ip != null) inst = ip.GetValue(null, null);
+                if (inst == null) { Plugin.L.LogWarning("[CHEAT] GameplayController.Instance пуст"); return; }
+                foreach (var m in t.GetMethods(flags))
+                {
+                    if (m.Name != "AddMoney") continue;
+                    var ps = m.GetParameters();
+                    var args = new object[ps.Length];
+                    bool first = true;
+                    for (int i = 0; i < ps.Length; i++)
+                    {
+                        var pt = ps[i].ParameterType;
+                        if (pt == typeof(int)) args[i] = amount;
+                        else if (pt == typeof(float)) args[i] = (float)amount;
+                        else if (pt == typeof(bool)) args[i] = first ? true : false;
+                        else if (pt == typeof(string)) args[i] = "cheat";
+                        else args[i] = null;
+                        if (pt == typeof(bool)) first = false;
+                    }
+                    m.Invoke(inst, args);
+                    Plugin.L.LogInfo($"[CHEAT] добавлено денег: {amount} (AddMoney)");
+                    return;
+                }
+                var mp = t.GetProperty("money", flags);
+                if (mp != null && mp.PropertyType == typeof(int))
+                {
+                    mp.SetValue(inst, (int)mp.GetValue(inst, null) + amount, null);
+                    Plugin.L.LogInfo($"[CHEAT] добавлено денег: {amount} (поле money)");
+                    return;
+                }
+                Plugin.L.LogWarning("[CHEAT] не нашёл AddMoney / money у GameplayController, смотрите список членов в логе выше");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[CHEAT] деньги: {(e.InnerException != null ? e.InnerException.Message : e.Message)}"); }
+        }
+
+        static bool socialDumped;
+
+        static void GiveSocial(int amount)
+        {
+            try
+            {
+                var t = FindType("GameplayController");
+                if (t == null) { Plugin.L.LogWarning("[CHEAT] класс GameplayController не найден"); return; }
+                var flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance;
+                if (!socialDumped)
+                {
+                    socialDumped = true;
+                    var names = new System.Collections.Generic.List<string>();
+                    foreach (var m in t.GetMembers(flags))
+                        if (m.Name.IndexOf("ocial", StringComparison.OrdinalIgnoreCase) >= 0 && !m.Name.StartsWith("NativeFieldInfoPtr") && !m.Name.StartsWith("NativeMethodInfoPtr")) names.Add(m.MemberType + " " + m.Name);
+                    Plugin.L.LogInfo("[CHEAT] члены GameplayController про соцрейтинг: " + string.Join(", ", names.ToArray()));
+                }
+                object inst = null;
+                var ip = t.GetProperty("Instance", flags);
+                if (ip != null) inst = ip.GetValue(null, null);
+                if (inst == null) { Plugin.L.LogWarning("[CHEAT] GameplayController.Instance пуст"); return; }
+                foreach (var m in t.GetMethods(flags))
+                {
+                    if (!m.Name.StartsWith("Add") || m.Name.IndexOf("ocial", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    var ps = m.GetParameters();
+                    var args = new object[ps.Length];
+                    bool ok = true;
+                    for (int i = 0; i < ps.Length; i++)
+                    {
+                        var pt = ps[i].ParameterType;
+                        if (pt == typeof(int)) args[i] = amount;
+                        else if (pt == typeof(float)) args[i] = (float)amount;
+                        else if (pt == typeof(bool)) args[i] = false;
+                        else if (pt == typeof(string)) args[i] = "cheat";
+                        else if (!pt.IsValueType) args[i] = null;
+                        else ok = false;
+                    }
+                    if (!ok) continue;
+                    m.Invoke(inst, args);
+                    Plugin.L.LogInfo($"[CHEAT] соцрейтинг +{amount} ({m.Name})");
+                    return;
+                }
+                foreach (var pr in t.GetProperties(flags))
+                {
+                    if (pr.Name.IndexOf("ocialcredit", StringComparison.OrdinalIgnoreCase) < 0 || !pr.CanRead || !pr.CanWrite) continue;
+                    if (pr.PropertyType == typeof(int)) { pr.SetValue(inst, (int)pr.GetValue(inst, null) + amount, null); Plugin.L.LogInfo($"[CHEAT] соцрейтинг +{amount} (поле {pr.Name})"); return; }
+                    if (pr.PropertyType == typeof(float)) { pr.SetValue(inst, (float)pr.GetValue(inst, null) + amount, null); Plugin.L.LogInfo($"[CHEAT] соцрейтинг +{amount} (поле {pr.Name})"); return; }
+                }
+                Plugin.L.LogWarning("[CHEAT] не нашёл метод/поле соцрейтинга, смотрите список членов в логе выше");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[CHEAT] соцрейтинг: {(e.InnerException != null ? e.InnerException.Message : e.Message)}"); }
+        }
+
+        static void SpawnItem(string preset)
+        {
+            try
+            {
+                var pr = FindPreset(preset);
+                if (pr == null) { Plugin.L.LogWarning($"[CHEAT] пресет '{preset}' не найден (используйте Cheats.SearchPreset)"); return; }
+                var cam = Camera.main;
+                Vector3 pos = cam != null ? cam.transform.position + cam.transform.forward * 1.0f : Player.Instance.transform.position + Vector3.up;
+                var it = InteractableCreator.Instance.CreateWorldInteractable(pr, null, null, null, pos, Vector3.zero, null, null, "");
+                Plugin.L.LogInfo(it != null ? $"[CHEAT] создан предмет '{preset}' (id={it.id})" : $"[CHEAT] не удалось создать '{preset}'");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[CHEAT] предмет: {e.Message}"); }
+        }
+
+        static void SearchPresets(string q)
+        {
+            FindPreset("");
+            var found = new System.Collections.Generic.List<string>();
+            if (presetCache != null)
+                foreach (var k in presetCache.Keys)
+                    if (k.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0) found.Add(k);
+            found.Sort();
+            Plugin.L.LogInfo($"[CHEAT] пресеты по '{q}' ({found.Count}): " + string.Join(", ", found.ToArray()));
+        }
+
+        // ---------- Двери ----------
+        static bool applyingDoor;
+        static bool doorActorFallback;
+        static System.Collections.Generic.Dictionary<IntPtr, int> doorKeys = new System.Collections.Generic.Dictionary<IntPtr, int>();
+        static float doorKeysAt;
+
+        static bool IsPlayerActor(Actor a)
+        {
+            try { return a != null && a.isPlayer; } catch (Exception) { return false; }
+        }
+
+        static Actor DoorActor()
+        {
+            if (!doorActorFallback) return null;
+            try { return Player.Instance; } catch (Exception) { return null; }
+        }
+
+        static int DoorKey(NewDoor d)
+        {
+            int k;
+            if (doorKeys.TryGetValue(d.Pointer, out k)) return k;
+            if (Time.realtimeSinceStartup < doorKeysAt) return -1;
+            doorKeysAt = Time.realtimeSinceStartup + 2f;
+            try
+            {
+                doorKeys.Clear();
+                foreach (var kv in CityData.Instance.doorDictionary)
+                    if (kv.Value != null) doorKeys[kv.Value.Pointer] = kv.Key;
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[DOOR] индекс дверей: {e.Message}"); }
+            return doorKeys.TryGetValue(d.Pointer, out k) ? k : -1;
+        }
+
+        static NewDoor DoorByKey(int key)
+        {
+            try
+            {
+                NewDoor d;
+                var dict = CityData.Instance.doorDictionary;
+                if (dict != null && dict.TryGetValue(key, out d)) return d;
+            }
+            catch (Exception) { }
+            return null;
+        }
+
+        static void SendDoor(NetDataWriter w)
+        {
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+        }
+
+        internal static void OnDoorOpen(NewDoor d, float ajar, Actor actor, bool skip)
+        {
+            try
+            {
+                if (applyingDoor || !Plugin.CfgDoorSync.Value || d == null || manager == null || manager.ConnectedPeersCount == 0) return;
+                // двери, которые открывают горожане, шлёт только хост (у клиента ИИ горожан остановлен)
+                if (!IsPlayerActor(actor) && !(IsHost && actor != null && Plugin.CfgNpcSync.Value)) return;
+                int key = DoorKey(d);
+                if (key < 0) return;
+                var w = new NetDataWriter();
+                w.Put(MsgDoor); w.Put((byte)1); w.Put(key); w.Put(ajar); w.Put(skip);
+                SendDoor(w);
+                if (Plugin.CfgDebugLog.Value) Plugin.L.LogInfo($"[DOOR] я открыл/закрыл дверь {key}: ajar={ajar:0.00}");
+            }
+            catch (Exception) { }
+        }
+
+        internal static void OnDoorFlag(byte kind, NewDoor d, bool val, Actor actor)
+        {
+            try
+            {
+                if (applyingDoor || !Plugin.CfgDoorSync.Value || d == null || manager == null || manager.ConnectedPeersCount == 0) return;
+                if (kind == 2 && !IsPlayerActor(actor)) return; // замки, которые меняет игра/NPC, не синхронизируем
+                int key = DoorKey(d);
+                if (key < 0) return;
+                var w = new NetDataWriter();
+                w.Put(MsgDoor); w.Put(kind); w.Put(key); w.Put(val);
+                SendDoor(w);
+                if (Plugin.CfgDebugLog.Value) Plugin.L.LogInfo($"[DOOR] {(kind == 2 ? "замок" : "заклинивание")} двери {key}: {val}");
+            }
+            catch (Exception) { }
+        }
+
+        static readonly System.Collections.Generic.Dictionary<long, bool> moveState = new System.Collections.Generic.Dictionary<long, bool>();
+
+        internal static void OnLockState(Interactable it, bool val, Actor interactor)
+        {
+            try
+            {
+                if (applyingDoor || it == null || !Plugin.CfgDoorSync.Value || manager == null || manager.ConnectedPeersCount == 0) return;
+                if (!IsPlayerActor(interactor) || it.id == 0) return;
+                var w = new NetDataWriter();
+                Vector3 wp = it.wPos;
+                w.Put(MsgDoor); w.Put((byte)6); w.Put(GidOf(it)); w.Put(NameHash(PresetNameOf(it))); w.Put(val);
+                w.Put(wp.x); w.Put(wp.y); w.Put(wp.z);
+                SendDoor(w);
+                if (Plugin.CfgDebugLog.Value) Plugin.L.LogInfo($"[DOOR] я {(val ? "запер" : "отпер")} объект id={it.id} '{PresetNameOf(it)}'");
+            }
+            catch (Exception) { }
+        }
+
+        static readonly System.Collections.Generic.HashSet<string> seenSwitchNames = new System.Collections.Generic.HashSet<string>();
+
+        static bool SwitchWorthy(Interactable it, string name)
+        {
+            string n = name.ToLowerInvariant();
+            if (n.Contains("light") || n.Contains("lamp") || n.Contains("switch") || n.Contains("lantern")) return true;
+            try { if (it.preset != null && it.preset.isLight != null) return true; } catch (Exception) { }
+            return false;
+        }
+
+        // Выключатели света и лампы: включил / выключил -> то же у второго игрока
+        static float pressUntil;
+        static float rateWindowStart; static int rateCount;
+        static readonly System.Collections.Generic.Dictionary<long, bool> lastSwitchSent = new System.Collections.Generic.Dictionary<long, bool>();
+
+        internal static void MarkPlayerPress(Actor who)
+        {
+            try { if (IsPlayerActor(who)) pressUntil = Time.realtimeSinceStartup + 1.5f; } catch (Exception) { }
+        }
+
+        static readonly System.Collections.Generic.Dictionary<int, bool> lastRoomSent = new System.Collections.Generic.Dictionary<int, bool>();
+        static System.Collections.Generic.List<int> roomSnapIds; static System.Collections.Generic.List<bool> roomSnapVals; static int roomSnapPos;
+
+        internal static void OnRoomLights(NewRoom room, bool val, Actor actor)
+        {
+            try
+            {
+                if (applyingDoor || room == null || !Plugin.CfgDoorSync.Value || manager == null || manager.ConnectedPeersCount == 0) return;
+                float now = Time.realtimeSinceStartup;
+                if (!IsPlayerActor(actor) && now > pressUntil) return;
+                int rid = room.roomID;
+                if (lastRoomSent.TryGetValue(rid, out var lv) && lv == val) return;
+                lastRoomSent[rid] = val;
+                var w = new NetDataWriter();
+                w.Put(MsgDoor); w.Put((byte)8); w.Put(rid); w.Put(val);
+                SendDoor(w);
+                Plugin.Dbg($"[LIGHT] я {(val ? "включил" : "выключил")} свет в комнате {rid}");
+                AvatarLightFix(true);
+            }
+            catch (Exception) { }
+        }
+
+        static bool avatarMaskLogged;
+
+        internal static void AvatarLightFix(bool log)
+        {
+            try
+            {
+                if (!Plugin.CfgAvatarLightFix.Value || avatar == null) return;
+                var rs = avatar.GetComponentsInChildren<Renderer>(true);
+                uint first = 0; bool got = false; int changed = 0;
+                for (int i = 0; i < rs.Length; i++)
+                {
+                    var r = rs[i];
+                    if (r == null) continue;
+                    uint m = r.renderingLayerMask;
+                    if (!got) { first = m; got = true; }
+                    if (m != 0xFFFFFFFFu) { r.renderingLayerMask = 0xFFFFFFFFu; changed++; }
+                }
+                if ((log || !avatarMaskLogged) && got)
+                {
+                    avatarMaskLogged = true;
+                    Plugin.Dbg($"[LIGHT] маска света аватара: было {first:X}, исправлено рендереров {changed} из {rs.Length}");
+                }
+            }
+            catch (Exception) { }
+        }
+
+        static NewRoom RoomById(int rid)
+        {
+            try
+            {
+                var dict = CityData.Instance.roomDictionary;
+                NewRoom r;
+                if (dict != null && dict.TryGetValue(rid, out r)) return r;
+            }
+            catch (Exception) { }
+            return null;
+        }
+
+        static bool ApplyRoomLights(int rid, bool val, bool log)
+        {
+            var r = RoomById(rid);
+            if (r == null) { if (log) Plugin.L.LogWarning($"[LIGHT] комната {rid} не найдена"); return false; }
+            lastRoomSent[rid] = val;
+            bool before = r.mainLightStatus;
+            applyingDoor = true;
+            try
+            {
+                if (before != val) r.SetMainLights(val, "coop", null, false, false);
+                // кнопки выключателей: подтягиваем в то же состояние
+                try
+                {
+                    var sw = r.lightswitchInteractables;
+                    if (sw != null)
+                        for (int i = 0; i < sw.Count; i++)
+                        {
+                            var x = sw[i];
+                            if (x != null && x.sw0 != val) x.SetSwitchState(val, DoorActor(), false, false, false);
+                        }
+                }
+                catch (Exception e) { if (log) Plugin.L.LogWarning($"[LIGHT] выключатели: {e.Message}"); }
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[LIGHT] SetMainLights: {e.Message}"); }
+            finally { applyingDoor = false; }
+            if (log) Plugin.Dbg($"[LIGHT] второй игрок {(val ? "включил" : "выключил")} свет в комнате {rid}: {before} -> {r.mainLightStatus}");
+            AvatarLightFix(log);
+            return true;
+        }
+
+        static void SendRoomSnapshot(NetPeer peer)
+        {
+            try
+            {
+                var dict = CityData.Instance.roomDictionary;
+                if (dict == null) return;
+                var ids = new System.Collections.Generic.List<int>();
+                var vals = new System.Collections.Generic.List<bool>();
+                foreach (var kv in dict)
+                {
+                    var r = kv.Value;
+                    if (r == null) continue;
+                    ids.Add(kv.Key); vals.Add(r.mainLightStatus);
+                }
+                var w = new NetDataWriter();
+                w.Put(MsgDoor); w.Put((byte)9); w.Put(ids.Count);
+                for (int i = 0; i < ids.Count; i++) { w.Put(ids[i]); w.Put(vals[i]); }
+                peer.Send(w, DeliveryMethod.ReliableOrdered);
+                Plugin.Dbg($"[LIGHT] отправил снимок света комнат: {ids.Count}");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[LIGHT] снимок: {e.Message}"); }
+        }
+
+        static void RoomSnapTick()
+        {
+            if (roomSnapIds == null) return;
+            int budget = 15;
+            while (budget > 0 && roomSnapPos < roomSnapIds.Count)
+            {
+                int i = roomSnapPos++;
+                try
+                {
+                    var r = RoomById(roomSnapIds[i]);
+                    if (r != null && r.mainLightStatus != roomSnapVals[i]) { ApplyRoomLights(roomSnapIds[i], roomSnapVals[i], false); budget--; }
+                    else lastRoomSent[roomSnapIds[i]] = roomSnapVals[i];
+                }
+                catch (Exception) { }
+            }
+            if (roomSnapPos >= roomSnapIds.Count)
+            {
+                Plugin.Dbg($"[LIGHT] снимок света комнат применён: {roomSnapIds.Count}");
+                roomSnapIds = null; roomSnapVals = null;
+            }
+        }
+
+        static bool SwitchExcluded(string name)
+        {
+            return name.StartsWith("Door") || name.StartsWith("Drawer") || name.StartsWith("Telephone") || name == "";
+        }
+
+        internal static void OnSwitchState(Interactable it, int idx, bool val, Actor interactor)
+        {
+            try
+            {
+                if (applyingDoor || it == null || !Plugin.CfgDoorSync.Value || manager == null || manager.ConnectedPeersCount == 0) return;
+                string name = PresetNameOf(it);
+                // мебель, поставленная игроком (лампы, телевизоры): её переключатели синхронизируем всегда
+                bool placed = false;
+                try { var fpar = it.furnitureParent; placed = fpar != null && fpar.userPlaced; } catch (Exception) { }
+                bool isMain = name.StartsWith("Lightswitch");
+                try { if (it.preset != null && it.preset.isMainLight) isMain = true; } catch (Exception) { }
+                if (isMain && !placed)
+                {
+                    bool hasFurn = false;
+                    try { hasFurn = it.furnitureParent != null; } catch (Exception) { }
+                    if (hasFurn && seenSwitchNames.Add("main:" + name)) Plugin.Dbg($"[SWITCH] пропущен основной свет '{name}' sw{idx} id={it.id} (мебель есть, userPlaced=false)");
+                    return;
+                }
+                bool player = IsPlayerActor(interactor);
+                bool noActor = interactor == null;
+                if (!player && !noActor) return;
+                float now = Time.realtimeSinceStartup;
+                // свет в комнате переключается без актёра: считаем это переключением, только если игрок только что нажимал
+                if (!player && now > pressUntil) return;
+                if (now - rateWindowStart > 1f) { rateWindowStart = now; rateCount = 0; }
+                if (++rateCount > 30) return;
+                long sk = ((long)it.Pointer << 2) | (long)idx;
+                if (lastSwitchSent.TryGetValue(sk, out var lastV) && lastV == val) return;
+                lastSwitchSent[sk] = val;
+                bool worthy = placed || (player ? (SwitchWorthy(it, name) || it.id < 0) : SwitchWorthy(it, name));
+                if (SwitchExcluded(name) || !worthy)
+                {
+                    string k = name + "#" + idx;
+                    if (seenSwitchNames.Add(k)) Plugin.Dbg($"[SWITCH] не синхронизирую '{name}' sw{idx} id={it.id}");
+                    return;
+                }
+                var w = new NetDataWriter();
+                Vector3 wp = it.wPos;
+                w.Put(MsgDoor); w.Put((byte)7); w.Put(it.id); w.Put(NameHash(name)); w.Put(val);
+                w.Put(wp.x); w.Put(wp.y); w.Put(wp.z); w.Put((byte)idx);
+                SendDoor(w);
+                Plugin.Dbg($"[SWITCH] я {(val ? "включил" : "выключил")} '{name}' sw{idx} id={it.id} (актёр: {(player ? "игрок" : "нет")}{(placed ? ", моя мебель" : "")})");
+            }
+            catch (Exception) { }
+        }
+
+        static Interactable FindInteractableAt(int hash, Vector3 wp, out float dist)
+        {
+            Interactable best = null; float bd = 0.15f;
+            try
+            {
+                var list = CityData.Instance.interactableDirectory;
+                for (int i = 0; i < list.Count; i++)
+                {
+                    var x = list[i];
+                    if (x == null) continue;
+                    float d = Vector3.Distance(x.wPos, wp);
+                    if (d >= bd) continue;
+                    if (NameHash(PresetNameOf(x)) != hash) continue;
+                    bd = d; best = x;
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[SWITCH] поиск: {e.Message}"); }
+            dist = bd;
+            return best;
+        }
+
+        static bool SwGet(Interactable it, int idx)
+        {
+            return idx == 0 ? it.sw0 : idx == 1 ? it.sw1 : idx == 2 ? it.sw2 : it.sw3;
+        }
+
+        static void ApplySwitch(int id, int hash, Vector3 wp, bool val, int idx)
+        {
+            float dist;
+            var it = FindInteractableAt(hash, wp, out dist);
+            if (it == null) { Plugin.L.LogWarning($"[SWITCH] объект id={id} в позиции {wp} не найден"); return; }
+            bool before = SwGet(it, idx);
+            lastSwitchSent[((long)it.Pointer << 2) | (long)idx] = val;
+            applyingDoor = true;
+            try
+            {
+                if (before != val)
+                {
+                    Actor act = DoorActor();
+                    if (idx == 0) it.SetSwitchState(val, act, false, false, false);
+                    else if (idx == 1) it.SetCustomState1(val, act, false, false, false);
+                    else if (idx == 2) it.SetCustomState2(val, act, false, false, false);
+                    else it.SetCustomState3(val, act, false, false, false);
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[SWITCH] SetState: {e.Message}"); }
+            finally { applyingDoor = false; }
+            Plugin.Dbg($"[SWITCH] второй игрок {(val ? "включил" : "выключил")} '{PresetNameOf(it)}' sw{idx} ({dist:F3} м), {before} -> {SwGet(it, idx)}");
+        }
+
+        static DoorMovementController FindMoveCtl(int hash, Vector3 wp, out float dist)
+        {
+            DoorMovementController c = null;
+            float best = 0.1f;
+            try
+            {
+                foreach (var cand in UnityEngine.Object.FindObjectsOfType<DoorMovementController>())
+                {
+                    if (cand == null) continue;
+                    Interactable ci = null;
+                    try { ci = cand.interactable; } catch (Exception) { }
+                    if (ci == null || NameHash(PresetNameOf(ci)) != hash) continue;
+                    float d = Vector3.Distance(ci.wPos, wp);
+                    if (d < best) { best = d; c = cand; }
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[DOOR] поиск: {e.Message}"); }
+            dist = best;
+            return c;
+        }
+
+        internal static void OnMoveDoor(DoorMovementController c, bool open, Actor interactor)
+        {
+            try
+            {
+                if (applyingDoor || !Plugin.CfgDoorSync.Value || c == null || manager == null || manager.ConnectedPeersCount == 0) return;
+                if (!IsPlayerActor(interactor)) return;
+                Interactable it = null;
+                try { it = c.interactable; } catch (Exception) { }
+                if (it == null) return;
+                long mk = (long)c.Pointer;
+                if (moveState.TryGetValue(mk, out var known) && known == open) return;
+                moveState[mk] = open;
+                var w = new NetDataWriter();
+                Vector3 wp = it.wPos;
+                w.Put(MsgDoor); w.Put((byte)4); w.Put(GidOf(it)); w.Put(NameHash(PresetNameOf(it))); w.Put(open);
+                w.Put(wp.x); w.Put(wp.y); w.Put(wp.z);
+                SendDoor(w);
+                if (Plugin.CfgDebugLog.Value) Plugin.L.LogInfo($"[DOOR] я {(open ? "открыл" : "закрыл")} объект id={it.id} '{PresetNameOf(it)}'");
+            }
+            catch (Exception) { }
+        }
+
+        static void ApplyDoorOpen(NewDoor d, float ajar, bool skip)
+        {
+            applyingDoor = true;
+            try
+            {
+                try { d.SetOpen(ajar, DoorActor(), skip, 1f); }
+                catch (Exception)
+                {
+                    if (doorActorFallback) throw;
+                    doorActorFallback = true;
+                    Plugin.L.LogWarning("[DOOR] SetOpen с пустым актёром не прошёл, использую локального игрока как актёра");
+                    d.SetOpen(ajar, DoorActor(), skip, 1f);
+                }
+            }
+            finally { applyingDoor = false; }
+        }
+
+        static void ApplyDoorLock(NewDoor d, bool val)
+        {
+            applyingDoor = true;
+            try
+            {
+                try { d.SetLocked(val, DoorActor(), true); }
+                catch (Exception)
+                {
+                    if (doorActorFallback) throw;
+                    doorActorFallback = true;
+                    d.SetLocked(val, DoorActor(), true);
+                }
+            }
+            finally { applyingDoor = false; }
+        }
+
+        static void OnDoorMessage(NetDataReader r)
+        {
+            byte kind = r.GetByte();
+            try
+            {
+                if (!Plugin.CfgDoorSync.Value) { if (kind == 5) { /* всё равно прочитаем ниже */ } else return; }
+                if (kind == 1)
+                {
+                    int key = r.GetInt(); float ajar = r.GetFloat(); bool skip = r.GetBool();
+                    var d = DoorByKey(key);
+                    if (d == null) { Plugin.L.LogWarning($"[DOOR] дверь {key} не найдена"); return; }
+                    ApplyDoorOpen(d, ajar, skip);
+                    if (Plugin.CfgDebugLog.Value) Plugin.L.LogInfo($"[DOOR] второй игрок открыл/закрыл дверь {key}: ajar={ajar:0.00}");
+                }
+                else if (kind == 2 || kind == 3)
+                {
+                    int key = r.GetInt(); bool val = r.GetBool();
+                    var d = DoorByKey(key);
+                    if (d == null) { Plugin.L.LogWarning($"[DOOR] дверь {key} не найдена"); return; }
+                    if (kind == 2) ApplyDoorLock(d, val);
+                    else
+                    {
+                        applyingDoor = true;
+                        try { d.SetJammed(val, null, val); } finally { applyingDoor = false; }
+                    }
+                    if (Plugin.CfgDebugLog.Value) Plugin.L.LogInfo($"[DOOR] второй игрок: {(kind == 2 ? "замок" : "заклинивание")} двери {key} = {val}");
+                }
+                else if (kind == 4)
+                {
+                    int id = r.GetInt(); int hash = r.GetInt(); bool open = r.GetBool();
+                    Vector3 wp = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat());
+                    // у ящиков и шкафов номера у игроков разные (отрицательные), поэтому ищем по названию и позиции в мире
+                    ApplyMove(id, hash, wp, open, false);
+                }
+                else if (kind == 14)
+                {
+                    int sid = r.GetInt();
+                    ApplyApartmentSold(sid, true, GetRems(r));
+                }
+                else if (kind == 16)
+                {
+                    ApplyDecorRemote(r);
+                }
+                else if (kind == 15)
+                {
+                    int cnt = r.GetInt();
+                    for (int i = 0; i < cnt; i++) { int sid = r.GetInt(); ApplyApartmentSold(sid, false, GetRems(r)); }
+                    Plugin.L.LogInfo($"[APT] получен список проданных квартир: {cnt}");
+                }
+                else if (kind == 13)
+                {
+                    float gt = r.GetFloat(); int leap = r.GetInt(); int spd = r.GetByte();
+                    float rain = r.GetFloat(), wind = r.GetFloat(), snow = r.GetFloat(), lit = r.GetFloat(), fog = r.GetFloat();
+                    ApplyTime(gt, leap, spd, rain, wind, snow, lit, fog);
+                }
+                else if (kind == 11)
+                {
+                    Vector3 wp = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat());
+                    Vector3 cp = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat());
+                    Vector3 vv = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat());
+                    ApplyWindowBreak(wp, cp, vv, true);
+                }
+                else if (kind == 12)
+                {
+                    int cnt = r.GetInt();
+                    for (int i = 0; i < cnt; i++)
+                    {
+                        Vector3 wp = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat());
+                        ApplyWindowBreak(wp, wp, Vector3.zero, false);
+                    }
+                    Plugin.L.LogInfo($"[WINDOW] получен снимок разбитых окон: {cnt}");
+                }
+                else if (kind == 10)
+                {
+                    int type = r.GetByte(); int hash = r.GetInt();
+                    Vector3 wp = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat());
+                    Vector3 cp = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat());
+                    Vector3 nn = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat());
+                    float mag = r.GetFloat();
+                    ApplyWorldBreak(type, hash, wp, cp, nn, mag);
+                }
+                else if (kind == 8)
+                {
+                    int rid = r.GetInt(); bool val = r.GetBool();
+                    ApplyRoomLights(rid, val, true);
+                }
+                else if (kind == 9)
+                {
+                    int n = r.GetInt();
+                    var ids = new System.Collections.Generic.List<int>(); var vals = new System.Collections.Generic.List<bool>();
+                    for (int i = 0; i < n; i++) { ids.Add(r.GetInt()); vals.Add(r.GetBool()); }
+                    if (!IsHost && Plugin.CfgDoorSnap.Value && Plugin.CfgDoorSync.Value)
+                    {
+                        roomSnapIds = ids; roomSnapVals = vals; roomSnapPos = 0;
+                        Plugin.Dbg($"[LIGHT] получен снимок света комнат: {n}");
+                    }
+                }
+                else if (kind == 7)
+                {
+                    int id = r.GetInt(); int hash = r.GetInt(); bool val = r.GetBool();
+                    Vector3 wp = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat());
+                    int sidx = r.GetByte();
+                    ApplySwitch(id, hash, wp, val, sidx);
+                }
+                else if (kind == 6)
+                {
+                    int id = r.GetInt(); int hash = r.GetInt(); bool val = r.GetBool();
+                    Vector3 wp = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat());
+                    ApplyMove(id, hash, wp, val, true);
+                }
+                else if (kind >= 17 && kind <= 19) OnFurnMessage(kind, r);
+                else if (kind == 5)
+                {
+                    int n = r.GetInt();
+                    var list = new System.Collections.Generic.List<int[]>();
+                    var ajars = new System.Collections.Generic.List<float>();
+                    for (int i = 0; i < n; i++)
+                    {
+                        int key = r.GetInt(); float ajar = r.GetFloat(); byte fl = r.GetByte();
+                        list.Add(new[] { key, fl }); ajars.Add(ajar);
+                    }
+                    if (!IsHost && Plugin.CfgDoorSnap.Value && Plugin.CfgDoorSync.Value)
+                    {
+                        doorSnap = list; doorSnapAjar = ajars; doorSnapPos = 0;
+                        Plugin.L.LogInfo($"[DOOR] получен снимок дверей хоста: {n}");
+                    }
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[DOOR] приём kind={kind}: {e.Message}"); }
+        }
+
+        static System.Collections.Generic.List<int[]> doorSnap;
+        static System.Collections.Generic.List<float> doorSnapAjar;
+        static int doorSnapPos;
+
+        static void SendDoorSnapshot(NetPeer peer)
+        {
+            try
+            {
+                if (!Plugin.CfgDoorSnap.Value || !Plugin.CfgDoorSync.Value) return;
+                var dict = CityData.Instance.doorDictionary;
+                if (dict == null) return;
+                var keys = new System.Collections.Generic.List<int>();
+                var ajars = new System.Collections.Generic.List<float>();
+                var flags = new System.Collections.Generic.List<byte>();
+                foreach (var kv in dict)
+                {
+                    var d = kv.Value;
+                    if (d == null) continue;
+                    byte fl = 0;
+                    try { if (d.isLocked) fl |= 1; if (d.isJammed) fl |= 2; } catch (Exception) { }
+                    keys.Add(kv.Key); ajars.Add(d.ajar); flags.Add(fl);
+                }
+                var w = new NetDataWriter();
+                w.Put(MsgDoor); w.Put((byte)5); w.Put(keys.Count);
+                for (int i = 0; i < keys.Count; i++) { w.Put(keys[i]); w.Put(ajars[i]); w.Put(flags[i]); }
+                peer.Send(w, DeliveryMethod.ReliableOrdered);
+                Plugin.L.LogInfo($"[DOOR] отправил снимок дверей: {keys.Count}");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[DOOR] снимок: {e.Message}"); }
+        }
+
+        class PendingMove
+        {
+            public int id, hash; public Vector3 wp; public bool isLock, val; public float due; public DoorMovementController c;
+        }
+        static readonly System.Collections.Generic.List<PendingMove> pendingMoves = new System.Collections.Generic.List<PendingMove>();
+
+        static bool QueueMove(PendingMove m)
+        {
+            for (int i = 0; i < pendingMoves.Count; i++)
+            {
+                var o = pendingMoves[i];
+                if (o.c == null && m.c == null && o.isLock == m.isLock && o.hash == m.hash && Vector3.Distance(o.wp, m.wp) < 0.1f) { pendingMoves[i] = m; return false; }
+            }
+            if (pendingMoves.Count > 300) pendingMoves.RemoveAt(0);
+            pendingMoves.Add(m);
+            return true;
+        }
+
+        // Применить состояние ящика/шкафа (открыт или заперт). Если объекта рядом нет, запоминаем и применяем позже
+        static bool ApplyMove(int id, int hash, Vector3 wp, bool val, bool isLock)
+        {
+            float dist;
+            var c = FindMoveCtl(hash, wp, out dist);
+            if (c == null)
+            {
+                bool isNew = QueueMove(new PendingMove { id = id, hash = hash, wp = wp, isLock = isLock, val = val, due = Time.realtimeSinceStartup + 1f });
+                if (isNew) Plugin.L.LogInfo($"[DOOR] объект id={id} далеко/не заспавнен, применю позже ({(isLock ? "замок" : "открыт")}={val})");
+                return false;
+            }
+            Interactable ci = null;
+            try { ci = c.interactable; } catch (Exception) { }
+            if (isLock)
+            {
+                if (ci == null) return false;
+                applyingDoor = true;
+                try { ci.SetLockedState(val, DoorActor(), false, true); }
+                catch (Exception e) { Plugin.L.LogWarning($"[DOOR] SetLockedState: {e.Message}"); }
+                finally { applyingDoor = false; }
+                if (Plugin.CfgDebugLog.Value) Plugin.L.LogInfo($"[DOOR] второй игрок {(val ? "запер" : "отпер")} объект id={id} ({dist:F3} м)");
+                return true;
+            }
+            bool before = c.isOpen;
+            moveState[(long)c.Pointer] = val;
+            string how = "уже в нужном состоянии";
+            if (before != val)
+            {
+                applyingDoor = true;
+                try
+                {
+                    how = "SetSwitchState";
+                    if (ci != null) ci.SetSwitchState(val, DoorActor(), false, false, false);
+                    else { how = "SetOpen"; c.SetOpen(val ? 1f : 0f, DoorActor(), false); }
+                }
+                catch (Exception e) { Plugin.L.LogWarning($"[DOOR] открытие: {e.Message}"); }
+                finally { applyingDoor = false; }
+                // проверим после анимации и только тогда доделаем, чтобы не запускать две анимации сразу
+                QueueMove(new PendingMove { id = id, hash = hash, wp = wp, isLock = false, val = val, due = Time.realtimeSinceStartup + 2f, c = c });
+            }
+            Plugin.L.LogInfo($"[DOOR] ящик id={id}: {dist:F3} м, isOpen {before} -> {c.isOpen} (нужно {val}), способ: {how}");
+            return true;
+        }
+
+        static void MoveTick()
+        {
+            if (pendingMoves.Count == 0) return;
+            float now = Time.realtimeSinceStartup;
+            for (int i = pendingMoves.Count - 1; i >= 0; i--)
+            {
+                var m = pendingMoves[i];
+                if (now < m.due) continue;
+                pendingMoves.RemoveAt(i);
+                try
+                {
+                    if (m.c != null)
+                    {
+                        // проверка после анимации
+                        if (m.c.isOpen != m.val)
+                        {
+                            applyingDoor = true;
+                            try { if (m.val) m.c.OnOpen(DoorActor(), false); else m.c.OnClose(DoorActor(), false); }
+                            finally { applyingDoor = false; }
+                            Plugin.L.LogInfo($"[DOOR] ящик id={m.id}: доделал через OnOpen/OnClose, isOpen={m.c.isOpen}");
+                        }
+                    }
+                    else ApplyMove(m.id, m.hash, m.wp, m.val, m.isLock);
+                }
+                catch (Exception) { }
+            }
+        }
+
+        // Применяем снимок хоста порциями, чтобы не вешать кадр
+        static void DoorTick()
+        {
+            MoveTick();
+            RoomSnapTick();
+            WindowTick();
+            TimeTick();
+            if (Time.unscaledTime - lastAptTick > 2f) { lastAptTick = Time.unscaledTime; AptTick(); }
+            if (doorSnap == null) return;
+            int budget = 60;
+            while (budget-- > 0 && doorSnapPos < doorSnap.Count)
+            {
+                int i = doorSnapPos++;
+                try
+                {
+                    int key = doorSnap[i][0]; byte fl = (byte)doorSnap[i][1]; float ajar = doorSnapAjar[i];
+                    var d = DoorByKey(key);
+                    if (d == null) continue;
+                    if (Mathf.Abs(d.ajar - ajar) > 0.01f) ApplyDoorOpen(d, ajar, true);
+                    bool lk = (fl & 1) != 0;
+                    if (d.isLocked != lk) ApplyDoorLock(d, lk);
+                    bool jm = (fl & 2) != 0;
+                    if (d.isJammed != jm) { applyingDoor = true; try { d.SetJammed(jm, null, false); } finally { applyingDoor = false; } }
+                }
+                catch (Exception e) { if (doorSnapPos < 5) Plugin.L.LogWarning($"[DOOR] снимок дверь #{i}: {e.Message}"); }
+            }
+            if (doorSnapPos >= doorSnap.Count)
+            {
+                Plugin.L.LogInfo($"[DOOR] снимок дверей применён: {doorSnap.Count}");
+                doorSnap = null; doorSnapAjar = null;
+            }
+        }
+
+        static readonly System.Collections.Generic.HashSet<int> soldAddrs = new System.Collections.Generic.HashSet<int>();
+        static readonly System.Collections.Generic.HashSet<int> soldPending = new System.Collections.Generic.HashSet<int>();
+
+        static int AddrIdOf(ResidenceController rc)
+        {
+            try { var a = rc != null ? rc.address : null; return a != null ? a.id : -1; } catch (Exception) { return -1; }
+        }
+
+        internal static bool IsApartmentSoldElsewhere(ResidenceController rc)
+        {
+            if (applyingRemote) return false;
+            int id = AddrIdOf(rc);
+            if (id >= 0 && soldAddrs.Contains(id))
+            {
+                Plugin.L.LogWarning($"[APT] квартира (адрес {id}) уже куплена вторым игроком, моя покупка блокируется");
+                return true;
+            }
+            return false;
+        }
+
+        static bool buying;
+        static readonly System.Collections.Generic.List<int[]> buyRemovals = new System.Collections.Generic.List<int[]>();
+        static readonly System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<int[]>> soldRemovals = new System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<int[]>>();
+        static readonly System.Collections.Generic.HashSet<int> removalsDone = new System.Collections.Generic.HashSet<int>();
+
+        internal static void BeginBuy() { buying = true; buyRemovals.Clear(); }
+
+        internal static void OnRoomCleared(NewRoom room, bool skipFlag, int opt)
+        {
+            try
+            {
+                if (!buying || applyingRemote || room == null) return;
+                buyRemovals.Add(new[] { room.roomID, skipFlag ? 1 : 0, opt });
+            }
+            catch (Exception) { }
+        }
+
+        static void PutSale(NetDataWriter w, int id, System.Collections.Generic.List<int[]> rems)
+        {
+            w.Put(id);
+            int n = rems != null ? rems.Count : 0;
+            w.Put(n);
+            for (int i = 0; i < n; i++) { w.Put(rems[i][0]); w.Put(rems[i][1] != 0); w.Put((byte)rems[i][2]); }
+        }
+
+        static System.Collections.Generic.List<int[]> GetRems(NetDataReader r)
+        {
+            int n = r.GetInt();
+            var l = new System.Collections.Generic.List<int[]>();
+            for (int i = 0; i < n; i++) { int rid = r.GetInt(); bool b = r.GetBool(); int o = r.GetByte(); l.Add(new[] { rid, b ? 1 : 0, o }); }
+            return l;
+        }
+
+        internal static void OnApartmentBought(ResidenceController rc)
+        {
+            try
+            {
+                buying = false;
+                if (applyingRemote) return;
+                int id = AddrIdOf(rc);
+                if (id < 0) return;
+                if (!soldAddrs.Add(id)) return;
+                var rems = new System.Collections.Generic.List<int[]>(buyRemovals);
+                buyRemovals.Clear();
+                soldRemovals[id] = rems; removalsDone.Add(id);
+                Plugin.L.LogInfo($"[APT] я купил квартиру (адрес {id}): {rc.GetResidenceString()}, очисток комнат: {rems.Count}");
+                if (manager == null || manager.ConnectedPeersCount == 0) return;
+                var w = new NetDataWriter();
+                w.Put(MsgDoor); w.Put((byte)14); PutSale(w, id, rems);
+                SendDoor(w);
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[APT] {e.Message}"); }
+        }
+
+        static void ApplyRemovals(int id, System.Collections.Generic.List<int[]> rems)
+        {
+            if (rems == null || rems.Count == 0 || !removalsDone.Add(id)) return;
+            soldRemovals[id] = rems;
+            applyingRemote = true; applyingDoor = true;
+            try
+            {
+                foreach (var e in rems)
+                {
+                    var room = RoomById(e[0]);
+                    if (room == null) { Plugin.L.LogWarning($"[APT] комната {e[0]} не найдена"); continue; }
+                    int opt = e[2] == 2 ? 1 : e[2]; // «на склад» у второго игрока не нужно: просто убираем
+                    try
+                    {
+                        room.RemoveAllInhabitantFurniture(e[1] != 0, (FurnitureClusterLocation.RemoveInteractablesOption)opt);
+                        Plugin.L.LogInfo($"[APT] очистил комнату {e[0]} (флаг={e[1]}, опция={opt})");
+                    }
+                    catch (Exception ex) { Plugin.L.LogWarning($"[APT] очистка комнаты {e[0]}: {ex.Message}"); }
+                }
+            }
+            finally { applyingRemote = false; applyingDoor = false; }
+        }
+
+        // Отделка: комната, тип, пресет материала и ключ (материал + цвета)
+        static System.Collections.Generic.Dictionary<string, Material> matByName;
+
+        static Material FindMaterial(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return null;
+            if (matByName == null)
+            {
+                matByName = new System.Collections.Generic.Dictionary<string, Material>();
+                foreach (var m in Resources.FindObjectsOfTypeAll<Material>())
+                    if (m != null && !matByName.ContainsKey(m.name)) matByName[m.name] = m;
+            }
+            Material res; matByName.TryGetValue(name, out res);
+            return res;
+        }
+
+        static MaterialGroupPreset FindMatPreset(string name)
+        {
+            foreach (var m in Resources.FindObjectsOfTypeAll<MaterialGroupPreset>())
+                if (m != null && m.name == name) return m;
+            return null;
+        }
+
+        static void PutColor(NetDataWriter w, Color c) { w.Put(c.r); w.Put(c.g); w.Put(c.b); w.Put(c.a); }
+        static Color GetColor(NetDataReader r) { return new Color(r.GetFloat(), r.GetFloat(), r.GetFloat(), r.GetFloat()); }
+
+        internal static void OnDecorApplied(PlayerApartmentController pac, MaterialGroupPreset.MaterialType type, MaterialGroupPreset mat, Toolbox.MaterialKey key, bool save)
+        {
+            try
+            {
+                if (!save || applyingRemote || mat == null || manager == null || manager.ConnectedPeersCount == 0) return;
+                NewRoom room = pac.decoratingRoom;
+                if (room == null) return;
+                var w = new NetDataWriter();
+                w.Put(MsgDoor); w.Put((byte)16);
+                w.Put(room.roomID); w.Put((byte)(int)type); w.Put(mat.name);
+                bool hk = key != null;
+                w.Put(hk);
+                if (hk)
+                {
+                    w.Put(key.baseMaterial != null ? key.baseMaterial.name : "");
+                    PutColor(w, key.mainColour); PutColor(w, key.colour1); PutColor(w, key.colour2); PutColor(w, key.colour3);
+                    w.Put(key.grubiness);
+                }
+                SendDoor(w);
+                Plugin.L.LogInfo($"[DECOR] я применил отделку: комната {room.roomID}, тип {type}, материал '{mat.name}'");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[DECOR] {e.Message}"); }
+        }
+
+        static void ApplyDecorRemote(NetDataReader r)
+        {
+            int rid = r.GetInt(); int type = r.GetByte(); string mname = r.GetString();
+            Toolbox.MaterialKey key = null;
+            if (r.GetBool())
+            {
+                string bm = r.GetString();
+                key = new Toolbox.MaterialKey();
+                key.baseMaterial = FindMaterial(bm);
+                key.mainColour = GetColor(r); key.colour1 = GetColor(r); key.colour2 = GetColor(r); key.colour3 = GetColor(r);
+                key.grubiness = r.GetFloat();
+            }
+            var room = RoomById(rid);
+            var preset = FindMatPreset(mname);
+            var pac = PlayerApartmentController.Instance;
+            if (room == null || preset == null || pac == null) { Plugin.L.LogWarning($"[DECOR] не могу применить: комната={(room != null)} материал='{mname}'={(preset != null)} контроллер={(pac != null)}"); return; }
+            applyingRemote = true; applyingDoor = true;
+            var prevRoom = pac.decoratingRoom;
+            try
+            {
+                pac.decoratingRoom = room;
+                pac.ApplyDecor((MaterialGroupPreset.MaterialType)type, preset, key, true);
+                Plugin.L.LogInfo($"[DECOR] второй игрок сменил отделку: комната {rid}, тип {type}, материал '{mname}'");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[DECOR] применить: {e.Message}"); }
+            finally { try { pac.decoratingRoom = prevRoom; } catch (Exception) { } applyingRemote = false; applyingDoor = false; }
+        }
+
+        // Объявление о продаже убираем у себя (если оно ещё на доске)
+        static bool TryRemoveSaleNote(int id)
+        {
+            var dict = CityData.Instance.addressDictionary;
+            NewAddress a = null;
+            if (dict == null || !dict.TryGetValue(id, out a) || a == null) return false;
+            Interactable note = null;
+            try { note = a.saleNote; } catch (Exception) { }
+            if (note == null) return true;
+            applyingRemote = true; applyingDoor = true;
+            try { note.SafeDelete(false); a.saleNote = null; Plugin.L.LogInfo($"[APT] убрал объявление о продаже (адрес {id})"); }
+            catch (Exception e) { Plugin.L.LogWarning($"[APT] убрать объявление: {e.Message}"); }
+            finally { applyingRemote = false; applyingDoor = false; }
+            return true;
+        }
+
+        static void ApplyApartmentSold(int id, bool log, System.Collections.Generic.List<int[]> rems = null)
+        {
+            soldAddrs.Add(id);
+            try { ApplyRemovals(id, rems); } catch (Exception e) { Plugin.L.LogWarning($"[APT] {e.Message}"); }
+            bool ok = false;
+            try { ok = TryRemoveSaleNote(id); } catch (Exception e) { Plugin.L.LogWarning($"[APT] {e.Message}"); }
+            if (log) Plugin.L.LogInfo($"[APT] второй игрок купил квартиру (адрес {id}), найдено={ok}");
+            if (!ok) soldPending.Add(id);
+        }
+
+        // ---------- Одинаковая внешность горожан ----------
+        static int lookDepth; static float lookAt; static int lookLogged;
+        static UnityEngine.Random.State lookSaved;
+
+        internal static void LookSeedBegin(Human h)
+        {
+            try
+            {
+                if (!Plugin.CfgSeedLook.Value || h == null) return;
+                if (lookDepth > 0 && Time.realtimeSinceStartup - lookAt > 2f) lookDepth = 0; // страховка, если послесловие не вызвалось
+                if (lookDepth++ > 0) return;
+                lookAt = Time.realtimeSinceStartup;
+                lookSaved = UnityEngine.Random.state;
+                int sd;
+                unchecked { sd = NameHash(h.seed ?? "") * 31 + h.humanID * 7919 + 12345; }
+                UnityEngine.Random.InitState(sd);
+                if (lookLogged < 6) { lookLogged++; Plugin.Dbg($"[LOOK] внешность горожанина {h.humanID} привязана к его seed ({sd})"); }
+            }
+            catch (Exception) { }
+        }
+
+        internal static void LookSeedEnd()
+        {
+            try
+            {
+                if (lookDepth <= 0) return;
+                if (--lookDepth == 0) UnityEngine.Random.state = lookSaved;
+            }
+            catch (Exception) { lookDepth = 0; }
+        }
+
+        // ---------- Удары по горожанам ----------
+        static System.Collections.Generic.Dictionary<string, SpatterPatternPreset> spatterCache;
+        static SpatterPatternPreset FindSpatter(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return null;
+            if (spatterCache == null)
+            {
+                spatterCache = new System.Collections.Generic.Dictionary<string, SpatterPatternPreset>();
+                foreach (var p in Resources.FindObjectsOfTypeAll<SpatterPatternPreset>())
+                    if (p != null && !string.IsNullOrEmpty(p.name) && !spatterCache.ContainsKey(p.name)) spatterCache[p.name] = p;
+            }
+            SpatterPatternPreset r; return spatterCache.TryGetValue(name, out r) ? r : null;
+        }
+
+        static int ffLog;
+        // true = выполнить обычный урон; false = урон пошёл хосту
+        internal static bool OnClientHitsNpc(Citizen c, float amount, Actor fromWho, Vector3 pos, Vector3 dir, SpatterPatternPreset fs, SpatterPatternPreset bs, int erase, bool alert, bool forceRag, float dur, float shock, bool kill, bool recoil, float ragMp)
+        {
+            try
+            {
+                if (IsHost && !applyingRemote && puppet != null && c == puppet) return !OnPuppetDamaged(amount, fromWho, pos, dir, fs, bs, erase, alert, forceRag, dur, shock, kill, recoil, ragMp);
+                if (IsHost && !applyingRemote && puppet != null && c != null && c != puppet && Plugin.CfgNoFriendlyFire.Value)
+                {
+                    var att = fromWho as Citizen;
+                    if (att != null && att != c && att != puppet && att.ai != null)
+                    {
+                        bool atPuppet = false;
+                        try { atPuppet = att.ai.persuitTarget == puppet || att.ai.attackTarget == puppet; } catch (Exception) { }
+                        if (atPuppet)
+                        {
+                            if (ffLog++ < 12) Plugin.Dbg($"[FF] удар/выстрел горожанина {att.humanID} по случайному горожанину {c.humanID} (цель - второй игрок) отменён");
+                            return false;
+                        }
+                    }
+                }
+                if (!IsHost && !applyingRemote && c != null && puppetId >= 0 && c.humanID == puppetId && fromWho != null && fromWho.isPlayer)
+                {
+                    // я ударил двойника хоста = ударил игрока-хоста
+                    if (Plugin.CfgPvp.Value) OnPuppetDamaged(amount, fromWho, pos, dir, fs, bs, erase, alert, forceRag, dur, shock, kill, recoil, ragMp);
+                    return false;
+                }
+                if (IsHost || applyingRemote || !Plugin.CfgNpcSync.Value || manager == null || manager.ConnectedPeersCount == 0) return true;
+                if (c == null || fromWho == null || !fromWho.isPlayer) return true;
+                var w = new NetDataWriter();
+                w.Put(MsgNpcHit);
+                w.Put(c.humanID); w.Put(amount);
+                w.Put(pos.x); w.Put(pos.y); w.Put(pos.z); w.Put(dir.x); w.Put(dir.y); w.Put(dir.z);
+                w.Put(fs != null ? (fs.name ?? "") : ""); w.Put(bs != null ? (bs.name ?? "") : "");
+                w.Put(erase);
+                int fl = (alert ? 1 : 0) | (forceRag ? 2 : 0) | (kill ? 4 : 0) | (recoil ? 8 : 0);
+                w.Put((byte)fl); w.Put(dur); w.Put(shock); w.Put(ragMp);
+                manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+                // мгновенная реакция у себя: отдача в анимации
+                try { c.animationController.TakeDamageRecoil(pos); } catch (Exception) { }
+                Plugin.Dbg($"[HIT] я ударил горожанина {c.humanID}: урон {amount:F2}, отправил хосту");
+                return false;
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[HIT] {e.Message}"); return true; }
+        }
+
+        static void OnNpcHit(NetDataReader r)
+        {
+            int id = r.GetInt(); float amount = r.GetFloat();
+            Vector3 pos = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat());
+            Vector3 dir = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat());
+            string fsn = r.GetString(), bsn = r.GetString();
+            int erase = r.GetInt(); int fl = r.GetByte();
+            float dur = r.GetFloat(), shock = r.GetFloat(), ragMp = r.GetFloat();
+            if (npcById == null || !npcById.ContainsKey(id)) { try { BuildNpcMap(); } catch (Exception) { } }
+            Citizen c; if (npcById == null || !npcById.TryGetValue(id, out c) || c == null) { Plugin.L.LogWarning($"[HIT] горожанин {id} не найден у хоста"); return; }
+            Actor attacker = null;
+            if (Plugin.CfgPuppet.Value && puppet != null && puppet != c) attacker = puppet;
+            else if (Plugin.CfgNpcHitHostAttacker.Value) { try { attacker = Player.Instance; } catch (Exception) { } }
+            applyingRemote = true;
+            try
+            {
+                c.RecieveDamage(amount, attacker, pos, dir, FindSpatter(fsn), FindSpatter(bsn), (SpatterSimulation.EraseMode)erase,
+                    (fl & 1) != 0, (fl & 2) != 0, dur, shock, (fl & 4) != 0, (fl & 8) != 0, ragMp);
+                Plugin.Dbg($"[HIT] второй игрок ударил горожанина {id}: урон {amount:F2}, здоровье теперь {c.currentHealth:F2}");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[HIT] применить удар: {e.Message}"); }
+            finally { applyingRemote = false; }
+        }
+
+
+        // ---------- Двойник второго игрока (хост) ----------
+        // Горожане реагируют только на Actor. Клиентский аватар - просто картинка, поэтому на хосте
+        // запасной горожанин (невидимый) стоит там же, где клиент, и игра видит в нём обычного человека.
+        static Citizen puppet;
+        static int puppetId = -1;
+        static float puppetAt, puppetAiAt, puppetLocAt, puppetIdAt, puppetHideAt;
+        static bool puppetErrLogged, puppetCrouch;
+        static Renderer[] puppetRends;
+        static Collider[] puppetCols;
+        static int puppetHideId = -1;
+        static float puppetClientHideAt;
+        static readonly System.Collections.Generic.Dictionary<int, float> puppetSeenLog = new System.Collections.Generic.Dictionary<int, float>();
+
+        static Citizen PickPuppet()
+        {
+            int want = Plugin.CfgPuppetId.Value;
+            Citizen best = null; int bestScore = int.MinValue;
+            foreach (var c in npcById.Values)
+            {
+                if (c == null) continue;
+                try
+                {
+                    if (want >= 0) { if (c.humanID == want) return c; continue; }
+                    if (c.removedFromWorld || c.isDead || c.isEnforcer || c.isPlayer || c.isAsleep) continue;
+                    int sc = 0;
+                    if (c.isHomeless) sc += 100;
+                    if (c.job == null) sc += 10;
+                    if (c.partner == null) sc += 5;
+                    if (c.home == null) sc += 20;
+                    sc -= c.humanID / 1000; // при равенстве - стабильный выбор
+                    if (sc > bestScore) { bestScore = sc; best = c; }
+                }
+                catch (Exception) { }
+            }
+            return best;
+        }
+
+        static void CachePuppetParts(Citizen c)
+        {
+            puppetRends = null; puppetCols = null;
+            try
+            {
+                var rs = c.gameObject.GetComponentsInChildren<Renderer>(true);
+                var l = new System.Collections.Generic.List<Renderer>();
+                for (int i = 0; i < rs.Length; i++) if (rs[i] != null) l.Add(rs[i]);
+                puppetRends = l.ToArray();
+            }
+            catch (Exception) { }
+        }
+
+        static float puppetHideLog;
+        static void HidePuppet()
+        {
+            // рендереры берём заново: игра дорисовывает одежду и части модели позже, их нет в кэше
+            var c = puppet; if (c == null) return;
+            int on = 0;
+            try
+            {
+                var rs = c.gameObject.GetComponentsInChildren<Renderer>(true);
+                puppetRends = rs;
+                for (int i = 0; i < rs.Length; i++)
+                {
+                    try { var r = rs[i]; if (r != null && r.enabled) { r.enabled = false; on++; } } catch (Exception) { }
+                }
+            }
+            catch (Exception) { }
+            if (on > 0 && Plugin.CfgPuppetLog.Value && Time.unscaledTime - puppetHideLog > 3f)
+            {
+                puppetHideLog = Time.unscaledTime;
+                Plugin.L.LogInfo($"[PUPPET] игра снова включила {on} рендереров двойника, выключил (сидит клиент={remoteSitting})");
+            }
+        }
+
+        static void ReleasePuppet(string why)
+        {
+            var c = puppet; puppet = null; puppetId = -1;
+            if (c == null) return;
+            try
+            {
+                if (puppetRends != null) for (int i = 0; i < puppetRends.Length; i++) { try { if (puppetRends[i] != null) puppetRends[i].enabled = true; } catch (Exception) { } }
+                if (Plugin.CfgPuppetNoAI.Value && c.ai != null) c.ai.EnableAI(true);
+            }
+            catch (Exception) { }
+            puppetRends = null;
+            Plugin.L.LogInfo($"[PUPPET] двойник {c.humanID} ({c.citizenName}) возвращён в город: {why}");
+        }
+
+        static void PuppetTick(float dt)
+        {
+            bool want = Plugin.CfgPuppet.Value && manager != null && manager.ConnectedPeersCount > 0 && avatar != null;
+            if (!want)
+            {
+                if (puppet != null) ReleasePuppet("клиент не подключён");
+                return;
+            }
+            if (puppet == null)
+            {
+                if (Time.unscaledTime - puppetAt < 2f) return;
+                puppetAt = Time.unscaledTime;
+                var c = PickPuppet();
+                if (c == null) { Plugin.L.LogWarning("[PUPPET] не нашёл подходящего горожанина для двойника"); return; }
+                puppet = c; puppetId = c.humanID;
+                CachePuppetParts(c);
+                try { if (Plugin.CfgPuppetNoAI.Value && c.ai != null) c.ai.EnableAI(false); } catch (Exception e) { Plugin.L.LogWarning($"[PUPPET] EnableAI: {e.Message}"); }
+                try { c.SetVisible(true, false); } catch (Exception) { }
+                Plugin.L.LogInfo($"[PUPPET] двойником второго игрока стал горожанин {c.humanID} ({c.citizenName}), бездомный={c.isHomeless}. Он невидим и стоит там, где стоит клиент");
+            }
+            var p = puppet;
+            if (p == null) return;
+            var tr = p.transform;
+            Vector3 pos = targetPos;
+            tr.position = pos;
+            tr.rotation = Quaternion.Euler(0f, targetYaw - 180f, 0f);
+            float now = Time.unscaledTime;
+            if (now - puppetLocAt > 0.2f)
+            {
+                puppetLocAt = now;
+                try { p.UpdateGameLocation(0f, false); } catch (Exception) { }
+            }
+            if (now - puppetHideAt > 0.2f) { puppetHideAt = now; HidePuppet(); }
+            if (now - puppetAiAt > 5f)
+            {
+                puppetAiAt = now;
+                try { if (Plugin.CfgPuppetNoAI.Value && p.ai != null) p.ai.EnableAI(false); } catch (Exception) { }
+                try { if (!p.visible) p.SetVisible(true, false); } catch (Exception) { }
+                try { p.UpdateLightLevel(); } catch (Exception) { }
+            }
+            try { if (puppetCrouch != remoteCrouched) { puppetCrouch = remoteCrouched; p.SetCrouched(remoteCrouched, true); } } catch (Exception) { }
+            if (now - puppetIdAt > 3f)
+            {
+                puppetIdAt = now;
+                var w = new NetDataWriter(); w.Put(MsgPuppet); w.Put(puppetId);
+                manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+            }
+        }
+
+        // клиент: у меня двойник хоста-стороны это обычный житель, его надо спрятать и сделать неосязаемым
+        static void OnPuppetId(int id)
+        {
+            if (id == puppetId) return;
+            puppetId = id; puppetHideId = -1;
+        }
+
+        // ПвП: у клиента двойник стоит на месте аватара хоста, по нему можно ударить (урон уходит хосту)
+        static void PuppetClientFollow()
+        {
+            if (!Plugin.CfgPvp.Value || puppetId < 0 || avatar == null || npcById == null) return;
+            Citizen c; if (!npcById.TryGetValue(puppetId, out c) || c == null) return;
+            try
+            {
+                var tr = c.transform; var at = avatar.transform;
+                tr.position = at.position;
+                tr.rotation = Quaternion.Euler(0f, at.eulerAngles.y, 0f);
+            }
+            catch (Exception) { }
+        }
+
+        static void PuppetClientTick()
+        {
+            if (puppetId < 0 || npcById == null) return;
+            if (puppetHideId == puppetId && Time.unscaledTime - puppetClientHideAt < 0.2f) return;
+            puppetClientHideAt = Time.unscaledTime;
+            Citizen c; if (!npcById.TryGetValue(puppetId, out c) || c == null) return;
+            try
+            {
+                var rs = c.gameObject.GetComponentsInChildren<Renderer>(true);
+                for (int i = 0; i < rs.Length; i++) { try { if (rs[i] != null && rs[i].enabled) rs[i].enabled = false; } catch (Exception) { } }
+                if (!Plugin.CfgPvp.Value)
+                {
+                    var cs = c.gameObject.GetComponentsInChildren<Collider>(true);
+                    for (int i = 0; i < cs.Length; i++) { try { if (cs[i] != null && cs[i].enabled) cs[i].enabled = false; } catch (Exception) { } }
+                }
+                if (puppetHideId != puppetId) Plugin.L.LogInfo($"[PUPPET] у меня горожанин {puppetId} ({c.citizenName}) - двойник другого игрока: спрятан");
+                puppetHideId = puppetId;
+            }
+            catch (Exception) { }
+        }
+
+        // горожанин ударил двойника = ударил клиента. true = урон перехвачен
+        static bool OnPuppetDamaged(float amount, Actor fromWho, Vector3 pos, Vector3 dir, SpatterPatternPreset fs, SpatterPatternPreset bs, int erase, bool alert, bool forceRag, float dur, float shock, bool kill, bool recoil, float ragMp)
+        {
+            try
+            {
+                if (manager == null || manager.ConnectedPeersCount == 0) return true;
+                if (IsHost && !Plugin.CfgPvp.Value && fromWho != null && fromWho.isPlayer) return true;
+                int aid = -1;
+                try { var h = fromWho as Human; if (h != null && !h.isPlayer) aid = h.humanID; } catch (Exception) { }
+                var w = new NetDataWriter();
+                w.Put(MsgPuppetHurt);
+                w.Put(aid); w.Put(amount);
+                w.Put(pos.x); w.Put(pos.y); w.Put(pos.z); w.Put(dir.x); w.Put(dir.y); w.Put(dir.z);
+                w.Put(fs != null ? (fs.name ?? "") : ""); w.Put(bs != null ? (bs.name ?? "") : "");
+                w.Put(erase);
+                int fl = (alert ? 1 : 0) | (forceRag ? 2 : 0) | (kill ? 4 : 0) | (recoil ? 8 : 0);
+                w.Put((byte)fl); w.Put(dur); w.Put(shock); w.Put(ragMp);
+                manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+                if (Plugin.CfgPuppetLog.Value) Plugin.L.LogInfo($"[PUPPET] по второму игроку ударили (урон {amount:F2}, от {(aid >= 0 ? aid.ToString() : "игрока")}), переслал ему");
+                return true;
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[PUPPET] {e.Message}"); return false; }
+        }
+
+        static void OnPuppetHurt(NetDataReader r)
+        {
+            int aid = r.GetInt(); float amount = r.GetFloat();
+            Vector3 pos = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat());
+            Vector3 dir = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat());
+            string fsn = r.GetString(), bsn = r.GetString();
+            int erase = r.GetInt(); int fl = r.GetByte();
+            float dur = r.GetFloat(), shock = r.GetFloat(), ragMp = r.GetFloat();
+            Actor from = null;
+            if (aid >= 0 && npcById != null) { Citizen a; if (npcById.TryGetValue(aid, out a)) from = a; }
+            var me = Player.Instance;
+            if (me == null) return;
+            try
+            {
+                me.RecieveDamage(amount, from, pos, dir, FindSpatter(fsn), FindSpatter(bsn), (SpatterSimulation.EraseMode)erase,
+                    (fl & 1) != 0, (fl & 2) != 0, dur, shock, (fl & 4) != 0, (fl & 8) != 0, ragMp);
+                Plugin.L.LogInfo($"[PUPPET] меня ударил горожанин {aid}: урон {amount:F2}, здоровье {me.currentHealth:F2}");
+                PlayHitSound(from, pos);
+            }
+            catch (Exception e)
+            {
+                Plugin.L.LogWarning($"[PUPPET] урон с атакующим не прошёл ({e.Message}), пробую без него");
+                try { me.RecieveDamage(amount, null, pos, dir, FindSpatter(fsn), FindSpatter(bsn), (SpatterSimulation.EraseMode)erase, (fl & 1) != 0, (fl & 2) != 0, dur, shock, (fl & 4) != 0, (fl & 8) != 0, ragMp); }
+                catch (Exception e2) { Plugin.L.LogWarning($"[PUPPET] {e2.Message}"); }
+            }
+        }
+
+        // диагностика: житель нацелился не на двойника, а на другого жителя
+        static int aggroLog;
+        static readonly System.Collections.Generic.Dictionary<int, float> aggroSeen = new System.Collections.Generic.Dictionary<int, float>();
+        static void AggroNote(string what, NewAIController ai, Actor target)
+        {
+            try
+            {
+                var tc = target as Citizen; if (tc == null) return;
+                var h = ai.human; if (h == null) return;
+                int key = (what + h.humanID + ":" + tc.humanID).GetHashCode();
+                float last; if (aggroSeen.TryGetValue(key, out last) && Time.unscaledTime - last < 20f) return;
+                aggroSeen[key] = Time.unscaledTime;
+                if (aggroLog++ >= 80) return;
+                string st = "";
+                try { st = $"бой={ai.inCombat} атака={ai.attackActive} оружие={(ai.currentWeaponPreset != null ? ai.currentWeaponPreset.name : "нет")}"; } catch (Exception) { }
+                string tst = ""; try { tst = $"цель: ko={tc.ai != null && tc.ai.ko} бой={tc.ai != null && tc.ai.inCombat}"; } catch (Exception) { }
+                string pd = ""; try { pd = $"; двойник в {Vector3.Distance(puppet.transform.position, h.transform.position):F1} м от него, цель в {Vector3.Distance(tc.transform.position, h.transform.position):F1} м"; } catch (Exception) { }
+                Plugin.Dbg($"[AGGRO] горожанин {h.humanID} ({h.citizenName}) {what} ДРУГОГО жителя {tc.humanID} ({tc.citizenName}); {st}; {tst}{pd}");
+            }
+            catch (Exception) { }
+        }
+
+        // диагностика: что горожане делают с двойником
+        internal static void PuppetNote(string what, NewAIController ai, Actor target)
+        {
+            try
+            {
+                if (IsHost && puppet != null && target != null && target != puppet && what != "заметил" && Plugin.CfgPuppetLog.Value && ai != null) AggroNote(what, ai, target);
+                if (!IsHost || puppet == null || target == null || target != puppet || !Plugin.CfgPuppetLog.Value || ai == null) return;
+                var h = ai.human;
+                int id = h != null ? h.humanID : -1;
+                float last; string key = what + id;
+                int k = key.GetHashCode();
+                if (puppetSeenLog.TryGetValue(k, out last) && Time.unscaledTime - last < 20f) return;
+                puppetSeenLog[k] = Time.unscaledTime;
+                Plugin.L.LogInfo($"[PUPPET] горожанин {id} ({(h != null ? h.citizenName : "?")}): {what} второго игрока");
+            }
+            catch (Exception) { }
+        }
+
+
+        // ---------- Разовые действия горожан (хост -> клиент) ----------
+        static int npcActLogged;
+        static readonly System.Collections.Generic.Dictionary<int, float> actLastAt = new System.Collections.Generic.Dictionary<int, float>();
+        static readonly int[] actLogCnt = new int[16], actLogCnt2 = new int[16];
+        class AtkState { public bool atk, thr; public int shots; }
+        static readonly System.Collections.Generic.Dictionary<int, AtkState> atkStates = new System.Collections.Generic.Dictionary<int, AtkState>();
+
+        // Бой горожан: игра может запускать анимации мимо методов, которые я перехватываю,
+        // поэтому дополнительно слежу за самим состоянием боя у хоста и шлю разовые события по смене
+        static void NpcActPoll(System.Collections.Generic.List<Citizen> all)
+        {
+            for (int i = 0; i < all.Count; i++)
+            {
+                var c = all[i];
+                if (c == null || c == puppet) continue;
+                try
+                {
+                    var ai = c.ai; if (ai == null) continue;
+                    AtkState st;
+                    if (!atkStates.TryGetValue(c.humanID, out st)) { st = new AtkState(); atkStates[c.humanID] = st; }
+                    bool atk = ai.attackActive, thr = ai.throwActive; int shots = ai.revolverShots;
+                    if (atk && !st.atk)
+                    {
+                        string wn = ""; try { var wp = ai.currentWeaponPreset; if (wp != null) wn = wp.name; } catch (Exception) { }
+                        if (actLogCnt[0]++ < 8)
+                        {
+                            string lw = ""; try { var an = c.animationController.mainAnimator; for (int li = 0; li < an.layerCount; li++) lw += $" L{li}={an.GetLayerWeight(li):F1}"; lw += $" desired={c.animationController.armsLayerDesiredWeight:F1}"; } catch (Exception) { }
+                            Plugin.Dbg($"[NPCACT] хост: горожанин {c.humanID} начал атаку, оружие='{wn}', выстрелов={shots}, веса слоёв:{lw}");
+                        }
+                        NpcAct(c, 1, 0f, false, Vector3.zero, 0);
+                    }
+                    else if (shots != st.shots && shots > 0) NpcAct(c, 1, 0f, false, Vector3.zero, 0);
+                    if (thr && !st.thr) NpcAct(c, 2, 0f, false, Vector3.zero, 0);
+                    st.atk = atk; st.thr = thr; st.shots = shots;
+                }
+                catch (Exception) { }
+            }
+        }
+        static readonly System.Collections.Generic.Dictionary<int, int> npcHeldState = new System.Collections.Generic.Dictionary<int, int>();
+
+        internal static void NpcAct(Citizen c, byte kind, float f, bool b, Vector3 pos, int state)
+        {
+            try
+            {
+                if (!IsHost || applyingRemote || !Plugin.CfgNpcSync.Value || c == null || manager == null || manager.ConnectedPeersCount == 0) return;
+                if (kind <= 5)
+                {   // одно и то же действие от перехвата и от слежения за боем не дублируем
+                    int key = c.humanID * 16 + kind; float la;
+                    if (actLastAt.TryGetValue(key, out la) && Time.unscaledTime - la < 0.2f) return;
+                    actLastAt[key] = Time.unscaledTime;
+                }
+                if (kind == 11) npcHeldState.Remove(c.humanID);
+                if (kind == 10)
+                {   // одинаковое состояние рук не шлём повторно
+                    int old; if (npcHeldState.TryGetValue(c.humanID, out old) && old == state) return;
+                    npcHeldState[c.humanID] = state;
+                }
+                var w = new NetDataWriter();
+                w.Put(MsgNpcAct); w.Put(c.humanID); w.Put(kind); w.Put(f); w.Put(b);
+                w.Put(pos.x); w.Put(pos.y); w.Put(pos.z); w.Put(state);
+                manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+                if (kind < 10 && actLogCnt[kind & 15]++ < 8) Plugin.Dbg($"[NPCACT] хост: горожанин {c.humanID} действие {kind} (f={f:F2})");
+            }
+            catch (Exception) { }
+        }
+
+        internal static void NpcActAc(CitizenAnimationController ac, byte kind, float f, bool b, Vector3 pos)
+        {
+            try { var c = ac != null ? ac.cit as Citizen : null; if (c != null) NpcAct(c, kind, f, b, pos, 0); } catch (Exception) { }
+        }
+
+        internal static void NpcActAi(NewAIController ai, byte kind, int state)
+        {
+            try { var c = ai != null ? ai.human as Citizen : null; if (c != null) NpcAct(c, kind, 0f, false, Vector3.zero, state); } catch (Exception) { }
+        }
+
+        static bool npcEnumLogged, combatErrLogged;
+        static void OnNpcAct(NetDataReader r)
+        {
+            int id = r.GetInt(); byte kind = r.GetByte(); float f = r.GetFloat(); bool b = r.GetBool();
+            Vector3 pos = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat()); int state = r.GetInt();
+            if (npcById == null || !npcById.ContainsKey(id)) { try { BuildNpcMap(); } catch (Exception) { } }
+            Citizen c; if (npcById == null || !npcById.TryGetValue(id, out c) || c == null) return;
+            if (kind < 10 && actLogCnt2[kind & 15]++ < 8) Plugin.Dbg($"[NPCACT] клиент: горожанин {id} действие {kind} (f={f:F2})");
+            if (!npcEnumLogged)
+            {
+                npcEnumLogged = true;
+                try { Plugin.Dbg("[NPCACT] ActionStateFlag: " + string.Join(", ", Enum.GetNames(typeof(AIActionPreset.ActionStateFlag)))); } catch (Exception) { }
+            }
+            applyingRemote = true;
+            try
+            {
+                var ac = c.animationController; var ai = c.ai;
+                switch (kind)
+                {
+                    case 1:
+                        if (ac != null)
+                        {
+                            NpcTarget nt; npcTargets.TryGetValue(id, out nt);
+                            var an = ac.mainAnimator;
+                            if (nt != null) nt.combatHoldUntil = Time.unscaledTime + 2.5f;
+                            if (an != null && nt != null) { try { an.SetInteger("combatArmsOverride", nt.combatArms); } catch (Exception) { } }
+                            ac.AttackTrigger();
+                            if (nt != null) nt.atkUntil = Time.unscaledTime + 1.2f;
+                            if (actLogCnt2[8]++ < 6)
+                            {
+                                string d = "";
+                                try
+                                {
+                                    if (an != null)
+                                    {
+                                        d = $"inCombat={an.GetBool("inCombat")} cao={an.GetInteger("combatArmsOverride")} arms={an.GetInteger("ArmsState")} слоёв={an.layerCount} enabled={an.enabled} speed={an.speed}";
+                                        for (int li = 0; li < an.layerCount && li < 4; li++) d += $" L{li}:w={an.GetLayerWeight(li):F1}/{an.GetCurrentAnimatorClipInfo(li).Length}";
+                                    }
+                                }
+                                catch (Exception) { }
+                                string held = "";
+                                try
+                                {
+                                    var hi = ai != null ? ai.spawnedRightItem : null;
+                                    if (hi == null) held = "нет";
+                                    else
+                                    {
+                                        var rs = hi.GetComponentsInChildren<Renderer>(true); int on = 0; for (int ri = 0; ri < rs.Length; ri++) if (rs[ri] != null && rs[ri].enabled) on++;
+                                        held = $"{hi.name} активен={hi.activeInHierarchy} рендереров={on}/{rs.Length} в {Vector3.Distance(hi.transform.position, c.transform.position):F2} м от жителя";
+                                    }
+                                }
+                                catch (Exception) { }
+                                Plugin.Dbg($"[NPCACT] клиент: аниматор {id}: {d}; предмет в правой руке: {held}");
+                            }
+                        }
+                        break;
+                    case 2: if (ac != null) ac.ThrowTrigger(); break;
+                    case 3: if (ac != null) ac.AbortAttackTrigger(); break;
+                    case 4: if (ac != null) ac.BlockTrigger(f, b); break;
+                    case 5: if (ac != null) ac.TakeDamageRecoil(pos); break;
+                    case 10: if (ai != null) ai.UpdateHeldItems((AIActionPreset.ActionStateFlag)state); break;
+                    case 11: if (ai != null) ai.DespawnRightItem(); break;
+                    case 12: if (ai != null) ai.DespawnLeftItem(); break;
+                    case 13: if (ai != null) ai.UpdateCurrentWeapon(); break;
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[NPCACT] действие {kind} у {id}: {e.Message}"); }
+            finally { applyingRemote = false; }
+        }
+
+
+        // ---------- Звуки жителей в бою (хост -> клиент) ----------
+        static readonly System.Text.RegularExpressions.Regex combatSoundRx = new System.Text.RegularExpressions.Regex("gun|shot|shoot|fire|pistol|revolver|rifle|bullet|punch|hit|kick|swing|draw(?!er)|holster|reload|impact|knife|sword|melee|block|click|cock|brass|casing|weapon|attack", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        static readonly System.Collections.Generic.HashSet<string> soundLogged = new System.Collections.Generic.HashSet<string>();
+        static readonly System.Collections.Generic.Dictionary<string, AudioEvent> audioByName = new System.Collections.Generic.Dictionary<string, AudioEvent>();
+
+        internal static void OnWorldSound(AudioEvent ev, Actor who, Vector3 pos)
+        {
+            try
+            {
+                if (!IsHost || applyingRemote || !Plugin.CfgNpcSync.Value || ev == null || manager == null || manager.ConnectedPeersCount == 0) return;
+                var c = who as Citizen;
+                if (c == null || c == puppet) return;
+                string name = ev.name; if (string.IsNullOrEmpty(name)) return;
+                bool fight = false;
+                try { var ai = c.ai; fight = ai != null && (ai.inCombat || ai.attackActive || ai.ko); } catch (Exception) { }
+                bool match = combatSoundRx.IsMatch(name);
+                if (!match && !fight) return;
+                if (soundLogged.Count < 60 && soundLogged.Add(name)) Plugin.Dbg($"[SOUND] хост: '{name}' от горожанина {c.humanID} (бой={fight}, по имени={match})");
+                var w = new NetDataWriter();
+                w.Put(MsgSound); w.Put(c.humanID); w.Put(name); w.Put(pos.x); w.Put(pos.y); w.Put(pos.z);
+                manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+            }
+            catch (Exception) { }
+        }
+
+        static void OnSoundMessage(NetDataReader r)
+        {
+            int id = r.GetInt(); string name = r.GetString();
+            Vector3 pos = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat());
+            try
+            {
+                Citizen c = null; if (npcById != null) npcById.TryGetValue(id, out c);
+                AudioEvent ev;
+                if (!audioByName.TryGetValue(name, out ev) || ev == null)
+                {
+                    ev = null;
+                    foreach (var e in Resources.FindObjectsOfTypeAll<AudioEvent>()) { if (e != null && e.name == name) { ev = e; break; } }
+                    audioByName[name] = ev;
+                }
+                if (ev == null) { if (soundLogged.Add("miss:" + name)) Plugin.L.LogWarning($"[SOUND] у меня нет звука '{name}'"); return; }
+                if (soundLogged.Count < 60 && soundLogged.Add("play:" + name)) Plugin.Dbg($"[SOUND] клиент: играю '{name}'");
+                applyingRemote = true;
+                try { AudioController.Instance.PlayWorldOneShot(ev, c, c != null ? c.currentNode : null, pos); }
+                finally { applyingRemote = false; }
+                MuzzleFx(c, name, pos);
+            }
+            catch (Exception e) { if (soundLogged.Add("err")) Plugin.L.LogWarning($"[SOUND] {e.Message}"); }
+        }
+
+        static AudioEvent FindAudio(string name)
+        {
+            AudioEvent ev;
+            if (audioByName.TryGetValue(name, out ev) && ev != null) return ev;
+            ev = null;
+            foreach (var e in Resources.FindObjectsOfTypeAll<AudioEvent>()) { if (e != null && e.name == name) { ev = e; break; } }
+            audioByName[name] = ev;
+            return ev;
+        }
+
+        static int brassLog;
+        static readonly System.Collections.Generic.List<KeyValuePair<Interactable, float>> casings = new System.Collections.Generic.List<KeyValuePair<Interactable, float>>();
+
+        // Гильза: настоящий предмет мира с физикой (звук падения даёт игра), удаляется через 20 с
+        static void EjectCasing(Citizen c, MurderWeaponPreset wp, GameObject hi)
+        {
+            try
+            {
+                if (wp.ejectBrassSetting != MurderWeaponPreset.EjectBrass.onFire || wp.shellCasing == null) return;
+                Vector3 pos = hi != null ? hi.transform.TransformPoint(wp.brassEjectOffset) : c.transform.position + Vector3.up * 1.3f;
+                Vector3 right = hi != null ? hi.transform.right : c.transform.right;
+                Vector3 up = Vector3.up;
+                applyingRemote = true;
+                Interactable it;
+                try { it = InteractableCreator.Instance.CreateWorldInteractable(wp.shellCasing, null, null, null, pos, new Vector3(UnityEngine.Random.Range(0f, 360f), UnityEngine.Random.Range(0f, 360f), 0f), null, null, ""); }
+                finally { applyingRemote = false; }
+                if (it == null) { if (brassLog++ < 3) Plugin.L.LogWarning("[FX] гильза не создана"); return; }
+                GameObject go = it.spawnedObject;
+                if (go == null && it.controller != null) go = it.controller.gameObject;
+                if (go != null)
+                {
+                    var rb = go.GetComponentInChildren<Rigidbody>();
+                    if (rb != null) { rb.isKinematic = false; rb.velocity = right * UnityEngine.Random.Range(1.2f, 2.2f) + up * UnityEngine.Random.Range(1.0f, 2.0f); rb.angularVelocity = UnityEngine.Random.insideUnitSphere * 12f; }
+                    else if (brassLog < 3) Plugin.Dbg("[FX] у гильзы нет Rigidbody");
+                }
+                casings.Add(new KeyValuePair<Interactable, float>(it, Time.unscaledTime + 20f));
+                if (brassLog++ < 4) Plugin.Dbg($"[FX] клиент: гильза '{wp.shellCasing.name}' у {c.humanID}");
+            }
+            catch (Exception e) { if (brassLog++ < 4) Plugin.L.LogWarning("[FX] гильза: " + e.Message); }
+        }
+
+        static void CasingTick()
+        {
+            if (casings.Count == 0) return;
+            for (int i = casings.Count - 1; i >= 0; i--)
+            {
+                if (Time.unscaledTime < casings[i].Value) continue;
+                var it = casings[i].Key; casings.RemoveAt(i);
+                applyingRemote = true;
+                try { if (it != null) it.SafeDelete(false); } catch (Exception) { } finally { applyingRemote = false; }
+            }
+        }
+
+        // Звук попадания по клиенту: оригинальный урон по двойнику на хосте пропускается вместе со звуком
+        static int hitSndLog;
+        static void PlayHitSound(Actor from, Vector3 pos)
+        {
+            try
+            {
+                var cit = from as Citizen;
+                AudioEvent ev = null;
+                if (cit != null && cit.ai != null)
+                {
+                    var wp = cit.ai.currentWeaponPreset;
+                    if (wp != null) { ev = wp.impactEventPlayer; if (ev == null) ev = wp.impactEventBody; }
+                }
+                if (ev == null) ev = FindAudio("punchHitFlesh");
+                if (ev == null) return;
+                applyingRemote = true;
+                try { AudioController.Instance.PlayWorldOneShot(ev, cit, cit != null ? cit.currentNode : null, pos); }
+                finally { applyingRemote = false; }
+                if (hitSndLog++ < 5) Plugin.Dbg($"[SOUND] клиент: звук попадания '{ev.name}'");
+            }
+            catch (Exception e) { if (hitSndLog++ < 5) Plugin.L.LogWarning("[SOUND] попадание: " + e.Message); }
+        }
+
+        static int muzzleLog;
+        // Вспышка выстрела: при звуке выстрела текущего оружия жителя
+        static void MuzzleFx(Citizen c, string soundName, Vector3 pos)
+        {
+            try
+            {
+                if (c == null || c.ai == null) return;
+                var wp = c.ai.currentWeaponPreset;
+                if (wp == null || wp.fireEvent == null || wp.fireEvent.name != soundName) return;
+                var flash = wp.muzzleFlash;
+                var hi = c.ai.spawnedRightItem;
+                if (flash == null) { if (muzzleLog++ < 3) Plugin.Dbg($"[FX] у оружия {wp.name} нет muzzleFlash"); return; }
+                GameObject fx = UnityEngine.Object.Instantiate(flash);
+                fx.SetActive(true);
+                if (hi != null)
+                {
+                    fx.transform.SetParent(hi.transform, false);
+                    fx.transform.localPosition = wp.muzzleOffset;
+                    fx.transform.localRotation = Quaternion.identity;
+                }
+                else fx.transform.position = pos + Vector3.up * 1.4f;
+                foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true)) { try { ps.Play(true); } catch (Exception) { } }
+                foreach (var l in fx.GetComponentsInChildren<Light>(true)) { try { l.enabled = true; } catch (Exception) { } }
+                UnityEngine.Object.Destroy(fx, 0.35f);
+                EjectCasing(c, wp, hi);
+                if (muzzleLog++ < 6) Plugin.Dbg($"[FX] клиент: вспышка '{flash.name}' у {c.humanID}, оружие {wp.name}, предмет={(hi != null ? hi.name : "нет")}, смещение={wp.muzzleOffset}");
+            }
+            catch (Exception e) { if (muzzleLog++ < 6) Plugin.L.LogWarning("[FX] " + e.Message); }
+        }
+
+        // ---------- Горожане: хост ведёт, клиент повторяет ----------
+        static System.Collections.Generic.Dictionary<int, Citizen> npcById;
+        static float npcMapAt, npcSendAt, npcLogAt;
+        static int npcRoll;
+        static bool npcErrLogged, npcClientPaused, npcMissLogged;
+        static int npcSentCount, npcRecvCount;
+
+        class NpcTarget
+        {
+            public Citizen c;
+            public Vector3 pos; public float yaw, speed;
+            public byte flags, flags2, idle, arms, carryItem, combatArms, outfit = 255;
+            public int apOutfit = -1, apKo = -1; public float outfitTry;
+            public bool fresh = true, snap = true, wasTalking;
+            public float lastLoc; public Vector3 lastLocPos;
+            public float lastSpeed = -1f;
+            public int ap = -1;           // последнее применённое: битовая маска состояний
+            public int apIdle = -1, apArms = -1, apCarry = -1, apCombat = -1;
+            public float atkUntil, combatHoldUntil; public bool atkHeld; public int curCombat = -1;
+        }
+        static readonly System.Collections.Generic.Dictionary<int, NpcTarget> npcTargets = new System.Collections.Generic.Dictionary<int, NpcTarget>();
+
+        static void BuildNpcMap()
+        {
+            npcMapAt = Time.unscaledTime;
+            if (npcById == null) npcById = new System.Collections.Generic.Dictionary<int, Citizen>();
+            var list = CityData.Instance.citizenDirectory;
+            if (list == null) return;
+            for (int i = 0; i < list.Count; i++)
+            {
+                var c = list[i];
+                if (c == null) continue;
+                try { npcById[c.humanID] = c; } catch (Exception) { }
+            }
+        }
+
+        static void NpcTick(float dt)
+        {
+            if (!Plugin.CfgNpcSync.Value || manager == null || manager.ConnectedPeersCount == 0) return;
+            if (npcById == null || npcById.Count == 0 || Time.unscaledTime - npcMapAt > 30f) BuildNpcMap();
+            if (npcById.Count == 0) return;
+            if (IsHost) { try { PuppetTick(dt); } catch (Exception e) { if (!puppetErrLogged) { puppetErrLogged = true; Plugin.L.LogWarning($"[PUPPET] {e}"); } } NpcSendTick(); }
+            else { try { PuppetClientTick(); PuppetClientFollow(); } catch (Exception) { } NpcClientTick(dt); }
+        }
+
+        static void PutNpc(NetDataWriter w, Citizen c)
+        {
+            Vector3 p = c.transform.position;
+            w.Put(c.humanID);
+            w.Put(p.x); w.Put(p.y); w.Put(p.z);
+            w.Put(c.transform.eulerAngles.y);
+            float sp = 0f; try { sp = c.currentNormalizedSpeed; } catch (Exception) { }
+            w.Put(sp);
+            int f = 0;
+            try { if (c.isDead) f |= 1; } catch (Exception) { }
+            try { if (c.ai != null && c.ai.ko) f |= 2; } catch (Exception) { }
+            try { if (c.ai != null && c.ai.inCombat) f |= 4; } catch (Exception) { }
+            try { if (c.isInBed) f |= 8; } catch (Exception) { }
+            try { if (c.isInLowBed) f |= 16; } catch (Exception) { }
+            try { if (c.isRunning) f |= 128; } catch (Exception) { }
+            int f2 = 0;
+            try { if (c.isMoving) f2 |= 1; } catch (Exception) { }
+            try { if (c.ai != null && c.ai.restrained) f2 |= 2; } catch (Exception) { }
+            int idle = 0, arms = 0, carry = 0, comb = 0;
+            try
+            {
+                var ac = c.animationController;
+                if (ac != null)
+                {
+                    idle = (int)ac.idleAnimationState; arms = (int)ac.armsBoolAnimationState;
+                    var an = ac.mainAnimator;
+                    if (an != null)
+                    {
+                        if (an.GetBool("carryingItem")) f |= 32;
+                        carry = an.GetInteger("carryItem"); comb = an.GetInteger("combatArmsOverride");
+                    }
+                }
+            }
+            catch (Exception) { }
+            int outfit = 255;
+            try { var oc = c.outfitController; if (oc != null) outfit = (int)oc.currentOutfit; } catch (Exception) { }
+            w.Put((byte)f); w.Put((byte)f2); w.Put((byte)idle); w.Put((byte)arms); w.Put((byte)carry); w.Put((byte)comb); w.Put((byte)outfit);
+        }
+
+        sealed class NpcSent { public byte[] data = new byte[48]; public int len; public float at; }
+        static readonly System.Collections.Generic.Dictionary<int, NpcSent> npcSent = new System.Collections.Generic.Dictionary<int, NpcSent>();
+        static NetDataWriter npcScratch = new NetDataWriter();
+        static int npcBytes, npcSkipped;
+
+        static void NpcSendTick()
+        {
+            float now = Time.unscaledTime;
+            if (now - npcSendAt < Mathf.Max(0.03f, Plugin.CfgNpcRate.Value)) return;
+            npcSendAt = now;
+            Vector3 hp = Vector3.zero; bool hasH = false;
+            try { hp = Player.Instance.transform.position; hasH = true; } catch (Exception) { }
+            bool hasC = avatar != null; Vector3 cp = targetPos;
+            float rMid = Plugin.CfgNpcRange.Value; float rNear = rMid * 0.33f;
+            float rNear2 = rNear * rNear, rMid2 = rMid * rMid;
+            float baseIv = Mathf.Max(0.03f, Plugin.CfgNpcRate.Value);
+            var all = new System.Collections.Generic.List<Citizen>(npcById.Values);
+            NpcActPoll(all);
+            var recs = new System.Collections.Generic.List<NpcSent>();
+            for (int i = 0; i < all.Count; i++)
+            {
+                var c = all[i];
+                if (c == null || c == puppet) continue;
+                try { if (c.removedFromWorld) continue; } catch (Exception) { }
+                float d2 = float.MaxValue;
+                try
+                {
+                    Vector3 p = c.transform.position;
+                    if (hasH) d2 = Mathf.Min(d2, (p - hp).sqrMagnitude);
+                    if (hasC) d2 = Mathf.Min(d2, (p - cp).sqrMagnitude);
+                }
+                catch (Exception) { continue; }
+                // чем дальше горожанин от игроков, тем реже он обновляется
+                float iv, keep;
+                if (d2 < rNear2) { iv = baseIv; keep = 1f; }
+                else if (d2 < rMid2) { iv = baseIv * 3f; keep = 1.5f; }
+                else { iv = baseIv * 8f; keep = 3f; }
+                NpcSent st;
+                if (!npcSent.TryGetValue(c.humanID, out st)) { st = new NpcSent(); st.at = -100f; npcSent[c.humanID] = st; }
+                float age = now - st.at;
+                if (age < iv) { npcSkipped++; continue; }
+                npcScratch.Reset();
+                try { PutNpc(npcScratch, c); } catch (Exception) { continue; }
+                int len = npcScratch.Length; if (len > st.data.Length) continue;
+                bool same = st.len == len;
+                if (same) { var d = npcScratch.Data; for (int b = 0; b < len; b++) if (d[b] != st.data[b]) { same = false; break; } }
+                if (same && age < keep) { npcSkipped++; continue; } // ничего не изменилось
+                Buffer.BlockCopy(npcScratch.Data, 0, st.data, 0, len); st.len = len; st.at = now;
+                recs.Add(st);
+            }
+            int pos = 0;
+            while (pos < recs.Count)
+            {
+                int n = Math.Min(28, recs.Count - pos);
+                var w = new NetDataWriter();
+                w.Put(MsgNpc); w.Put((byte)n);
+                for (int i = 0; i < n; i++) { var st = recs[pos + i]; w.Put(st.data, 0, st.len); }
+                manager.SendToAll(w, DeliveryMethod.Sequenced);
+                npcSentCount += n; npcBytes += w.Length;
+                pos += n;
+            }
+            if (now - npcLogAt > 15f)
+            {
+                npcLogAt = now;
+                Plugin.L.LogInfo($"[NPC] хост: за 15 с отправлено записей: {npcSentCount} (~{npcBytes / 15 / 1024f:F1} КБ/с), пропущено как неизменных/далёких: {npcSkipped}, горожан: {all.Count}");
+                npcSentCount = 0; npcBytes = 0; npcSkipped = 0;
+            }
+        }
+
+        static void OnNpcMessage(NetDataReader r)
+        {
+            int n = r.GetByte();
+            for (int i = 0; i < n; i++)
+            {
+                int id = r.GetInt();
+                Vector3 p = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat());
+                float yaw = r.GetFloat(); float sp = r.GetFloat();
+                byte f = r.GetByte(), f2 = r.GetByte(), idle = r.GetByte(), arms = r.GetByte(), carry = r.GetByte(), comb = r.GetByte(), outfit = r.GetByte();
+                if (npcById == null || !npcById.ContainsKey(id)) { try { BuildNpcMap(); } catch (Exception) { } }
+                Citizen c; if (npcById == null || !npcById.TryGetValue(id, out c) || c == null)
+                {
+                    if (!npcMissLogged) { npcMissLogged = true; Plugin.L.LogWarning($"[NPC] горожанин {id} не найден у меня"); }
+                    continue;
+                }
+                NpcTarget t;
+                if (!npcTargets.TryGetValue(id, out t)) { t = new NpcTarget { c = c }; npcTargets[id] = t; }
+                t.c = c; t.pos = p; t.yaw = yaw; t.speed = sp; t.flags = f; t.flags2 = f2; t.idle = idle; t.arms = arms; t.carryItem = carry; t.combatArms = comb; t.outfit = outfit;
+                npcRecvCount++;
+            }
+        }
+
+        static void NpcClientTick(float dt)
+        {
+            CasingTick();
+            if (npcTargets.Count == 0) return;
+            if (!npcClientPaused)
+            {
+                try { Game.Instance.SetPauseAI(true); npcClientPaused = true; Plugin.L.LogInfo("[NPC] клиент: ИИ горожан остановлен, слежу за хостом"); }
+                catch (Exception e) { Plugin.L.LogWarning($"[NPC] SetPauseAI: {e.Message}"); }
+            }
+            if (Time.unscaledTime - npcLogAt > 15f)
+            {
+                npcLogAt = Time.unscaledTime;
+                Plugin.L.LogInfo($"[NPC] клиент: за 15 с получено записей: {npcRecvCount}, веду горожан: {npcTargets.Count}");
+                npcRecvCount = 0;
+            }
+            float kp = 1f - Mathf.Exp(-12f * dt);
+            int locBudget = 8;
+            foreach (var kv in npcTargets)
+            {
+                var t = kv.Value; var c = t.c;
+                try
+                {
+                    if (c == null) continue;
+                    if (kv.Key == puppetId) continue; // двойник клиента: его ведёт хост, у меня он невидим
+                    var tr = c.transform;
+                    if (tr == null) continue;
+                    bool talking = false;
+                    try { talking = c.inConversation; } catch (Exception) { }
+                    if (talking)
+                    {
+                        if (!t.wasTalking) { t.wasTalking = true; Plugin.L.LogInfo($"[NPC] разговор с горожанином {kv.Key}: моя y={tr.position.y:F2}, у хоста y={t.pos.y:F2}; позицию не трогаю"); }
+                        ApplyNpcState(t);
+                        continue;
+                    }
+                    t.wasTalking = false;
+                    if ((t.flags & 2) != 0 && !t.snap) { ApplyNpcState(t); continue; } // оглушён: его тело ведёт физика, не двигаю
+                    Vector3 cur = tr.position;
+                    float d = Vector3.Distance(cur, t.pos);
+                    if (t.snap || d > 4f) { tr.position = t.pos; tr.rotation = Quaternion.Euler(0f, t.yaw, 0f); t.snap = false; }
+                    else
+                    {
+                        tr.position = Vector3.Lerp(cur, t.pos, kp);
+                        tr.rotation = Quaternion.Slerp(tr.rotation, Quaternion.Euler(0f, t.yaw, 0f), kp);
+                    }
+                    ApplyNpcState(t);
+                    ArmsLayerForAttack(t);
+                    CombatSync(t);
+                    if (locBudget > 0 && Time.unscaledTime - t.lastLoc > 0.5f && (t.lastLocPos - tr.position).sqrMagnitude > 0.25f)
+                    {
+                        t.lastLoc = Time.unscaledTime; t.lastLocPos = tr.position; locBudget--;
+                        try { c.UpdateGameLocation(0f, false); } catch (Exception) { }
+                    }
+                }
+                catch (Exception) { }
+            }
+        }
+
+        // Боевые позы рук (удар, выстрел) лежат в слое ArmsOverride. У клиента вес слоя оставался 0,
+        // поэтому атака «проигрывалась», но не была видна. На время атаки включаю слой
+        static void ArmsLayerForAttack(NpcTarget t)
+        {
+            var c = t.c; if (c == null) return;
+            var ac = c.animationController; if (ac == null) return;
+            var an = ac.mainAnimator; if (an == null || an.layerCount < 2) return;
+            if (Time.unscaledTime < t.atkUntil)
+            {
+                try { an.SetLayerWeight(1, 1f); } catch (Exception) { }
+                try { ac.armsLayerDesiredWeight = 1f; } catch (Exception) { }
+                t.atkHeld = true;
+            }
+            else if (t.atkHeld)
+            {
+                t.atkHeld = false;
+                if (t.arms == 0 && t.carryItem == 0)
+                {
+                    try { an.SetLayerWeight(1, 0f); } catch (Exception) { }
+                    try { ac.armsLayerDesiredWeight = 0f; } catch (Exception) { }
+                }
+            }
+        }
+
+        // Боевая стойка с задержкой: у хоста флаг боя мигает, поэтому клиенту хватает «включил»,
+        // а выключить он может только через 1 с после того, как хост перестал считать жителя дерущимся
+        static void CombatSync(NpcTarget t)
+        {
+            var c = t.c; if (c == null) return;
+            float now = Time.unscaledTime;
+            if ((t.flags & 4) != 0) t.combatHoldUntil = Math.Max(t.combatHoldUntil, now + 1.0f);
+            int want = now < t.combatHoldUntil ? 1 : 0;
+            if (t.curCombat == want) return;
+            bool first = t.curCombat < 0;
+            t.curCombat = want;
+            if (first && want == 0) return;
+            bool cmb = want == 1;
+            try { if (c.ai != null) { c.ai.SetInCombat(cmb, true); if (cmb) c.ai.UpdateCurrentWeapon(); } } catch (Exception e) { if (!combatErrLogged) { combatErrLogged = true; Plugin.L.LogWarning($"[NPCACT] ai.SetInCombat: {e.Message}"); } }
+            try { var ac = c.animationController; if (ac != null) ac.SetInCombat(cmb); } catch (Exception) { }
+        }
+
+        static void ApplyNpcState(NpcTarget t)
+        {
+            var c = t.c;
+            var ac = c.animationController;
+            if (ac == null) return;
+            bool dead = (t.flags & 1) != 0;
+            bool inBed = (t.flags & 8) != 0, low = (t.flags & 16) != 0;
+            int mask = (t.flags & (1 | 2 | 4 | 8 | 16 | 32 | 128)) | ((t.flags2 & 3) << 8);
+            if (mask != t.ap)
+            {
+                int old = t.ap; t.ap = mask;
+                if (old < 0 || ((old ^ mask) & 1) != 0)
+                {
+                    if (dead) { try { ac.SetDead(true); c.isDead = true; Plugin.L.LogInfo($"[NPC] горожанин {c.humanID}: мёртв (по данным хоста)"); } catch (Exception) { } }
+                    else if (old >= 0)
+                    {
+                        // хост больше не считает его мёртвым (флаг мигнул при нокауте): поднимаю и у себя
+                        try { ac.SetDead(false); c.isDead = false; Plugin.L.LogInfo($"[NPC] горожанин {c.humanID}: больше не мёртв (по данным хоста), снимаю позу смерти"); } catch (Exception) { }
+                    }
+                }
+                if (old < 0 || ((old ^ mask) & (8 | 16)) != 0)
+                {
+                    try { c.isInBed = inBed; c.isInLowBed = low; ac.SetInBed(inBed, low, false, true); } catch (Exception) { }
+                }
+                bool koNow = (t.flags & 2) != 0;
+                if (t.apKo != (koNow ? 1 : 0))
+                {
+                    bool first = t.apKo < 0; t.apKo = koNow ? 1 : 0;
+                    if (!(first && !koNow))
+                    {
+                        try { if (c.ai != null) c.ai.SetKO(koNow, Vector3.zero, Vector3.zero, true, 0f); Plugin.L.LogInfo($"[NPC] горожанин {c.humanID}: {(koNow ? "оглушён" : "пришёл в себя")} (по данным хоста)"); }
+                        catch (Exception) { }
+                    }
+                }
+                if (old < 0 || ((old ^ mask) & 32) != 0) { try { ac.SetCarryingItem((t.flags & 32) != 0); } catch (Exception) { } }
+                if (old < 0 || ((old ^ (mask)) & (1 << 8)) != 0) { try { c.isMoving = (t.flags2 & 1) != 0; } catch (Exception) { } }
+                if (old < 0 || ((old ^ mask) & 128) != 0) { try { c.isRunning = (t.flags & 128) != 0; } catch (Exception) { } }
+                if (old < 0 || ((old ^ (mask)) & (2 << 8)) != 0) { try { ac.SetRestrained((t.flags2 & 2) != 0); } catch (Exception) { } }
+            }
+            if (t.outfit != 255 && t.apOutfit != t.outfit && Time.unscaledTime - t.outfitTry > 1f)
+            {
+                t.outfitTry = Time.unscaledTime;
+                try
+                {
+                    var oc = c.outfitController;
+                    if (oc != null)
+                    {
+                        if ((int)oc.currentOutfit != t.outfit) { oc.SetCurrentOutfit((ClothesPreset.OutfitCategory)t.outfit, false, false, true); }
+                        t.apOutfit = t.outfit;
+                    }
+                }
+                catch (Exception) { }
+            }
+            if (t.apIdle != t.idle) { t.apIdle = t.idle; try { ac.SetIdleAnimationState((CitizenAnimationController.IdleAnimationState)t.idle); } catch (Exception) { } }
+            if (t.apArms != t.arms) { t.apArms = t.arms; try { ac.SetArmsBoolState((CitizenAnimationController.ArmsBoolSate)t.arms); } catch (Exception) { } }
+            if (t.apCarry != t.carryItem) { t.apCarry = t.carryItem; try { ac.SetCarryItemType(t.carryItem); } catch (Exception) { } }
+            if (t.apCombat != t.combatArms) { t.apCombat = t.combatArms; try { ac.SetCombatArmsOverride(t.combatArms); } catch (Exception) { } }
+            if (Mathf.Abs(t.speed - t.lastSpeed) > 0.01f)
+            {
+                t.lastSpeed = t.speed;
+                try { c.currentNormalizedSpeed = t.speed; c.desiredNormalizedSpeed = t.speed; ac.UpdateMovementSpeed(); } catch (Exception) { }
+            }
+        }
+
+        // ---------- Иконка второго игрока на карте ----------
+        static Transform mapTracked;
+        static Sprite mapSprite;
+        static float lastMapTry; static bool mapFailLogged;
+
+        static Sprite MakeMapSprite()
+        {
+            if (mapSprite != null) return mapSprite;
+            int n = 32;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false);
+            var px = new Color[n * n];
+            float c = (n - 1) / 2f;
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float d = Mathf.Sqrt((x - c) * (x - c) + (y - c) * (y - c));
+                    Color col = new Color(0f, 0f, 0f, 0f);
+                    if (d <= 15.5f) col = d >= 12f ? new Color(0.25f, 0.25f, 0.25f, 1f) : new Color(1f, 1f, 1f, 1f);
+                    px[y * n + x] = col;
+                }
+            tex.SetPixels(px); tex.Apply();
+            tex.filterMode = FilterMode.Bilinear;
+            mapSprite = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f), 100f);
+            return mapSprite;
+        }
+
+        static void MapUntrack()
+        {
+            try
+            {
+                if (mapTracked != null && MapController.Instance != null) MapController.Instance.RemoveTrackedObject(mapTracked);
+            }
+            catch (Exception) { }
+            mapTracked = null;
+        }
+
+        static void MapTick()
+        {
+            if (Time.unscaledTime - lastMapTry < 1f) return;
+            lastMapTry = Time.unscaledTime;
+            if (!Plugin.CfgMapIcon.Value) { if (mapTracked != null) MapUntrack(); return; }
+            if (avatar == null) { if (mapTracked != null) MapUntrack(); return; }
+            var mc = MapController.Instance;
+            if (mc == null) return;
+            if (mapTracked != null && mapTracked == avatar.transform) return;
+            if (mapTracked != null) MapUntrack();
+            try
+            {
+                float sz = Mathf.Max(6f, Plugin.CfgMapIconSize.Value);
+                mc.AddNewTrackedObject(avatar.transform, MakeMapSprite(), new Vector2(sz, sz), new Color(0.2f, 1f, 0.3f, 1f), true, null);
+                mapTracked = avatar.transform;
+                Plugin.L.LogInfo("[MAP] иконка второго игрока добавлена на карту");
+            }
+            catch (Exception e)
+            {
+                if (!mapFailLogged) { mapFailLogged = true; Plugin.L.LogWarning($"[MAP] не удалось добавить иконку: {e.Message}"); }
+            }
+        }
+
+        // ---------- Мебель в квартирах ----------
+        class FurnRec
+        {
+            public int room, angle, x, y, z, tries;
+            public string preset = "", art = "", bm = "";
+            public bool hasKey, hasOff;
+            public Color c0, c1, c2, c3; public float grub;
+            public Vector3 off;
+            public System.Collections.Generic.List<int[]> covers = new System.Collections.Generic.List<int[]>();
+        }
+
+        static readonly System.Collections.Generic.List<FurnRec> furnRecs = new System.Collections.Generic.List<FurnRec>();
+        static readonly System.Collections.Generic.List<FurnRec> furnPending = new System.Collections.Generic.List<FurnRec>();
+        static bool inExecute; static float execAt;
+        static string lastFurnKey = ""; static float lastFurnAt;
+        static System.Collections.Generic.Dictionary<string, FurniturePreset> furnPresetCache;
+        static System.Collections.Generic.Dictionary<string, ArtPreset> artPresetCache;
+
+        static string FurnKey(FurnRec r) { return r.room + ":" + r.x + "," + r.y + "," + r.z + ":" + r.preset; }
+
+        static FurniturePreset FindFurnPreset(string name)
+        {
+            if (furnPresetCache == null)
+            {
+                furnPresetCache = new System.Collections.Generic.Dictionary<string, FurniturePreset>();
+                foreach (var p in Resources.FindObjectsOfTypeAll<FurniturePreset>())
+                    if (p != null && !string.IsNullOrEmpty(p.name) && !furnPresetCache.ContainsKey(p.name)) furnPresetCache[p.name] = p;
+                Plugin.L.LogInfo($"[FURN] пресетов мебели: {furnPresetCache.Count}");
+            }
+            FurniturePreset r; return furnPresetCache.TryGetValue(name ?? "", out r) ? r : null;
+        }
+
+        static ArtPreset FindArtPreset(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return null;
+            if (artPresetCache == null)
+            {
+                artPresetCache = new System.Collections.Generic.Dictionary<string, ArtPreset>();
+                foreach (var p in Resources.FindObjectsOfTypeAll<ArtPreset>())
+                    if (p != null && !string.IsNullOrEmpty(p.name) && !artPresetCache.ContainsKey(p.name)) artPresetCache[p.name] = p;
+            }
+            ArtPreset r; return artPresetCache.TryGetValue(name, out r) ? r : null;
+        }
+
+        static FurnRec MakeRec(NewRoom room, FurnitureLocation loc, PlayerApartmentController.FurniturePlacement pl)
+        {
+            NewNode an = null;
+            try { an = loc != null ? loc.anchorNode : null; } catch (Exception) { }
+            if (an == null && pl != null) { try { an = pl.anchorNode; } catch (Exception) { } }
+            if (an == null) return null;
+            if (room == null) { try { room = an.room; } catch (Exception) { } }
+            if (room == null) return null;
+            var rec = new FurnRec();
+            rec.room = room.roomID;
+            FurniturePreset fp = null;
+            try { fp = loc != null ? loc.furniture : null; } catch (Exception) { }
+            if (fp == null && pl != null) { try { fp = pl.preset; } catch (Exception) { } }
+            if (fp == null) return null;
+            rec.preset = fp.name ?? "";
+            var c = an.nodeCoord; rec.x = c.x; rec.y = c.y; rec.z = c.z;
+            try { rec.angle = loc != null ? loc.angle : pl.angle; } catch (Exception) { }
+            Toolbox.MaterialKey key = null;
+            try { key = loc != null ? loc.matKey : null; } catch (Exception) { }
+            if (key == null && pl != null) { try { key = pl.materialKey; } catch (Exception) { } }
+            if (key != null)
+            {
+                rec.hasKey = true;
+                try { rec.bm = key.baseMaterial != null ? key.baseMaterial.name : ""; } catch (Exception) { }
+                rec.c0 = key.mainColour; rec.c1 = key.colour1; rec.c2 = key.colour2; rec.c3 = key.colour3; rec.grub = key.grubiness;
+            }
+            try
+            {
+                ArtPreset ap = loc != null ? loc.art : null;
+                if (ap == null && pl != null) ap = pl.art;
+                if (ap != null) rec.art = ap.name ?? "";
+            }
+            catch (Exception) { }
+            try { if (loc != null) { rec.off = loc.offset; rec.hasOff = true; } else if (pl != null) { rec.off = pl.offset; rec.hasOff = true; } } catch (Exception) { }
+            try
+            {
+                var cov = loc != null ? loc.coversNodes : null;
+                if (cov == null && pl != null) cov = pl.coversNodes;
+                if (cov != null)
+                    foreach (var n in cov) { if (n == null) continue; var cc = n.nodeCoord; rec.covers.Add(new[] { cc.x, cc.y, cc.z }); }
+            }
+            catch (Exception) { }
+            return rec;
+        }
+
+        static void PutFurn(NetDataWriter w, FurnRec r)
+        {
+            w.Put(r.room); w.Put(r.preset); w.Put(r.angle); w.Put(r.x); w.Put(r.y); w.Put(r.z);
+            w.Put(r.hasKey);
+            if (r.hasKey) { w.Put(r.bm); PutColor(w, r.c0); PutColor(w, r.c1); PutColor(w, r.c2); PutColor(w, r.c3); w.Put(r.grub); }
+            w.Put(r.art ?? "");
+            w.Put(r.hasOff);
+            if (r.hasOff) { w.Put(r.off.x); w.Put(r.off.y); w.Put(r.off.z); }
+            w.Put(r.covers.Count);
+            foreach (var c in r.covers) { w.Put(c[0]); w.Put(c[1]); w.Put(c[2]); }
+        }
+
+        static FurnRec GetFurn(NetDataReader r)
+        {
+            var f = new FurnRec();
+            f.room = r.GetInt(); f.preset = r.GetString(); f.angle = r.GetInt(); f.x = r.GetInt(); f.y = r.GetInt(); f.z = r.GetInt();
+            f.hasKey = r.GetBool();
+            if (f.hasKey) { f.bm = r.GetString(); f.c0 = GetColor(r); f.c1 = GetColor(r); f.c2 = GetColor(r); f.c3 = GetColor(r); f.grub = r.GetFloat(); }
+            f.art = r.GetString();
+            f.hasOff = r.GetBool();
+            if (f.hasOff) f.off = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat());
+            int n = r.GetInt();
+            for (int i = 0; i < n; i++) f.covers.Add(new[] { r.GetInt(), r.GetInt(), r.GetInt() });
+            return f;
+        }
+
+        internal static void BeginExecute()
+        {
+            inExecute = true; execAt = Time.unscaledTime;
+            try
+            {
+                if (applyingRemote) return;
+                var pac = PlayerApartmentController.Instance;
+                var p = pac != null ? pac.furnPlacement : null;
+                var ex = p != null ? p.existing : null;
+                if (ex != null) OnFurnRemoved(ex, "переставил");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[FURN] begin: {e.Message}"); }
+        }
+
+        internal static void EndExecute() { inExecute = false; }
+
+        internal static void OnFurnAdded(NewRoom room, FurnitureLocation loc, PlayerApartmentController.FurniturePlacement pl)
+        {
+            try
+            {
+                if (applyingRemote) return;
+                if (!inExecute || Time.unscaledTime - execAt > 5f) return;
+                var rec = MakeRec(room, loc, pl);
+                if (rec == null) return;
+                string k = FurnKey(rec);
+                if (k == lastFurnKey && Time.unscaledTime - lastFurnAt < 1f) return; // две перегрузки AddFurnitureCustom подряд
+                lastFurnKey = k; lastFurnAt = Time.unscaledTime;
+                furnRecs.RemoveAll(x => FurnKey(x) == k);
+                furnRecs.Add(rec);
+                if (manager == null || manager.ConnectedPeersCount == 0) return;
+                var w = new NetDataWriter();
+                w.Put(MsgDoor); w.Put((byte)17); PutFurn(w, rec);
+                SendDoor(w);
+                Plugin.L.LogInfo($"[FURN] я поставил '{rec.preset}': комната {rec.room}, узел ({rec.x},{rec.y},{rec.z}), угол {rec.angle}, занимает узлов {rec.covers.Count}");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[FURN] add: {e.Message}"); }
+        }
+
+        internal static void OnFurnRemoved(FurnitureLocation loc, string why)
+        {
+            try
+            {
+                if (applyingRemote || loc == null) return;
+                var rec = MakeRec(null, loc, null);
+                if (rec == null) return;
+                string k = FurnKey(rec);
+                furnRecs.RemoveAll(x => FurnKey(x) == k);
+                if (manager == null || manager.ConnectedPeersCount == 0) return;
+                var w = new NetDataWriter();
+                w.Put(MsgDoor); w.Put((byte)18);
+                w.Put(rec.room); w.Put(rec.x); w.Put(rec.y); w.Put(rec.z); w.Put(rec.preset);
+                SendDoor(w);
+                Plugin.L.LogInfo($"[FURN] я {why} '{rec.preset}': комната {rec.room}, узел ({rec.x},{rec.y},{rec.z})");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[FURN] remove: {e.Message}"); }
+        }
+
+        static NewNode FindNodeAt(NewRoom room, int x, int y, int z)
+        {
+            try
+            {
+                foreach (var n in room.nodes)
+                {
+                    if (n == null) continue;
+                    var c = n.nodeCoord;
+                    if (c.x == x && c.y == y && c.z == z) return n;
+                }
+            }
+            catch (Exception) { }
+            try
+            {
+                NewNode nn;
+                var map = PathFinder.Instance.nodeMap;
+                if (map != null && map.TryGetValue(new Vector3(x, y, z), out nn) && nn != null) return nn;
+            }
+            catch (Exception) { }
+            return null;
+        }
+
+        static FurnitureLocation FindFurnLoc(NewRoom room, int x, int y, int z, string preset)
+        {
+            try
+            {
+                foreach (var f in room.individualFurniture)
+                    if (FurnMatch(f, x, y, z, preset)) return f;
+            }
+            catch (Exception) { }
+            try
+            {
+                foreach (var cl in room.furniture)
+                {
+                    if (cl == null) continue;
+                    foreach (var f in cl.clusterList)
+                        if (FurnMatch(f, x, y, z, preset)) return f;
+                }
+            }
+            catch (Exception) { }
+            return null;
+        }
+
+        static bool FurnMatch(FurnitureLocation f, int x, int y, int z, string preset)
+        {
+            if (f == null) return false;
+            try
+            {
+                var an = f.anchorNode; if (an == null) return false;
+                var c = an.nodeCoord;
+                if (c.x != x || c.y != y || c.z != z) return false;
+                return f.furniture != null && f.furniture.name == preset;
+            }
+            catch (Exception) { return false; }
+        }
+
+        // true = обработано (применено или безнадёжно), false = попробовать позже
+        static bool ApplyFurnAdd(FurnRec rec)
+        {
+            var room = RoomById(rec.room);
+            if (room == null) return false;
+            var node = FindNodeAt(room, rec.x, rec.y, rec.z);
+            if (node == null) return false;
+            var preset = FindFurnPreset(rec.preset);
+            if (preset == null) { Plugin.L.LogWarning($"[FURN] нет пресета мебели '{rec.preset}'"); return true; }
+            string k = FurnKey(rec);
+            var existing = FindFurnLoc(room, rec.x, rec.y, rec.z, rec.preset);
+            if (existing != null)
+            {
+                bool same = false;
+                try { same = existing.angle == rec.angle; } catch (Exception) { }
+                if (same) { furnRecs.RemoveAll(x => FurnKey(x) == k); furnRecs.Add(rec); return true; }
+                RemoveFurnLoc(room, existing);
+            }
+            var pl = new PlayerApartmentController.FurniturePlacement();
+            pl.preset = preset; pl.anchorNode = node; pl.angle = rec.angle;
+            if (rec.hasKey)
+            {
+                var key = new Toolbox.MaterialKey();
+                key.baseMaterial = FindMaterial(rec.bm);
+                key.mainColour = rec.c0; key.colour1 = rec.c1; key.colour2 = rec.c2; key.colour3 = rec.c3; key.grubiness = rec.grub;
+                pl.materialKey = key;
+            }
+            var art = FindArtPreset(rec.art);
+            if (art != null) pl.art = art;
+            if (rec.hasOff) pl.offset = rec.off;
+            var cov = new Il2CppSystem.Collections.Generic.List<NewNode>();
+            foreach (var c in rec.covers)
+            {
+                var n = FindNodeAt(room, c[0], c[1], c[2]);
+                if (n != null) cov.Add(n);
+            }
+            if (cov.Count == 0) cov.Add(node);
+            pl.coversNodes = cov;
+            applyingRemote = true; applyingDoor = true;
+            try
+            {
+                room.AddFurnitureCustom(pl);
+                furnRecs.RemoveAll(x => FurnKey(x) == k);
+                furnRecs.Add(rec);
+                Plugin.L.LogInfo($"[FURN] второй игрок поставил '{rec.preset}': комната {rec.room}, узел ({rec.x},{rec.y},{rec.z}), угол {rec.angle}");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[FURN] поставить '{rec.preset}': {e.Message}"); }
+            finally { applyingRemote = false; applyingDoor = false; }
+            return true;
+        }
+
+        static void RemoveFurnLoc(NewRoom room, FurnitureLocation loc)
+        {
+            bool prev1 = applyingRemote, prev2 = applyingDoor;
+            applyingRemote = true; applyingDoor = true;
+            try
+            {
+                loc.Delete(true, FurnitureClusterLocation.RemoveInteractablesOption.remove);
+                try { if (room.individualFurniture.Contains(loc)) room.individualFurniture.Remove(loc); } catch (Exception) { }
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[FURN] удалить: {e.Message}"); }
+            finally { applyingRemote = prev1; applyingDoor = prev2; }
+        }
+
+        static bool ApplyFurnRemove(int rid, int x, int y, int z, string preset)
+        {
+            var room = RoomById(rid);
+            if (room == null) return false;
+            string k = rid + ":" + x + "," + y + "," + z + ":" + preset;
+            furnRecs.RemoveAll(q => FurnKey(q) == k);
+            var loc = FindFurnLoc(room, x, y, z, preset);
+            if (loc == null) { Plugin.L.LogInfo($"[FURN] убрать '{preset}' (комната {rid}): у меня её уже нет"); return true; }
+            RemoveFurnLoc(room, loc);
+            Plugin.L.LogInfo($"[FURN] второй игрок убрал '{preset}': комната {rid}, узел ({x},{y},{z})");
+            return true;
+        }
+
+        static void OnFurnMessage(byte kind, NetDataReader r)
+        {
+            if (kind == 17)
+            {
+                var rec = GetFurn(r);
+                if (!ApplyFurnAdd(rec)) furnPending.Add(rec);
+            }
+            else if (kind == 18)
+            {
+                int rid = r.GetInt(); int x = r.GetInt(); int y = r.GetInt(); int z = r.GetInt(); string pn = r.GetString();
+                furnPending.RemoveAll(q => q.room == rid && q.x == x && q.y == y && q.z == z && q.preset == pn);
+                ApplyFurnRemove(rid, x, y, z, pn);
+            }
+            else if (kind == 19)
+            {
+                int n = r.GetInt();
+                Plugin.L.LogInfo($"[FURN] получен снимок мебели: {n}");
+                for (int i = 0; i < n; i++)
+                {
+                    var rec = GetFurn(r);
+                    if (!ApplyFurnAdd(rec)) furnPending.Add(rec);
+                }
+            }
+        }
+
+        static void SendFurnSnapshot(NetPeer peer)
+        {
+            try
+            {
+                if (furnRecs.Count == 0) return;
+                var w = new NetDataWriter();
+                w.Put(MsgDoor); w.Put((byte)19); w.Put(furnRecs.Count);
+                foreach (var f in furnRecs) PutFurn(w, f);
+                if (peer != null) peer.Send(w, DeliveryMethod.ReliableOrdered); else manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+                Plugin.L.LogInfo($"[FURN] отправил снимок мебели: {furnRecs.Count}");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[FURN] снимок: {e.Message}"); }
+        }
+
+        static void FurnTick()
+        {
+            if (furnPending.Count == 0) return;
+            var list = new System.Collections.Generic.List<FurnRec>(furnPending);
+            foreach (var rec in list)
+            {
+                bool done = false;
+                try { done = ApplyFurnAdd(rec); } catch (Exception) { }
+                rec.tries++;
+                if (done || rec.tries > 40) furnPending.Remove(rec);
+            }
+        }
+
+        static void AptTick()
+        {
+            try { FurnTick(); } catch (Exception) { }
+            try { MapTick(); } catch (Exception) { }
+            if (soldPending.Count == 0) return;
+            var done = new System.Collections.Generic.List<int>();
+            foreach (var id in soldPending) { try { if (TryRemoveSaleNote(id)) done.Add(id); } catch (Exception) { } }
+            foreach (var id in done) soldPending.Remove(id);
+        }
+
+        static void SendSoldSnapshot(NetPeer peer)
+        {
+            try
+            {
+                var w = new NetDataWriter();
+                w.Put(MsgDoor); w.Put((byte)15); w.Put(soldAddrs.Count);
+                foreach (var id in soldAddrs)
+                {
+                    System.Collections.Generic.List<int[]> rems; soldRemovals.TryGetValue(id, out rems);
+                    PutSale(w, id, rems);
+                }
+                peer.Send(w, DeliveryMethod.ReliableOrdered);
+            }
+            catch (Exception) { }
+        }
+
+        static float lastAptTick;
+        static float lastTimeSend, lastTimeLog;
+        static bool timeLogged, applyingWeather;
+
+        internal static bool ClientFollowsHostWeather()
+        {
+            return !IsHost && !applyingWeather && Plugin.CfgTimeSync.Value && manager != null && manager.ConnectedPeersCount > 0;
+        }
+
+        static void TimeTick()
+        {
+            if (!IsHost || !Plugin.CfgTimeSync.Value) return;
+            if (manager == null || manager.ConnectedPeersCount == 0) return;
+            if (Time.unscaledTime - lastTimeSend < 5f) return;
+            lastTimeSend = Time.unscaledTime;
+            SendTime();
+        }
+
+        static void SendTime()
+        {
+            try
+            {
+                var sd = SessionData.Instance;
+                if (sd == null) return;
+                var w = new NetDataWriter();
+                w.Put(MsgDoor); w.Put((byte)13);
+                w.Put(sd.gameTime); w.Put(sd.leapYearCycle); w.Put((byte)(int)sd.currentTimeSpeed);
+                w.Put(sd.desiredRain); w.Put(sd.desiredWind); w.Put(sd.desiredSnow); w.Put(sd.desiredLightning); w.Put(sd.desiredFog);
+                SendDoor(w);
+            }
+            catch (Exception) { }
+        }
+
+        static void ApplyTime(float gt, int leap, int spd, float rain, float wind, float snow, float lit, float fog)
+        {
+            if (IsHost || !Plugin.CfgTimeSync.Value) return;
+            try
+            {
+                var sd = SessionData.Instance;
+                if (sd == null) return;
+                float mine = sd.gameTime;
+                if (!timeLogged || Time.unscaledTime - lastTimeLog > 30f)
+                {
+                    timeLogged = true; lastTimeLog = Time.unscaledTime;
+                    Plugin.L.LogInfo($"[TIME] хост gameTime={gt:F4} у меня={mine:F4} скорость={spd}/{(int)sd.currentTimeSpeed} дождь={rain:F2} ветер={wind:F2} снег={snow:F2} молнии={lit:F2} туман={fog:F2}");
+                }
+                if (spd != (int)sd.currentTimeSpeed) sd.SetTimeSpeed((SessionData.TimeSpeed)spd);
+                if (Mathf.Abs(mine - gt) > 0.03f) sd.SetGameTime(gt, leap);
+                if (Mathf.Abs(sd.desiredRain - rain) > 0.02f || Mathf.Abs(sd.desiredWind - wind) > 0.02f || Mathf.Abs(sd.desiredSnow - snow) > 0.02f
+                    || Mathf.Abs(sd.desiredLightning - lit) > 0.02f || Mathf.Abs(sd.desiredFog - fog) > 0.02f)
+                {
+                    applyingWeather = true;
+                    try { sd.SetWeather(rain, wind, snow, lit, fog, 0.1f, false); }
+                    finally { applyingWeather = false; }
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[TIME] {e.Message}"); }
+        }
+
+        class PendingWin { public Vector3 wp, cp, vel; public bool fx; public int tries; }
+        static readonly System.Collections.Generic.List<PendingWin> pendingWins = new System.Collections.Generic.List<PendingWin>();
+        static float lastWinTick;
+
+        internal static void OnWindowBreak(BreakableWindowController bw, Vector3 cp, Vector3 vel)
+        {
+            try
+            {
+                if (applyingRemote || bw == null || !Plugin.CfgObjSync.Value) return;
+                if (manager == null || manager.ConnectedPeersCount == 0) return;
+                if (!bw.isBroken) return;
+                Vector3 wp = bw.transform.position;
+                var w = new NetDataWriter();
+                w.Put(MsgDoor); w.Put((byte)11);
+                w.Put(wp.x); w.Put(wp.y); w.Put(wp.z);
+                w.Put(cp.x); w.Put(cp.y); w.Put(cp.z);
+                w.Put(vel.x); w.Put(vel.y); w.Put(vel.z);
+                SendDoor(w);
+                Plugin.L.LogInfo($"[WINDOW] я разбил окно в {wp}");
+            }
+            catch (Exception) { }
+        }
+
+        // true = обработано (применено или уже разбито), false = окно не найдено (ещё не заспавнилось)
+        static bool TryApplyWindow(Vector3 wp, Vector3 cp, Vector3 vel, bool fx)
+        {
+            BreakableWindowController found = null; float best = 0.5f;
+            foreach (var bw in UnityEngine.Object.FindObjectsOfType<BreakableWindowController>())
+            {
+                if (bw == null) continue;
+                float d = Vector3.Distance(bw.transform.position, wp);
+                if (d < best) { best = d; found = bw; }
+            }
+            if (found == null) return false;
+            if (found.isBroken) return true;
+            applyingRemote = true; applyingDoor = true;
+            try
+            {
+                if (fx) found.BreakWindow(cp, vel, null, false);
+                else found.SetBroken(true);
+                if (!found.isBroken) found.SetBroken(true);
+                Plugin.L.LogInfo($"[WINDOW] разбил окно у себя ({best:F3} м), isBroken={found.isBroken}");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[WINDOW] разбить: {e.Message}"); }
+            finally { applyingRemote = false; applyingDoor = false; }
+            return true;
+        }
+
+        static void ApplyWindowBreak(Vector3 wp, Vector3 cp, Vector3 vel, bool fx)
+        {
+            bool ok = false;
+            try { ok = TryApplyWindow(wp, cp, vel, fx); } catch (Exception e) { Plugin.L.LogWarning($"[WINDOW] {e.Message}"); }
+            if (!ok)
+            {
+                if (pendingWins.Count > 400) pendingWins.RemoveAt(0);
+                pendingWins.Add(new PendingWin { wp = wp, cp = cp, vel = vel, fx = fx });
+            }
+        }
+
+        static void WindowTick()
+        {
+            if (pendingWins.Count == 0) return;
+            if (Time.unscaledTime - lastWinTick < 1f) return;
+            lastWinTick = Time.unscaledTime;
+            for (int i = pendingWins.Count - 1; i >= 0; i--)
+            {
+                var p = pendingWins[i];
+                bool ok = false;
+                try { ok = TryApplyWindow(p.wp, p.cp, p.vel, false); } catch (Exception) { }
+                if (ok || ++p.tries > 600) pendingWins.RemoveAt(i);
+            }
+        }
+
+        static void SendWindowSnapshot(NetPeer peer)
+        {
+            try
+            {
+                var list = new System.Collections.Generic.List<Vector3>();
+                foreach (var bw in UnityEngine.Object.FindObjectsOfType<BreakableWindowController>())
+                    if (bw != null && bw.isBroken) list.Add(bw.transform.position);
+                var w = new NetDataWriter();
+                w.Put(MsgDoor); w.Put((byte)12); w.Put(list.Count);
+                foreach (var v in list) { w.Put(v.x); w.Put(v.y); w.Put(v.z); }
+                peer.Send(w, DeliveryMethod.ReliableOrdered);
+                Plugin.L.LogInfo($"[WINDOW] отправил снимок разбитых окон: {list.Count}");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[WINDOW] снимок: {e.Message}"); }
+        }
+
+        static readonly System.Collections.Generic.HashSet<string> brokenKeys = new System.Collections.Generic.HashSet<string>();
+
+        static string BreakKey(int hash, Vector3 wp)
+        {
+            return hash + ":" + Mathf.RoundToInt(wp.x * 20f) + ":" + Mathf.RoundToInt(wp.y * 20f) + ":" + Mathf.RoundToInt(wp.z * 20f);
+        }
+
+        // Разбилось стекло/объект мира, который не передаётся как общий предмет: ищем его по названию и позиции
+        internal static void OnWorldBreak(InteractableController ic, int type, Vector3 p, Vector3 n, float m)
+        {
+            try
+            {
+                if (applyingDoor || applyingRemote || ic == null || !Plugin.CfgObjSync.Value) return;
+                if (manager == null || manager.ConnectedPeersCount == 0) return;
+                Interactable it = null;
+                try { it = ic.interactable; } catch (Exception) { }
+                if (it == null) it = FindByController(ic);
+                string bname = it != null ? PresetNameOf(it) : ic.gameObject.name;
+                Vector3 wp = it != null ? it.wPos : ic.transform.position;
+                int hash = NameHash(bname);
+                if (!brokenKeys.Add(BreakKey(hash, wp))) return;
+                var w = new NetDataWriter();
+                w.Put(MsgDoor); w.Put((byte)10); w.Put((byte)type); w.Put(hash);
+                w.Put(wp.x); w.Put(wp.y); w.Put(wp.z);
+                w.Put(p.x); w.Put(p.y); w.Put(p.z); w.Put(n.x); w.Put(n.y); w.Put(n.z); w.Put(m);
+                SendDoor(w);
+                Plugin.L.LogInfo($"[BREAK] я разбил '{bname}' ({(type == 0 ? "Shatter" : "BreakObject")}) в {wp}");
+            }
+            catch (Exception) { }
+        }
+
+        static void ApplyWorldBreak(int type, int hash, Vector3 wp, Vector3 p, Vector3 n, float m)
+        {
+            string key = BreakKey(hash, wp);
+            if (!brokenKeys.Add(key)) return;
+            InteractableController found = null; float best = 0.2f;
+            try
+            {
+                foreach (var ic in UnityEngine.Object.FindObjectsOfType<InteractableController>())
+                {
+                    if (ic == null) continue;
+                    Interactable ci = null;
+                    try { ci = ic.interactable; } catch (Exception) { }
+                    string nm = ci != null ? PresetNameOf(ci) : ic.gameObject.name;
+                    if (NameHash(nm) != hash) continue;
+                    float d = Vector3.Distance(ci != null ? ci.wPos : ic.transform.position, wp);
+                    if (d < best) { best = d; found = ic; }
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[BREAK] поиск: {e.Message}"); }
+            if (found == null) { Plugin.L.LogWarning($"[BREAK] объект в {wp} не найден среди заспавненных (далеко от меня?)"); return; }
+            applyingDoor = true; applyingRemote = true;
+            try
+            {
+                if (type == 0) found.Shatter(p, m);
+                else found.BreakObject(p, n, m, null);
+                Plugin.L.LogInfo($"[BREAK] второй игрок разбил '{found.gameObject.name}' ({best:F3} м), повторяю у себя");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[BREAK] разбить: {e.Message}"); }
+            finally { applyingDoor = false; applyingRemote = false; }
+        }
+
+        internal static void OnItemBroken(InteractableController ic, Vector3 p, Vector3 n, float m)
+        {
+            try
+            {
+                if (applyingRemote || ic == null || !Plugin.CfgObjSync.Value) return;
+                Interactable it = null;
+                try { it = ic.interactable; } catch (Exception) { }
+                if (it == null) it = FindByController(ic);
+                if (it != null && !sharedLocal.Contains(it.id)) { OnWorldBreak(ic, 1, p, n, m); return; }
+                if (it == null || !sharedLocal.Contains(it.id)) return;
+                if (manager == null || manager.ConnectedPeersCount == 0) return;
+                sharedLocal.Remove(it.id);
+                var w = new NetDataWriter();
+                w.Put(MsgItemEv); w.Put((byte)5); w.Put(GidOf(it)); w.Put(PresetNameOf(it));
+                w.Put(p.x); w.Put(p.y); w.Put(p.z); w.Put(n.x); w.Put(n.y); w.Put(n.z); w.Put(m);
+                manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+                Plugin.Dbg($"[ITEM] предмет id={it.id} (общий id={GidOf(it)}) разбился, сообщаю второму игроку");
+            }
+            catch (Exception) { }
+        }
+
+        internal static void OnItemPickedUp(Interactable it)
+        {
+            if (!Plugin.CfgObjSync.Value) return;
+            Plugin.Dbg($"[ITEM] я подобрал предмет id={it.id} (общий id={GidOf(it)})");
+            SendItemEvent(1, it, false);
+        }
+
+        internal static void OnItemDropped(Interactable it)
+        {
+            if (!Plugin.CfgObjSync.Value) return;
+            Plugin.Dbg($"[ITEM] я выбросил/поставил предмет id={it.id} (общий id={GidOf(it)})");
+            SendItemEvent(2, it, true);
+            pendingDrop = it;
+            pendingDropUntil = Time.realtimeSinceStartup + 3f;
+        }
+
+        static System.Collections.Generic.Dictionary<int, GameObject> hiddenItems = new System.Collections.Generic.Dictionary<int, GameObject>();
+        static float hiddenTickAt;
+
+        // игра может заново заспавнить предмет (смена комнаты) и он снова станет видимым — прячем повторно,
+        // пока другой игрок держит его в руках
+        static void HiddenTick()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (now < hiddenTickAt || hiddenItems.Count == 0) return;
+            hiddenTickAt = now + 0.5f;
+            try
+            {
+                var keys = new System.Collections.Generic.List<int>(hiddenItems.Keys);
+                foreach (var k in keys)
+                {
+                    var it = ResolveId(k);
+                    if (it == null) continue;
+                    GameObject go = null;
+                    try { go = it.spawnedObject; } catch (Exception) { }
+                    if (go == null) { try { if (it.controller != null) go = it.controller.gameObject; } catch (Exception) { } }
+                    if (go != null) { if (go.activeSelf) go.SetActive(false); hiddenItems[k] = go; }
+                }
+            }
+            catch (Exception) { }
+        }
+
+        static void OnItemEvent(byte kind, int id, string preset, Vector3 pos, Vector3 euler, ItemState st)
+        {
+            try
+            {
+                if (kind == 1)
+                {
+                    var it = ResolveChecked(id, preset, 0);
+                    if (it == null) return;
+                    sharedLocal.Add(it.id);
+                    GameObject go = null;
+                    try { go = it.spawnedObject; } catch (Exception) { }
+                    if (go == null) { try { if (it.controller != null) go = it.controller.gameObject; } catch (Exception) { } }
+                    if (go != null) { go.SetActive(false); hiddenItems[id] = go; Plugin.Dbg($"[ITEM] второй игрок подобрал предмет id={id}, скрываю"); }
+                }
+                else if (kind == 5)
+                {
+                    var it = ResolveChecked(id, preset, 0);
+                    hiddenItems.Remove(id);
+                    if (it == null) return;
+                    sharedLocal.Remove(it.id);
+                    GameObject bgo = null;
+                    try { bgo = it.spawnedObject; } catch (Exception) { }
+                    if (bgo != null && !bgo.activeSelf) bgo.SetActive(true);
+                    applyingRemote = true;
+                    try
+                    {
+                        bool done = false;
+                        try
+                        {
+                            var ic = it.controller;
+                            if (ic != null) { ic.BreakObject(pos, euler, st != null ? st.val : 3f, null); done = true; }
+                        }
+                        catch (Exception) { done = false; }
+                        if (!done) it.SafeDelete(false);
+                        Plugin.Dbg($"[ITEM] второй игрок разбил предмет id={id}, разбиваю свою копию (id={it.id}, разбито={done})");
+                    }
+                    finally { applyingRemote = false; }
+                }
+                else if (kind == 4)
+                {
+                    var it = ResolveChecked(id, preset, 0);
+                    hiddenItems.Remove(id); idMap.Remove(id);
+                    if (it == null) return;
+                    sharedLocal.Remove(it.id);
+                    applyingRemote = true;
+                    try { it.SafeDelete(false); Plugin.Dbg($"[ITEM] второй игрок уничтожил/израсходовал предмет id={id}, удаляю свою копию (id={it.id})"); }
+                    finally { applyingRemote = false; }
+                }
+                else if (kind == 2)
+                {
+                    GameObject hg;
+                    if (hiddenItems.TryGetValue(id, out hg)) { hiddenItems.Remove(id); try { if (hg != null) hg.SetActive(true); } catch (Exception) { } }
+                    var it = ResolveChecked(id, preset, 0);
+                    if (it == null)
+                    {
+                        var pr = FindPreset(preset);
+                        if (pr == null) { Plugin.L.LogWarning($"[ITEM] пресет '{preset}' не найден, предмет id={id} не создан"); return; }
+                        it = InteractableCreator.Instance.CreateWorldInteractable(pr, null, null, null, pos, euler, null, null, "");
+                        if (it != null) { idMap[id] = it; gidOf[it.id] = id; sharedLocal.Add(it.id); ApplyState(it, st); Plugin.Dbg($"[ITEM] создан предмет '{preset}' (у отправителя id={id}, у меня id={it.id})"); }
+                        else Plugin.L.LogWarning($"[ITEM] не удалось создать '{preset}'");
+                    }
+                    else
+                    {
+                        try { it.MoveInteractable(pos, euler, false); } catch (Exception) { }
+                        sharedLocal.Add(it.id);
+                        ApplyState(it, st);
+                        try
+                        {
+                            GameObject sgo = it.spawnedObject;
+                            if (sgo == null && it.controller != null) sgo = it.controller.gameObject;
+                            if (sgo != null)
+                            {
+                                if (!sgo.activeSelf) sgo.SetActive(true);
+                                var rt = it.controller != null ? RootOf(it.controller) : sgo.transform;
+                                rt.position = pos; rt.eulerAngles = euler;
+                            }
+                        }
+                        catch (Exception) { }
+                        Plugin.Dbg($"[ITEM] второй игрок выбросил предмет id={id} (у меня id={it.id})");
+                    }
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[ITEM] приём: {e.Message}"); }
+        }
+
+        static Interactable FindById(int id)
+        {
+            Interactable it;
+            if (idCache != null && idCache.TryGetValue(id, out it) && it != null) return it;
+            if (Time.realtimeSinceStartup < idCacheAt && idCache != null) return null;
+            idCacheAt = Time.realtimeSinceStartup + 5f;
+            try
+            {
+                idCache = new System.Collections.Generic.Dictionary<int, Interactable>();
+                var list = CityData.Instance.interactableDirectory;
+                for (int i = 0; i < list.Count; i++)
+                {
+                    var x = list[i];
+                    if (x != null) idCache[x.id] = x;
+                }
+                Plugin.Dbg($"[OBJ] индекс объектов мира: {idCache.Count}");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[OBJ] индекс: {e.Message}"); }
+            return idCache.TryGetValue(id, out it) ? it : null;
+        }
+
+        static Interactable FindByController(InteractableController ic)
+        {
+            try
+            {
+                var list = CityData.Instance.interactableDirectory;
+                for (int i = 0; i < list.Count; i++)
+                {
+                    var x = list[i];
+                    if (x != null && x.controller != null && x.controller.Pointer == ic.Pointer) return x;
+                }
+            }
+            catch (Exception) { }
+            return null;
+        }
+
+        // Корень физического объекта: у Rigidbody свой трансформ, иначе трансформ контроллера
+        static Transform RootOf(Component c)
+        {
+            Rigidbody rb = c.GetComponent<Rigidbody>();
+            if (rb == null) rb = c.GetComponentInParent<Rigidbody>();
+            return rb != null ? rb.transform : c.transform;
+        }
+
+        static void SendObject(byte flags)
+        {
+            try
+            {
+                var tr = RootOf(objTrackIc);
+                var w = new NetDataWriter();
+                w.Put(MsgObj);
+                w.Put(objTrackId);
+                w.Put(flags);
+                w.Put(objTrackHash);
+                Vector3 p = tr.position; Quaternion q = tr.rotation;
+                w.Put(p.x); w.Put(p.y); w.Put(p.z);
+                w.Put(q.x); w.Put(q.y); w.Put(q.z); w.Put(q.w);
+                manager.SendToAll(w, (flags & 2) != 0 ? DeliveryMethod.ReliableOrdered : DeliveryMethod.Sequenced);
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[OBJ] отправка: {e.Message}"); }
+        }
+
+        static void FinishObject()
+        {
+            if (objTrackIc != null && objTrackId >= 0) SendObject(2);
+            if (objTrackIc != null) Plugin.Dbg($"[OBJ] объект id={objTrackId} отпущен, финальная поза отправлена");
+            objTrackIc = null; objTrackIt = null; objTrackId = -1; objSettleUntil = 0f; objStillSince = -1f;
+        }
+
+        // Предмет, созданный во время игры (купленный, со склада), у второго игрока ещё не существует: создаём ему копию
+        static void EnsureShared(Interactable it)
+        {
+            try
+            {
+                if (it == null || it.id < RuntimeIdStart || sharedLocal.Contains(it.id)) return;
+                if (manager == null || manager.ConnectedPeersCount == 0 || !Plugin.CfgObjSync.Value) return;
+                SendItemEvent(2, it, true);
+                Plugin.Dbg($"[ITEM] новый предмет '{PresetNameOf(it)}' id={it.id} (общий {GidOf(it)}): отправил второму игроку для создания");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[ITEM] EnsureShared: {e.Message}"); }
+        }
+
+        static void LocalObjects(float dt)
+        {
+            objSendTimer += dt;
+            if (objSendTimer < 0.066f) return;
+            objSendTimer = 0f;
+            float now = Time.realtimeSinceStartup;
+            InteractableController cur = null;
+            try { cur = InteractionController.Instance.carryingObject; } catch (Exception) { }
+            if (cur == null && objTrackIc == null && pendingDrop != null)
+            {
+                try
+                {
+                    if (pendingDrop.controller != null)
+                    {
+                        objTrackIc = pendingDrop.controller; objTrackIt = pendingDrop; objTrackId = GidOf(pendingDrop); objTrackHash = NameHash(PresetNameOf(pendingDrop));
+                        objSettleUntil = now + 8f; objStillSince = -1f; pendingDrop = null;
+                    }
+                    else if (now > pendingDropUntil) pendingDrop = null;
+                }
+                catch (Exception) { pendingDrop = null; }
+            }
+            if (cur != null)
+            {
+                if (objTrackIc == null || objTrackIc.Pointer != cur.Pointer)
+                {
+                    FinishObject();
+                    objTrackIc = cur;
+                    try { objTrackIt = cur.interactable; } catch (Exception) { objTrackIt = null; }
+                    if (objTrackIt == null) objTrackIt = FindByController(cur);
+                    objTrackId = objTrackIt != null ? GidOf(objTrackIt) : -1;
+                    objTrackHash = NameHash(PresetNameOf(objTrackIt));
+                    string pn = "";
+                    try { pn = objTrackIt != null && objTrackIt.preset != null ? objTrackIt.preset.name : ""; } catch (Exception) { }
+                    Plugin.Dbg($"[OBJ] несу объект id={objTrackId} пресет='{pn}'");
+                    EnsureShared(objTrackIt);
+                }
+                objSettleUntil = 0f; objStillSince = -1f;
+                if (objTrackId == 0 && objTrackIt != null) { objTrackId = GidOf(objTrackIt); if (objTrackId > 0) EnsureShared(objTrackIt); }
+                if (objTrackId > 0) SendObject(1);
+            }
+            else if (objTrackIc != null)
+            {
+                if (objSettleUntil == 0f) { objSettleUntil = now + 8f; objStillSince = -1f; }
+                if (objTrackId > 0) SendObject(0);
+                bool still;
+                try
+                {
+                    var rb = objTrackIc.GetComponent<Rigidbody>();
+                    if (rb == null) rb = objTrackIc.GetComponentInParent<Rigidbody>();
+                    still = rb == null || rb.IsSleeping() || rb.velocity.sqrMagnitude < 0.01f;
+                }
+                catch (Exception) { still = true; }
+                if (still) { if (objStillSince < 0f) objStillSince = now; } else objStillSince = -1f;
+                if ((objStillSince >= 0f && now - objStillSince > 0.6f) || now > objSettleUntil) FinishObject();
+            }
+        }
+
+        class RObj { public Interactable it; public Transform tr; public Rigidbody rb; public Vector3 pos; public Quaternion rot; public float last; }
+        static System.Collections.Generic.Dictionary<int, RObj> robjs = new System.Collections.Generic.Dictionary<int, RObj>();
+        static System.Collections.Generic.HashSet<int> robjMissLogged = new System.Collections.Generic.HashSet<int>();
+
+        static void ReleaseRemote(RObj o, bool exact)
+        {
+            try
+            {
+                if (o.tr != null && exact) { o.tr.position = o.pos; o.tr.rotation = o.rot; }
+                if (o.rb != null) { o.rb.isKinematic = false; o.rb.velocity = Vector3.zero; o.rb.angularVelocity = Vector3.zero; }
+            }
+            catch (Exception) { }
+        }
+
+        static void OnRemoteObject(int id, byte flags, int phash, Vector3 pos, Quaternion rot)
+        {
+            try
+            {
+                RObj o;
+                if (!robjs.TryGetValue(id, out o))
+                {
+                    var it = ResolveChecked(id, null, phash);
+                    if (it == null)
+                    {
+                        if (robjMissLogged.Add(id)) Plugin.L.LogWarning($"[OBJ] объект id={id} не найден у меня");
+                        return;
+                    }
+                    Transform ctr = null;
+                    try { if (it.controller != null) ctr = RootOf(it.controller); } catch (Exception) { }
+                    if (ctr == null) { try { if (it.spawnedObject != null) ctr = it.spawnedObject.transform; } catch (Exception) { } }
+                    if (ctr == null)
+                    {
+                        // Объект сейчас не заспавнен (далеко от меня): запоминаем позицию в данных, мир применит её при спавне
+                        if ((flags & 2) != 0) { try { it.MoveInteractable(pos, rot.eulerAngles, false); } catch (Exception) { } }
+                        return;
+                    }
+                    o = new RObj { it = it, tr = ctr, rb = ctr.GetComponent<Rigidbody>() };
+                    robjs[id] = o;
+                    string pn = "";
+                    try { pn = it.preset != null ? it.preset.name : ""; } catch (Exception) { }
+                    Plugin.Dbg($"[OBJ] второй игрок взял объект id={id} пресет='{pn}'");
+                }
+                o.pos = pos; o.rot = rot; o.last = Time.realtimeSinceStartup;
+                if ((flags & 2) != 0)
+                {
+                    ReleaseRemote(o, true);
+                    try { o.it.MoveInteractable(pos, rot.eulerAngles, false); } catch (Exception) { }
+                    robjs.Remove(id);
+                    Plugin.Dbg($"[OBJ] объект id={id} положен/брошен вторым игроком");
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[OBJ] приём: {e.Message}"); }
+        }
+
+        static void RemoteObjectsTick(float dt)
+        {
+            if (robjs.Count == 0) return;
+            float now = Time.realtimeSinceStartup;
+            System.Collections.Generic.List<int> done = null;
+            float k = 1f - Mathf.Exp(-18f * dt);
+            foreach (var kv in robjs)
+            {
+                var o = kv.Value;
+                try
+                {
+                    if (o.tr == null || now - o.last > 2.5f)
+                    {
+                        ReleaseRemote(o, false);
+                        if (done == null) done = new System.Collections.Generic.List<int>();
+                        done.Add(kv.Key);
+                        continue;
+                    }
+                    if (o.rb != null && !o.rb.isKinematic) o.rb.isKinematic = true;
+                    o.tr.position = Vector3.Lerp(o.tr.position, o.pos, k);
+                    o.tr.rotation = Quaternion.Slerp(o.tr.rotation, o.rot, k);
+                }
+                catch (Exception) { if (done == null) done = new System.Collections.Generic.List<int>(); done.Add(kv.Key); }
+            }
+            if (done != null) foreach (var id in done) robjs.Remove(id);
+        }
+
+        // ---------- Предметы в руках ----------
+        class HeldPart { public string mesh; public string[] mats; public byte side; public float u = 1f; public float[] chain = new float[0]; }
+        static System.Collections.Generic.List<HeldPart> remoteHeld = new System.Collections.Generic.List<HeldPart>();
+        static bool remoteHeldDirty;
+        static string remoteHeldSig = "";
+        static string heldFor = "";
+        static GameObject heldL, heldR;
+        static float heldScanAt, heldResendAt;
+        static string heldSentSig = "";
+        static float meshMissAt;
+        static float heldU = 1f;
+        static string handNameR = "", handNameL = "";
+        static System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<Mesh>> meshCache = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<Mesh>>();
+        static System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<Material>> matCache = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<Material>>();
+
+        static string CleanName(string n)
+        {
+            if (n == null) return "";
+            n = n.Replace(" (Instance)", "").Replace("(Clone)", "").Trim();
+            return n;
+        }
+
+        static void ScanHeld(System.Collections.Generic.List<HeldPart> res)
+        {
+            try
+            {
+                var fp = FirstPersonItemController.Instance;
+                if (fp == null || fp.forceHolstered) return;
+                string nm = curItem ?? "";
+                if (nm == "" || nm == "nothing" || nm.IndexOf("fist", StringComparison.OrdinalIgnoreCase) >= 0) return;
+                for (byte side = 0; side < 2; side++)
+                {
+                    Transform par = side == 0 ? fp.rightHandObjectParent : fp.leftHandObjectParent;
+                    if (par == null) continue;
+                    Vector3 pls = par.lossyScale;
+                    foreach (var mf in par.GetComponentsInChildren<MeshFilter>(false))
+                    {
+                        if (mf == null || mf.sharedMesh == null || string.IsNullOrEmpty(mf.sharedMesh.name)) continue;
+                        var mr = mf.GetComponent<MeshRenderer>();
+                        if (mr == null || !mr.enabled) continue;
+                        var tr = mf.transform;
+                        var sm = mr.sharedMaterials;
+                        var names = new string[sm.Length];
+                        for (int i = 0; i < sm.Length; i++) names[i] = sm[i] != null ? CleanName(sm[i].name) + "\t" + TexName(sm[i]) : "\t";
+                        // Цепочка трансформов от руки (par) до меша: локальные позиция/поворот/масштаб каждого узла,
+                        // так форма предмета восстанавливается точно (даже при неравномерных масштабах родителей)
+                        var nodes = new System.Collections.Generic.List<Transform>();
+                        Transform t = tr;
+                        while (t != null && t != par && nodes.Count < 10) { nodes.Add(t); t = t.parent; }
+                        if (t != par) continue;
+                        nodes.Reverse();
+                        var chain = new float[nodes.Count * 10];
+                        for (int i = 0; i < nodes.Count; i++)
+                        {
+                            var n = nodes[i];
+                            var lp = n.localPosition; var lr = n.localRotation; var lsc = n.localScale;
+                            int o = i * 10;
+                            chain[o] = lp.x; chain[o + 1] = lp.y; chain[o + 2] = lp.z;
+                            chain[o + 3] = lr.x; chain[o + 4] = lr.y; chain[o + 5] = lr.z; chain[o + 6] = lr.w;
+                            chain[o + 7] = lsc.x; chain[o + 8] = lsc.y; chain[o + 9] = lsc.z;
+                        }
+                        var part = new HeldPart();
+                        part.mesh = mf.sharedMesh.name + "\t" + mf.sharedMesh.vertexCount;
+                        part.mats = names;
+                        part.side = side;
+                        // Масштаб самой руки (в игре он крошечный, а узлы предмета внутри огромные) вносим в первый узел:
+                        // так итоговый размер в метрах точный и не зависит от порогов
+                        float u = Mathf.Pow(Mathf.Abs(pls.x * pls.y * pls.z), 1f / 3f);
+                        if (u > 0f && !float.IsNaN(u) && !float.IsInfinity(u) && chain.Length >= 10)
+                        {
+                            chain[0] *= u; chain[1] *= u; chain[2] *= u;
+                            chain[7] *= u; chain[8] *= u; chain[9] *= u;
+                        }
+                        part.u = 1f;
+                        part.chain = chain;
+                        res.Add(part);
+                        if (res.Count >= 12) return;
+                    }
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[HELD] скан: {e.Message}"); }
+        }
+
+        static string HeldSig(System.Collections.Generic.List<HeldPart> parts)
+        {
+            var sb = new StringBuilder();
+            foreach (var p in parts)
+            {
+                sb.Append(p.mesh).Append('|').Append(p.side).Append('|').Append(string.Join(",", p.mats)).Append(';');
+            }
+            return sb.ToString();
+        }
+
+        // Раз в 0.5 с смотрим, что у нас в руках (объекты появляются после смены предмета) и шлём при изменении
+        static void SendHeldIfChanged()
+        {
+            if (Time.realtimeSinceStartup < heldScanAt) return;
+            try { var fpc0 = FirstPersonItemController.Instance; if (fpc0 != null && fpc0.isConsuming) return; } catch (Exception) { }
+            heldScanAt = Time.realtimeSinceStartup + 0.5f;
+            var parts = new System.Collections.Generic.List<HeldPart>();
+            ScanHeld(parts);
+            string sig = HeldSig(parts);
+            if (sig == heldSentSig && Time.realtimeSinceStartup < heldResendAt) return;
+            if (sig != heldSentSig)
+                Plugin.Dbg($"[HELD] у меня в руках: {curItem}, частей={parts.Count} {(parts.Count > 0 ? "первая: меш=" + parts[0].mesh + " материал=" + string.Join("/", parts[0].mats) + " масштаб узла0=" + (parts[0].chain.Length >= 10 ? parts[0].chain[7].ToString("G4") : "-") + " узлов=" + (parts[0].chain.Length / 10) : "")}");
+            heldSentSig = sig;
+            heldResendAt = Time.realtimeSinceStartup + 5f;
+            var w = new NetDataWriter();
+            w.Put(MsgHeld);
+            w.Put(parts.Count);
+            foreach (var p in parts)
+            {
+                w.Put(p.mesh ?? "");
+                w.Put(p.side);
+                w.Put(p.mats.Length);
+                foreach (var m in p.mats) w.Put(m ?? "");
+                w.Put(p.u);
+                w.Put(p.chain.Length / 10);
+                foreach (var f in p.chain) w.Put(f);
+            }
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+        }
+
+        // Имя основной текстуры материала: различает материалы с одинаковым именем
+        static string TexName(Material m)
+        {
+            try
+            {
+                Texture t = null;
+                if (m.HasProperty("_BaseColorMap")) t = m.GetTexture("_BaseColorMap");
+                if (t == null && m.HasProperty("_MainTex")) t = m.GetTexture("_MainTex");
+                if (t == null && m.HasProperty("_UnlitColorMap")) t = m.GetTexture("_UnlitColorMap");
+                return t != null ? t.name : "";
+            }
+            catch (Exception) { return ""; }
+        }
+
+        static Mesh PickMesh(string name, int verts)
+        {
+            System.Collections.Generic.List<Mesh> l;
+            if (!meshCache.TryGetValue(name, out l) || l.Count == 0) return null;
+            foreach (var m in l) if (m != null && m.vertexCount == verts) return m;
+            Plugin.L.LogWarning($"[HELD] меш '{name}': вариантов={l.Count}, с {verts} вершинами нет, беру первый");
+            return l[0];
+        }
+
+        static Material PickMat(string name, string tex)
+        {
+            System.Collections.Generic.List<Material> l;
+            if (!matCache.TryGetValue(name, out l) || l.Count == 0) return null;
+            foreach (var m in l) if (m != null && TexName(m) == tex) return m;
+            Plugin.L.LogWarning($"[HELD] материал '{name}': вариантов={l.Count}, с текстурой '{tex}' нет, беру первый");
+            return l[0];
+        }
+
+        static void RebuildCaches()
+        {
+            try
+            {
+                meshCache.Clear(); matCache.Clear();
+                foreach (var m in Resources.FindObjectsOfTypeAll<Mesh>())
+                {
+                    if (m == null || string.IsNullOrEmpty(m.name)) continue;
+                    System.Collections.Generic.List<Mesh> l;
+                    if (!meshCache.TryGetValue(m.name, out l)) { l = new System.Collections.Generic.List<Mesh>(); meshCache[m.name] = l; }
+                    l.Add(m);
+                }
+                foreach (var m in Resources.FindObjectsOfTypeAll<Material>())
+                {
+                    if (m == null || string.IsNullOrEmpty(m.name)) continue;
+                    string cn = CleanName(m.name);
+                    System.Collections.Generic.List<Material> l;
+                    if (!matCache.TryGetValue(cn, out l)) { l = new System.Collections.Generic.List<Material>(); matCache[cn] = l; }
+                    l.Add(m);
+                }
+                Plugin.Dbg($"[HELD] кэш: мешей={meshCache.Count} материалов={matCache.Count}");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[HELD] кэш: {e.Message}"); }
+        }
+
+        static void ClearHeld()
+        {
+            if (heldL != null) UnityEngine.Object.Destroy(heldL);
+            if (heldR != null) UnityEngine.Object.Destroy(heldR);
+            heldL = heldR = null;
+        }
+
+        static GameObject Container(Transform bone)
+        {
+            var go = new GameObject("HeldItem");
+            go.layer = bone.gameObject.layer;
+            go.transform.SetParent(bone, false);
+            return go;
+        }
+
+        static void BuildHeld()
+        {
+            ClearHeld();
+            if (remoteHeld.Count == 0 || avatarModel == null) return;
+            if (meshCache.Count == 0) RebuildCaches();
+            var bl = (handNameL != "" ? FindDeep(avatarModel, handNameL) : null) ?? FindDeep(avatarModel, "LowerArmLeft");
+            var br = (handNameR != "" ? FindDeep(avatarModel, handNameR) : null) ?? FindDeep(avatarModel, "LowerArmRight");
+            string hand = (Plugin.CfgHeldHand.Value ?? "Auto").Trim().ToLowerInvariant();
+            int made = 0;
+            foreach (var p in remoteHeld)
+            {
+                string mname = p.mesh; int verts = -1;
+                int tab = p.mesh.IndexOf('\t');
+                if (tab >= 0) { mname = p.mesh.Substring(0, tab); int.TryParse(p.mesh.Substring(tab + 1), out verts); }
+                Mesh mesh = PickMesh(mname, verts);
+                if (mesh == null && Time.realtimeSinceStartup > meshMissAt)
+                {
+                    meshMissAt = Time.realtimeSinceStartup + 5f;
+                    RebuildCaches();
+                    mesh = PickMesh(mname, verts);
+                }
+                if (mesh == null) { Plugin.L.LogWarning($"[HELD] меш '{mname}' не найден"); continue; }
+                bool left = hand == "left" || (hand == "auto" && p.side == 1);
+                Transform bone = left ? bl : br;
+                if (bone == null) continue;
+                GameObject cont = left ? heldL : heldR;
+                if (cont == null) { cont = Container(bone); if (left) heldL = cont; else heldR = cont; }
+                heldU = 1f;
+                Transform parent = cont.transform;
+                GameObject go = null;
+                for (int ci = 0; ci + 9 < p.chain.Length; ci += 10)
+                {
+                    go = new GameObject("n");
+                    go.layer = cont.layer;
+                    go.transform.SetParent(parent, false);
+                    go.transform.localPosition = new Vector3(p.chain[ci], p.chain[ci + 1], p.chain[ci + 2]);
+                    go.transform.localRotation = new Quaternion(p.chain[ci + 3], p.chain[ci + 4], p.chain[ci + 5], p.chain[ci + 6]);
+                    go.transform.localScale = new Vector3(p.chain[ci + 7], p.chain[ci + 8], p.chain[ci + 9]);
+                    parent = go.transform;
+                }
+                if (go == null) continue;
+                go.AddComponent<MeshFilter>().sharedMesh = mesh;
+                var mr = go.AddComponent<MeshRenderer>();
+                var mats = new Material[p.mats.Length];
+                for (int i = 0; i < mats.Length; i++)
+                {
+                    string mn = p.mats[i] ?? ""; string tn = "";
+                    int mt = mn.IndexOf('\t');
+                    if (mt >= 0) { tn = mn.Substring(mt + 1); mn = mn.Substring(0, mt); }
+                    Material m = PickMat(CleanName(mn), tn);
+                    if (m == null) Plugin.L.LogWarning($"[HELD] материал '{mn}' не найден");
+                    mats[i] = m;
+                }
+                mr.sharedMaterials = new Il2CppReferenceArray<Material>(mats);
+                made++;
+            }
+            Plugin.Dbg($"[HELD] у второго игрока собрано частей: {made} из {remoteHeld.Count}");
+        }
+
+        static void UpdateHeld()
+        {
+            if (avatarModel == null) return;
+            if (remoteHeldDirty || (heldL == null && heldR == null && remoteHeld.Count > 0 && Plugin.CfgHeldShow.Value && Time.realtimeSinceStartup > meshMissAt))
+            {
+                remoteHeldDirty = false;
+                meshMissAt = Math.Max(meshMissAt, Time.realtimeSinceStartup + 2f);
+                if (Plugin.CfgHeldShow.Value) BuildHeld(); else ClearHeld();
+            }
+            if (heldL == null && heldR == null) return;
+            Vector3 pos = ParseV3(Plugin.CfgHeldPos.Value, Vector3.zero);
+            Quaternion rot = Quaternion.Euler(ParseV3(Plugin.CfgHeldRot.Value, Vector3.zero));
+            float sc = Plugin.CfgHeldScale.Value;
+            ApplyHeld(heldL, pos, rot, sc);
+            ApplyHeld(heldR, pos, rot, sc);
+        }
+
+        // Контейнер компенсирует масштаб кости: части предмета заданы в реальных метрах
+        static void ApplyHeld(GameObject go, Vector3 pos, Quaternion rot, float sc)
+        {
+            if (go == null) return;
+            var t = go.transform;
+            Vector3 bs = t.parent != null ? t.parent.lossyScale : Vector3.one;
+            Vector3 inv = new Vector3(bs.x != 0f ? 1f / bs.x : 1f, bs.y != 0f ? 1f / bs.y : 1f, bs.z != 0f ? 1f / bs.z : 1f);
+            t.localPosition = Vector3.Scale(pos, inv);
+            t.localRotation = rot;
+            t.localScale = inv * (sc * heldU);
+        }
+
+        static Vector3 ParseV3(string str, Vector3 def)
+        {
+            try
+            {
+                var p = (str ?? "").Split(',');
+                if (p.Length != 3) return def;
+                var ci = System.Globalization.CultureInfo.InvariantCulture;
+                return new Vector3(float.Parse(p[0].Trim(), ci), float.Parse(p[1].Trim(), ci), float.Parse(p[2].Trim(), ci));
+            }
+            catch (Exception) { return def; }
+        }
+
+        // ---------- Позы по имени состояния аниматора ----------
+        static readonly string[] KnownStates = {
+            "Idle","Walking","Running","DrunkWalk","DrunkIdle","CombatIdle","CombatWalking","CombatRunning","CrouchingStackingObjects","OutOfBreath","Leaning","SatAgainstWall","SitDownHunched",
+            "PunchBlock","PunchBlockPerfect","Arms_Punch","Arms_LeftPunch","CombatKick","RecoilUpper","RecoilLower","RecoilLeft","RecoilRight","AimingStance","Arms_HoldingSword","Arms_SwingingSword",
+            "Arms_HoldingRifle","Arms_ShootingRifle","Arms_PumpAction","Arms_HoldingPistol","Arms_ShootingPistol","Arms_FirePistol","Arms_ThrowingObject","Arms_Fleeing","Arms_Restrained","Arms_Choking",
+            "Dead","GetUpFromRagdoll","TripForwards","HandcuffRagdoll","GetUpFromRestrainedRagdoll","Cowering","PickUpFromFloor","SitDown","StandtoSitAgainstWall","KneelDown","Kneeling","StandUpFromKneel",
+            "GetIntoBedLeft","GetIntoBedRight","GetIntoBedRollLeft","GetIntoBedRollRight","Sweeping","CleaningBar","CookingChopping","CookingFrying","WashingHands","WashinginShower","BrushingTeeth",
+            "Arms_HangUpCoat","Arms_CarryHeavy","Arms_Carry1","StackingObjects","BargeDoor","Arms_LockDoor","Arms_GenericUse","Arms_GenericUseOneShot","Arms_Umbrella","WarmingHands","PullPlayerFromCover",
+            "CheckPulse","CheckPulseTransition","Arms_Consume1","Arms_Eating","Arms_EatingCutlery","Arms_BigBite","Arms_Smoking","Arms_SmokingPipe","RubbingEyes","Crying","TelephoneCall","PlayingViolin",
+            "PlayingPiano","Arms_Reading","Arms_Typing","Arms_Resting","Arms_Idle","TheTwist","DanceWatusi" };
+        static string poseCur = "";
+        static int poseLayer = -1, posePrevHash, posePrevLayer;
+        static bool poseAnimCrouch, poseAnimLean, poseAnimSit, statesLogged;
+        static float poseKick;
+        static System.Collections.Generic.Dictionary<string, int> stateLayerCache = new System.Collections.Generic.Dictionary<string, int>();
+
+        static int StateLayer(string name)
+        {
+            int cached;
+            if (stateLayerCache.TryGetValue(name, out cached)) return cached;
+            int res = -1;
+            try
+            {
+                int h = Animator.StringToHash(name);
+                int forced = Plugin.CfgStateLayer.Value;
+                if (forced >= 0) res = avatarAnim.HasState(forced, h) ? forced : -1;
+                else for (int l = 0; l < avatarAnim.layerCount; l++) if (avatarAnim.HasState(l, h)) { res = l; break; }
+            }
+            catch (Exception) { }
+            stateLayerCache[name] = res;
+            if (res < 0) Plugin.L.LogWarning($"[ANIM] состояние '{name}' не найдено в аниматоре (имя состояния может отличаться от имени клипа)");
+            else Plugin.Dbg($"[ANIM] состояние '{name}' найдено в слое {res}");
+            return res;
+        }
+
+        static void LogStatesOnce()
+        {
+            if (statesLogged || avatarAnim == null) return;
+            statesLogged = true;
+            var ok = new StringBuilder(); var bad = new StringBuilder();
+            foreach (var n in KnownStates)
+            {
+                int h = Animator.StringToHash(n); int found = -1;
+                for (int l = 0; l < avatarAnim.layerCount; l++) if (avatarAnim.HasState(l, h)) { found = l; break; }
+                if (found >= 0) ok.Append(n).Append('(').Append(found).Append(") "); else bad.Append(n).Append(' ');
+            }
+            Plugin.Dbg($"[ANIM] состояния, которые можно играть (в скобках слой): {ok}");
+            Plugin.Dbg($"[ANIM] имена без такого состояния: {bad}");
+        }
+
+        static string PickConsumeState(string item)
+        {
+            try
+            {
+                foreach (var pair in (Plugin.CfgConsumeStates.Value ?? "").Split(','))
+                {
+                    int c = pair.IndexOf(':');
+                    if (c <= 0) continue;
+                    string key = pair.Substring(0, c).Trim();
+                    if (key.Length > 0 && (item ?? "").IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0) return pair.Substring(c + 1).Trim();
+                }
+            }
+            catch (Exception) { }
+            return Plugin.CfgConsumeDefault.Value ?? "";
+        }
+
+        // ---------- Анимация удара / падения / смерти аватара ----------
+        static bool fxDead; static float fxDeadUntil, fxHitAt; static int fxLog;
+
+        internal static void SendBodyFx(byte kind, Vector3 dir)
+        {
+            try
+            {
+                if (manager == null || manager.ConnectedPeersCount == 0 || applyingRemote && kind != 1) return;
+                float hx = 0f, hy = 0f;
+                var me = Player.Instance;
+                if (kind == 1 && me != null)
+                {
+                    var t = me.transform;
+                    Vector3 d = dir; d.y = 0f;
+                    if (d.sqrMagnitude > 0.0001f) { d.Normalize(); hx = Vector3.Dot(d, t.right); hy = Vector3.Dot(d, t.forward); }
+                }
+                var w = new NetDataWriter(); w.Put(MsgBodyFx); w.Put(kind); w.Put(hx); w.Put(hy);
+                manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+                if (fxLog++ < 12) Plugin.Dbg($"[FX] отправил: {(kind == 1 ? "меня ударили" : kind == 2 ? "я упал" : kind == 3 ? "я встал" : "я умер")}");
+            }
+            catch (Exception) { }
+        }
+
+        static void OnBodyFx(NetDataReader r)
+        {
+            byte kind = r.GetByte(); float hx = r.GetFloat(), hy = r.GetFloat();
+            var an = avatarAnim; if (an == null) return;
+            float now = Time.realtimeSinceStartup;
+            try
+            {
+                if (kind == 1)
+                {
+                    if (fxDead || now - fxHitAt < 0.15f) return;
+                    fxHitAt = now;
+                    an.SetFloat("hitX", hx); an.SetFloat("hitY", hy);
+                    an.SetTrigger("hit");
+                }
+                else if (kind == 2 || kind == 4)
+                {
+                    fxDead = true; fxDeadUntil = now + (kind == 4 ? 3600f : 180f);
+                    an.ResetTrigger("hit");
+                    an.SetBool("isDead", true);
+                }
+                else if (kind == 3)
+                {
+                    fxDead = false;
+                    an.SetBool("isDead", false);
+                    an.SetTrigger("ragdollTransitionFrom");
+                }
+                if (fxLog++ < 24) Plugin.Dbg($"[FX] получил: {(kind == 1 ? $"второго игрока ударили (x={hx:F2}, y={hy:F2})" : kind == 2 ? "второй игрок упал" : kind == 3 ? "второй игрок встаёт" : "второй игрок умер")}");
+            }
+            catch (Exception e) { if (fxLog++ < 24) Plugin.L.LogWarning("[FX] " + e.Message); }
+        }
+
+        static void UpdatePose(float dt)
+        {
+            if (fxDead && Time.realtimeSinceStartup > fxDeadUntil)
+            {
+                fxDead = false;
+                try { if (avatarAnim != null) avatarAnim.SetBool("isDead", false); } catch (Exception) { }
+            }
+            if (fxDead) return;
+            LogStatesOnce();
+            string want = "";
+            bool crouchAnim = false, leanAnim = false, sitAnim = false;
+            string dbg = Plugin.CfgPlayState.Value ?? "";
+            if (dbg != "") want = dbg;
+            else if (remoteSitting && !string.IsNullOrEmpty(Plugin.CfgSitState.Value))
+            {
+                want = Plugin.CfgSitState.Value; sitAnim = true;
+            }
+            else if (remoteConsuming && PickConsumeState(remoteItem) != "")
+            {
+                want = PickConsumeState(remoteItem);
+            }
+            else if (remoteCrouched)
+            {
+                string c = Plugin.CfgCrouchIdleState.Value ?? "";
+                string cw = Plugin.CfgCrouchWalkState.Value ?? "";
+                if (animSpeed > 0.3f && cw != "") c = cw;
+                if (c != "") { want = c; crouchAnim = true; }
+            }
+            else
+            {
+                float thr = Plugin.CfgLeanThreshold.Value;
+                string ls = remoteLean < -thr ? Plugin.CfgLeanLeftState.Value : (remoteLean > thr ? Plugin.CfgLeanRightState.Value : "");
+                if (!string.IsNullOrEmpty(ls)) { want = ls; leanAnim = true; }
+            }
+            int layer = -1;
+            if (want != "")
+            {
+                layer = StateLayer(want);
+                if (layer < 0) { want = ""; crouchAnim = leanAnim = sitAnim = false; }
+            }
+            float fade = Plugin.CfgStateFade.Value;
+            if (want != poseCur)
+            {
+                if (poseCur == "" && want != "")
+                {
+                    posePrevLayer = layer;
+                    posePrevHash = avatarAnim.GetCurrentAnimatorStateInfo(layer).fullPathHash;
+                }
+                if (want != "") { avatarAnim.CrossFade(Animator.StringToHash(want), fade, layer); poseKick = Time.realtimeSinceStartup + 0.3f; }
+                else avatarAnim.CrossFade(posePrevHash, fade, posePrevLayer);
+                poseCur = want;
+            }
+            else if (want != "" && Time.realtimeSinceStartup > poseKick)
+            {
+                // Если контроллер сам увёл аниматор из нашего состояния, возвращаем
+                try
+                {
+                    if (avatarAnim.GetCurrentAnimatorStateInfo(layer).shortNameHash != Animator.StringToHash(want) && !avatarAnim.IsInTransition(layer))
+                    {
+                        avatarAnim.CrossFade(Animator.StringToHash(want), fade, layer);
+                        poseKick = Time.realtimeSinceStartup + 0.3f;
+                    }
+                }
+                catch (Exception) { }
+            }
+            poseLayer = want != "" ? layer : -1;
+            if (poseLayer > 0) avatarAnim.SetLayerWeight(poseLayer, 1f);
+            poseAnimCrouch = crouchAnim || paramCrouch;
+            poseAnimLean = leanAnim;
+            poseAnimSit = sitAnim || paramSit;
+        }
+
+        static void DestroyAvatar()
+        {
+            MapUntrack();
+            if (avatar != null)
+            {
+                UnityEngine.Object.Destroy(avatar);
+                avatar = null;
+                avatarAnim = null;
+                ClearHeld(); remoteHeldDirty = remoteHeld.Count > 0; poseCur = ""; poseAnimCrouch = poseAnimLean = poseAnimSit = false; remoteConsuming = remoteSitting = false; sitK = 0f;
+                avatarModel = null; fxDead = false;
+                boneUL = boneUR = boneLL = boneLR = boneTorso = null;
+                remoteLean = leanSmooth = 0f;
+                remoteBlocking = false;
+                remoteCrouched = remoteRunning = remoteFists = false;
+                armsW = 0f;
+                crouchK = 0f; crouchBoneK = crouchAnimK = 0f;
+                Plugin.L.LogInfo("[NET] Аватар второго игрока удалён");
+            }
+        }
+
+        static void OnReceive(NetPeer peer, NetPacketReader reader)
+        {
+            byte type = reader.GetByte();
+
+            if (type == MsgHello && IsHost)
+            {
+                string theirs = reader.GetString();
+                string mine = Describe();
+                bool ok = theirs == mine;
+                Plugin.L.LogInfo($"[NET] Handshake от клиента: ok={ok}");
+                Plugin.L.LogInfo($"[NET]   клиент: {theirs}");
+                Plugin.L.LogInfo($"[NET]   хост:   {mine}");
+
+                var w = new NetDataWriter();
+                w.Put(MsgHelloReply);
+                w.Put(ok);
+                w.Put(mine);
+                peer.Send(w, DeliveryMethod.ReliableOrdered);
+                if (ok) { SendDoorSnapshot(peer); SendRoomSnapshot(peer); SendWindowSnapshot(peer); SendTime(); SendSoldSnapshot(peer); SendFurnSnapshot(peer); }
+            }
+            else if (type == MsgHelloReply && !IsHost)
+            {
+                bool ok = reader.GetBool();
+                string hostInfo = reader.GetString();
+                Plugin.L.LogInfo($"[NET] Ответ хоста: ok={ok}");
+                Plugin.L.LogInfo($"[NET]   хост:   {hostInfo}");
+                Plugin.L.LogInfo($"[NET]   клиент: {Describe()}");
+                if (ok) SendFurnSnapshot(null);
+            }
+            else if (type == MsgAction)
+            {
+                byte kind = reader.GetByte();
+                if (avatarAnim != null)
+                {
+                    if (kind == 1 || kind == 2) combatUntil = Time.realtimeSinceStartup + 4f;
+                    if (kind == 3 || kind == 4)
+                    {
+                        string trg = Plugin.CfgThrowState.Value ?? "";
+                        if (trg != "") avatarAnim.SetTrigger(trg);
+                    }
+                    else if (kind == 1)
+                    {
+                        attackAlt = !attackAlt;
+                        avatarAnim.SetTrigger(attackAlt ? "attack" : "attack2");
+                    }
+                    else if (kind == 2) avatarAnim.SetTrigger("block"); // в игре блок = разовое уклонение
+                }
+            }
+            else if (type == MsgItemEv)
+            {
+                byte ik = reader.GetByte();
+                int iid = reader.GetInt();
+                string ipn = reader.GetString(); Vector3 ip = Vector3.zero, ie = Vector3.zero; ItemState ist = null;
+                if (ik == 2)
+                {
+                    ip = new Vector3(reader.GetFloat(), reader.GetFloat(), reader.GetFloat());
+                    ie = new Vector3(reader.GetFloat(), reader.GetFloat(), reader.GetFloat());
+                    ist = ReadState(reader);
+                }
+                else if (ik == 5)
+                {
+                    ip = new Vector3(reader.GetFloat(), reader.GetFloat(), reader.GetFloat());
+                    ie = new Vector3(reader.GetFloat(), reader.GetFloat(), reader.GetFloat());
+                    ist = new ItemState(); ist.val = reader.GetFloat();
+                }
+                if (Plugin.CfgObjSync.Value) OnItemEvent(ik, iid, ipn, ip, ie, ist);
+            }
+            else if (type == MsgObj)
+            {
+                int oid = reader.GetInt();
+                byte oflags = reader.GetByte();
+                int ohash = reader.GetInt();
+                Vector3 opos = new Vector3(reader.GetFloat(), reader.GetFloat(), reader.GetFloat());
+                Quaternion orot = new Quaternion(reader.GetFloat(), reader.GetFloat(), reader.GetFloat(), reader.GetFloat());
+                if (Plugin.CfgObjSync.Value) OnRemoteObject(oid, oflags, ohash, opos, orot);
+            }
+            else if (type == MsgDoor)
+            {
+                OnDoorMessage(reader);
+            }
+            else if (type == MsgNpcHit)
+            {
+                if (IsHost && Plugin.CfgNpcSync.Value) OnNpcHit(reader);
+            }
+            else if (type == MsgBodyFx)
+            {
+                OnBodyFx(reader);
+            }
+            else if (type == MsgSound)
+            {
+                if (!IsHost && Plugin.CfgNpcSync.Value) OnSoundMessage(reader);
+            }
+            else if (type == MsgNpcAct)
+            {
+                if (!IsHost && Plugin.CfgNpcSync.Value) OnNpcAct(reader);
+            }
+            else if (type == MsgPuppet)
+            {
+                if (!IsHost) OnPuppetId(reader.GetInt());
+            }
+            else if (type == MsgPuppetHurt)
+            {
+                if (!IsHost || Plugin.CfgPvp.Value) OnPuppetHurt(reader);
+            }
+            else if (type == MsgNpc)
+            {
+                if (!IsHost && Plugin.CfgNpcSync.Value) OnNpcMessage(reader);
+            }
+            else if (type == MsgHeld)
+            {
+                remoteHeld.Clear();
+                int n = reader.GetInt();
+                for (int i = 0; i < n; i++)
+                {
+                    var hp = new HeldPart();
+                    hp.mesh = reader.GetString();
+                    hp.side = reader.GetByte();
+                    int mc = reader.GetInt();
+                    hp.mats = new string[mc];
+                    for (int j = 0; j < mc; j++) hp.mats[j] = reader.GetString();
+                    hp.u = reader.GetFloat();
+                    int nn = reader.GetInt();
+                    hp.chain = new float[nn * 10];
+                    for (int j = 0; j < hp.chain.Length; j++) hp.chain[j] = reader.GetFloat();
+                    remoteHeld.Add(hp);
+                }
+                string rsig = HeldSig(remoteHeld);
+                if (rsig != remoteHeldSig) { remoteHeldSig = rsig; remoteHeldDirty = true; }
+            }
+            else if (type == MsgItem)
+            {
+                remoteItem = reader.GetString();
+            }
+            else if (type == MsgPos)
+            {
+                float x = reader.GetFloat();
+                float y = reader.GetFloat();
+                float z = reader.GetFloat();
+                float yaw = reader.GetFloat();
+                targetPos = new Vector3(x, y, z);
+                targetYaw = yaw;
+                byte fl = reader.GetByte();
+                remoteCrouched = (fl & 1) != 0;
+                remoteRunning = (fl & 2) != 0;
+                remoteFists = (fl & 4) != 0;
+                remoteBlocking = false;
+                remoteConsuming = (fl & 16) != 0;
+                remoteSitting = (fl & 32) != 0;
+                remoteCarryObj = (fl & 64) != 0;
+                remoteLean = reader.GetFloat();
+                if (avatar == null) CreateAvatar();
+            }
+        }
+    }
+}
