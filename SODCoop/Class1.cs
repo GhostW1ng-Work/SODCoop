@@ -20,7 +20,7 @@ namespace SodCoop
 {
     public enum NetMode { Off, Host, Client }
 
-    [BepInPlugin("com.yourname.sodcoop", "SodCoop", "0.9.39")]
+    [BepInPlugin("com.yourname.sodcoop", "SodCoop", "0.9.40")]
     public class Plugin : BasePlugin
     {
         internal static ManualLogSource L;
@@ -1612,7 +1612,7 @@ namespace SodCoop
         internal static void OpenEditor()
         {
             if (Open) return;
-            var saved = Load(); if (saved != null) cur = saved;
+            cur = Load() ?? new Appearance();
             poolsDirty = true; Open = true; status = "";
             try { menuCanvas = GameObject.Find("MenuCanvas"); if (menuCanvas != null) menuCanvas.SetActive(false); } catch (Exception) { }
             BuildPools(); EnsureCamera(); dirty = true; applyAt = 0f;
@@ -1661,6 +1661,70 @@ namespace SodCoop
         }
         static readonly List<Renderer> lodList = new List<Renderer>();
         static bool poseWarn, dumpedB, rebound;
+
+        // ---------- аватар другого игрока: тот же донор, но результат (модель «Model») забирает сеть ----------
+        static bool remoteBusy; static int remoteFrames;
+        internal static bool RemoteBusy { get { return remoteBusy; } }
+
+        internal static bool RemoteBegin(Appearance a)
+        {
+            if (Open || remoteBusy || a == null) return false;
+            try
+            {
+                cur = a; BuildPools();
+                DestroyDonor();
+                if (!CreateDonor()) return false;
+                ApplyToDonor();
+                if (donor == null) return false;
+                remoteBusy = true; remoteFrames = 0;
+                return true;
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[CHAR] RemoteBegin: " + e.Message); DestroyDonor(); return false; }
+        }
+
+        internal static void RemoteAbort() { remoteBusy = false; DestroyDonor(); }
+
+        // 0 = ещё готовится, 1 = готово (model отцеплена от донора), -1 = не получилось
+        internal static int RemoteStep(out Transform model, out List<Renderer> lod)
+        {
+            model = null; lod = null;
+            if (!remoteBusy || donor == null) { remoteBusy = false; return -1; }
+            try
+            {
+                PoseDonor();
+                for (int i = 0; i < lodList.Count; i++) { try { if (lodList[i] != null && lodList[i].enabled) lodList[i].enabled = false; } catch (Exception) { } }
+                if (++remoteFrames < 3) return 0;
+                Dedupe(); Offset();
+                try { var oc = donor.GetComponentInChildren<CitizenOutfitController>(true); if (oc != null) oc.enabled = false; } catch (Exception) { }
+                var rr = donor.GetComponentsInChildren<Renderer>(true);
+                for (int i = 0; i < rr.Length; i++)
+                {
+                    var r = rr[i]; if (r == null) continue;
+                    if ((LodPart(r.transform) || r.name == "DistantLOD") && !lodList.Contains(r)) { r.enabled = false; lodList.Add(r); }
+                }
+                PoseDonor();
+                var an = donor.GetComponentInChildren<Animator>(true);
+                if (an == null || an.transform == donor.transform) { Plugin.L.LogWarning("[CHAR] у донора нет отдельной «Model» с аниматором"); RemoteAbort(); return -1; }
+                model = an.transform;
+                lod = new List<Renderer>(lodList);
+                model.SetParent(null, true);
+                var old = donor; donor = null; remoteBusy = false;
+                UnityEngine.Object.Destroy(old);
+                return 1;
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[CHAR] RemoteStep: " + e); RemoteAbort(); return -1; }
+        }
+
+        internal static string ToJson(Appearance a)
+        {
+            try { return JsonSerializer.Serialize(a, new JsonSerializerOptions { IncludeFields = true }); } catch (Exception) { return ""; }
+        }
+
+        internal static Appearance FromJson(string j)
+        {
+            try { if (string.IsNullOrEmpty(j)) return null; return JsonSerializer.Deserialize<Appearance>(j, new JsonSerializerOptions { IncludeFields = true }); }
+            catch (Exception) { return null; }
+        }
 
         // ---------- IMGUI ----------
         static GUIStyle btnStyle, labelStyle, titleStyle;
@@ -2251,6 +2315,24 @@ namespace SodCoop
         internal static bool Started { get; private set; }
         static bool IsHost { get { return Plugin.CfgMode.Value == NetMode.Host; } }
 
+        static Appearance remoteApp;
+        static string remoteAppJson = "";
+
+        static string MyAppearanceJson()
+        {
+            try { var a = CharEditor.Load(); return a == null ? "" : CharEditor.ToJson(a); } catch (Exception) { return ""; }
+        }
+
+        static void SetRemoteAppearance(string json)
+        {
+            json = json ?? "";
+            if (json == remoteAppJson) return;
+            remoteAppJson = json;
+            remoteApp = CharEditor.FromJson(json);
+            Plugin.L.LogInfo("[CHAR] получен внешний вид второго игрока: " + (remoteApp == null ? "нет (останется модель жителя)" : "голова=" + remoteApp.Head + " волосы=" + remoteApp.Hair + " верх=" + remoteApp.Top + " низ=" + remoteApp.Bottom));
+            if (avatar != null) DestroyAvatar();   // пересоздастся со следующим пакетом позиции
+        }
+
         static string Describe()
         {
             var c = CityData.Instance;
@@ -2321,6 +2403,7 @@ namespace SodCoop
                         var w = new NetDataWriter();
                         w.Put(MsgHello);
                         w.Put(Describe());
+                        w.Put(MyAppearanceJson());
                         peer.Send(w, DeliveryMethod.ReliableOrdered);
                     }
                 };
@@ -2411,6 +2494,7 @@ namespace SodCoop
                     targetYaw = LookYaw(p) + 180f;
                     if (avatar == null) CreateAvatar();
                 }
+                PollRemoteModel();
 
                 // Отправка своей позиции ~20 раз в секунду
                 if (manager != null)
@@ -2651,6 +2735,13 @@ namespace SodCoop
             avatar = new GameObject("SodCoop_RemotePlayer");
 
             bool ok = false;
+            var app = remoteApp;
+            if (app == null && Plugin.CfgDebugAvatar.Value) app = CharEditor.Load();
+            if (app != null && Plugin.CfgUseCitizenModel.Value && !CharEditor.Open)
+            {
+                if (CharEditor.RemoteBegin(app)) { remotePending = true; remoteTries = 0; Plugin.L.LogInfo("[CHAR] собираю аватар по внешнему виду"); avatarSnap = true; return; }
+                Plugin.L.LogWarning("[CHAR] не удалось начать сборку аватара, беру модель жителя");
+            }
             if (Plugin.CfgUseCitizenModel.Value)
                 ok = TryCreateCitizenModel(avatar);
 
@@ -2658,6 +2749,91 @@ namespace SodCoop
                 CreateCapsule(avatar);
 
             avatarSnap = true;
+        }
+
+        static bool remotePending; static int remoteTries;
+        static List<Renderer> remoteLod = new List<Renderer>();
+
+        static void PollRemoteModel()
+        {
+            try
+            {
+                if (remotePending)
+                {
+                    if (avatar == null) { remotePending = false; CharEditor.RemoteAbort(); return; }
+                    Transform m; List<Renderer> lod;
+                    int st = CharEditor.RemoteStep(out m, out lod);
+                    if (st == 0) return;
+                    remotePending = false;
+                    if (st > 0 && AttachRemoteModel(m, lod)) return;
+                    Plugin.L.LogWarning("[CHAR] сборка не удалась, беру модель жителя");
+                    if (avatar != null && !TryCreateCitizenModel(avatar)) CreateCapsule(avatar);
+                    return;
+                }
+                for (int i = 0; i < remoteLod.Count; i++) { try { if (remoteLod[i] != null && remoteLod[i].enabled) remoteLod[i].enabled = false; } catch (Exception) { } }
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[CHAR] PollRemoteModel: " + e.Message); }
+        }
+
+        static bool AttachRemoteModel(Transform m, List<Renderer> lod)
+        {
+            try
+            {
+                var clone = m.gameObject;
+                Vector3 lp = Vector3.zero; Quaternion lr = Quaternion.identity;
+                Strip<CapsuleCollider>(clone);
+                Strip<InteractableController>(clone);
+                Strip<OutlineController>(clone);
+                Strip<CitizenOutfitController>(clone);
+                Strip<CitizenAnimationEvents>(clone);
+                try
+                {
+                    var list = CityData.Instance.citizenDirectory;
+                    for (int i = 0; list != null && i < list.Count; i++)
+                    {
+                        var sac = list[i] != null ? list[i].animationController : null;
+                        if (sac == null || sac.mainAnimator == null) continue;
+                        handNameR = sac.rightHandJoint != null ? sac.rightHandJoint.transform.name : "";
+                        handNameL = sac.leftHandJoint != null ? sac.leftHandJoint.transform.name : "";
+                        break;
+                    }
+                }
+                catch (Exception) { }
+                clone.transform.SetParent(avatar.transform, false);
+                clone.transform.localPosition = lp;
+                clone.transform.localRotation = lr;
+                clone.transform.localScale = Vector3.one;
+                clone.name = "SodCoop_Model";
+                avatarModel = clone.transform;
+                modelBaseScale = clone.transform.localScale;
+                modelBasePos = clone.transform.localPosition;
+                modelBaseRot = clone.transform.localRotation;
+                boneUL = FindDeep(clone.transform, "UpperLegLeft");
+                boneUR = FindDeep(clone.transform, "UpperLegRight");
+                boneLL = FindDeep(clone.transform, "LowerLegLeft");
+                boneLR = FindDeep(clone.transform, "LowerLegRight");
+                boneTorso = FindDeep(clone.transform, "Midriff");
+                remoteLod = lod ?? new List<Renderer>();
+                var anim = clone.GetComponent<Animator>();
+                if (anim == null) anim = clone.GetComponentInChildren<Animator>(true);
+                if (anim != null)
+                {
+                    anim.enabled = false; anim.fireEvents = false; anim.applyRootMotion = false;
+                    anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+                    avatarAnim = anim;
+                    for (int li = 1; li < anim.layerCount; li++) anim.SetLayerWeight(li, 0f);
+                    anim.SetBool("armsLock", false); anim.SetBool("carryingItem", false); anim.SetBool("restrained", false);
+                    anim.SetInteger("carryItem", 0);
+                    anim.SetInteger("ArmsState", Plugin.CfgArmsState.Value);
+                    anim.SetInteger("IdleAnimationState", Plugin.CfgIdleState.Value);
+                }
+                var rs = clone.GetComponentsInChildren<Renderer>(true);
+                for (int i = 0; i < rs.Length; i++) { try { if (rs[i] != null) rs[i].renderingLayerMask = 0xFFFFFFFFu; } catch (Exception) { } }
+                avatarSnap = true;
+                Plugin.L.LogInfo($"[CHAR] аватар собран по внешнему виду: рендереров {rs.Length}, аниматор={(anim != null)}, кости ноги={boneUL != null && boneUR != null}");
+                return anim != null;
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[CHAR] AttachRemoteModel: " + e); return false; }
         }
 
         // Клонирует модель одного из NPC (только внешний вид и аниматор, без ИИ)
@@ -6723,6 +6899,8 @@ namespace SodCoop
         static void DestroyAvatar()
         {
             MapUntrack();
+            if (remotePending) { remotePending = false; CharEditor.RemoteAbort(); }
+            remoteLod.Clear();
             if (avatar != null)
             {
                 UnityEngine.Object.Destroy(avatar);
@@ -6747,6 +6925,7 @@ namespace SodCoop
             if (type == MsgHello && IsHost)
             {
                 string theirs = reader.GetString();
+                SetRemoteAppearance(reader.AvailableBytes > 0 ? reader.GetString() : "");
                 string mine = Describe();
                 bool ok = theirs == mine;
                 Plugin.L.LogInfo($"[NET] Handshake от клиента: ok={ok}");
@@ -6757,6 +6936,7 @@ namespace SodCoop
                 w.Put(MsgHelloReply);
                 w.Put(ok);
                 w.Put(mine);
+                w.Put(MyAppearanceJson());
                 peer.Send(w, DeliveryMethod.ReliableOrdered);
                 if (ok) { SendDoorSnapshot(peer); SendRoomSnapshot(peer); SendWindowSnapshot(peer); SendTime(); SendSoldSnapshot(peer); SendFurnSnapshot(peer); }
             }
@@ -6764,6 +6944,7 @@ namespace SodCoop
             {
                 bool ok = reader.GetBool();
                 string hostInfo = reader.GetString();
+                SetRemoteAppearance(reader.AvailableBytes > 0 ? reader.GetString() : "");
                 Plugin.L.LogInfo($"[NET] Ответ хоста: ok={ok}");
                 Plugin.L.LogInfo($"[NET]   хост:   {hostInfo}");
                 Plugin.L.LogInfo($"[NET]   клиент: {Describe()}");
