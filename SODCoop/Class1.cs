@@ -20,7 +20,7 @@ namespace SodCoop
 {
     public enum NetMode { Off, Host, Client }
 
-    [BepInPlugin("com.yourname.sodcoop", "SodCoop", "0.9.56")]
+    [BepInPlugin("com.yourname.sodcoop", "SodCoop", "0.9.61")]
     public class Plugin : BasePlugin
     {
         internal static ManualLogSource L;
@@ -59,6 +59,9 @@ namespace SodCoop
         internal static ConfigEntry<bool> CfgHeldShow;
         internal static ConfigEntry<string> CfgHeldHand;
         internal static ConfigEntry<string> CfgHeldPos;
+        internal static ConfigEntry<string> CfgWpnPos;
+        internal static ConfigEntry<string> CfgWpnRot;
+        internal static ConfigEntry<float> CfgWpnScale;
         internal static ConfigEntry<string> CfgHeldRot;
         internal static ConfigEntry<float> CfgHeldScale;
         internal static ConfigEntry<bool> CfgCarryAnim;
@@ -201,7 +204,7 @@ namespace SodCoop
             CfgObjSync = Config.Bind("Objects", "Sync", true,
                 "Sync world objects the player carries (garbage bags, boxes...) and drops/throws: the other player sees them move");
             CfgCheatKeys = Config.Bind("Cheats", "Hotkeys", true,
-                "F6 = add money (MoneyAmount), F7 = spawn item ItemPreset in front of you, F8 = toggle NPC AI pause, F9 = toggle god mode, F10 = add social credit (SocialCreditAmount), F11 = toggle NPCs-cannot-see-me");
+                "F6 = add money (MoneyAmount), F7 = spawn item ItemPreset in front of you, F8 = toggle NPC AI pause, F9 = toggle god mode, F12 = spawn next weapon (press repeatedly to cycle), F10 = add social credit (SocialCreditAmount), F11 = toggle NPCs-cannot-see-me");
             CfgAddMoney = Config.Bind("Cheats", "AddMoney", 0,
                 "Set to a number while the game runs: that much money is added once, then it resets to 0");
             CfgMoneyAmount = Config.Bind("Cheats", "MoneyAmount", 1000, "How much money the F6 key adds");
@@ -251,6 +254,12 @@ namespace SodCoop
                 "While the other player holds an item, play the carry pose (carryingItem=true, arms layer on)");
             CfgCarryValue = Config.Bind("HeldItems", "CarryItemValue", 1,
                 "Animator int carryItem while carrying (try 0,1,2: Arms_Carry1 / Arms_CarryHeavy)");
+            CfgWpnPos = Config.Bind("Weapons", "ModelPosition", "0,0,0",
+                "Extra offset (x,y,z, metres, in the hand joint space) of the weapon model in the other player's hand. Edit while the game runs");
+            CfgWpnRot = Config.Bind("Weapons", "ModelRotation", "0,0,0",
+                "Extra rotation (euler x,y,z degrees) of the weapon model in the other player's hand");
+            CfgWpnScale = Config.Bind("Weapons", "ModelScale", 1f,
+                "Scale multiplier of the weapon model in the other player's hand");
             CfgHeldScale = Config.Bind("HeldItems", "Scale", 1f,
                 "Scale multiplier of the item model");
             CfgBlockCao = Config.Bind("Avatar", "BlockCombatArmsOverride", 2,
@@ -287,7 +296,7 @@ namespace SodCoop
             Harmony.CreateAndPatchAll(typeof(PlayerPatch));
             Harmony.CreateAndPatchAll(typeof(MeleePatch));
             Harmony.CreateAndPatchAll(typeof(BlockPatch));
-            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch) })
+            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch) })
             {
                 try { Harmony.CreateAndPatchAll(t); }
                 catch (Exception e) { L.LogWarning($"[PATCH] {t.Name}: {e.Message}"); }
@@ -768,6 +777,17 @@ namespace SodCoop
     {
         [HarmonyPostfix]
         public static void Postfix(AudioEvent __0, Actor __1, Vector3 __3) { Net.OnWorldSound(__0, __1, __3); }
+    }
+
+    // Выстрел игрока: повторяем вспышку, звук, гильзу и попадание у второго игрока (урон считает тот, кто стрелял)
+    [HarmonyPatch(typeof(Toolbox), "Shoot")]
+    public static class ShootPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(Actor __0, Vector3 __1, Vector3 __2, float __3, float __4, float __5, MurderWeaponPreset __6, bool __7, Vector3 __8, bool __9, bool __10)
+        {
+            Net.OnShoot(__0, __1, __2, __3, __4, __5, __6, __7, __8);
+        }
     }
 
     // Моё тело получило удар / упало / умерло -> другому игроку для анимации аватара
@@ -2278,7 +2298,7 @@ namespace SodCoop
                 Lan.Tick();
                 Net.Poll();
                 MenuAuto.Tick();
-                if (Net.Started && Net.KeyDown(KeyCode.F9)) Net.LeaveSession();
+                if (Net.Started && Net.KeyDown(KeyCode.End)) Net.LeaveSession();
                 if (!alive) { alive = true; Plugin.L.LogInfo("[DRV] Update работает"); }
                 if (!keyParsed)
                 {
@@ -2552,6 +2572,8 @@ namespace SodCoop
         const byte MsgNpcAct = 15;      // хост -> клиент: разовые действия горожанина (удар, бросок, блок, оружие в руках)
         const byte MsgSaveReq = 18, MsgSaveMeta = 19, MsgSaveWant = 20, MsgSaveChunk = 21, MsgSaveDone = 22, MsgSaveFail = 23;   // передача сохранения хост -> клиент
         const byte MsgBodyFx = 17;      // игрок -> игрок: меня ударили / я упал / я встал / я умер (для анимации аватара)
+        const byte MsgShot = 24;        // игрок -> игрок: я выстрелил (оружие, дуло, точка прицеливания)
+        const byte MsgWeapon = 25;      // игрок -> игрок: какое оружие у меня в руках
         const byte MsgSound = 16;       // хост -> клиент: звук горожанина в бою
         const byte MsgPuppetHurt = 13;  // хост -> клиент: горожанин ударил двойника = ударил тебя
 
@@ -2868,11 +2890,11 @@ namespace SodCoop
             }
         }
 
-        // F9: выйти из мультиплеера (хост закрывает сервер, клиент перестаёт переподключаться)
+        // End: выйти из мультиплеера (хост закрывает сервер, клиент перестаёт переподключаться)
         internal static void LeaveSession()
         {
             bool wasClient = RtMode == NetMode.Client;
-            Plugin.L.LogInfo("[NET] F9: выход из мультиплеера");
+            Plugin.L.LogInfo("[NET] End: выход из мультиплеера");
             ApplyOff();
             if (wasClient) ClientReleaseWorld();
             gamePeer = null; lostAt = -1f; everConnected = false;
@@ -2881,7 +2903,7 @@ namespace SodCoop
 
         internal static void Shutdown()
         {
-            gamePeer = null; lostAt = -1f; everConnected = false;
+            gamePeer = null; lostAt = -1f; everConnected = false; weaponSent = null; remoteWeaponName = ""; remoteWeaponCao = -1;
             try { Lan.StopAdvertise(); } catch (Exception) { }
             try { if (manager != null) manager.Stop(); } catch (Exception) { }
             manager = null; listener = null; serverPeer = null; connecting = false; connectRejected = false; Started = false;
@@ -2914,10 +2936,10 @@ namespace SodCoop
             if (MenuAuto.Notice != "") return MenuAuto.Notice;
             if (RtMode == NetMode.Off) return "";
             if (RtMode == NetMode.Host && sendStage != 0) return "HOSTING: sending the save to a player...";
-            if (RtMode == NetMode.Host) return (manager != null ? "HOSTING" : "HOST (starts when the city has loaded)") + ": " + RtName + " : " + RtPort + (manager != null ? (gamePeer != null ? "   [2/2 players]" : "   [1/2 players, waiting]") + "   (F9 = stop)" : "");
+            if (RtMode == NetMode.Host) return (manager != null ? "HOSTING" : "HOST (starts when the city has loaded)") + ": " + RtName + " : " + RtPort + (manager != null ? (gamePeer != null ? "   [2/2 players]" : "   [1/2 players, waiting]") + "   (End = stop)" : "");
             if (connectRejected) return "REJECTED by " + RtAddress + ":" + RtPort + " (wrong password?)";
-            if (serverPeer != null) return "CONNECTED to " + RtAddress + ":" + RtPort + "   (F9 = leave multiplayer)";
-            if (lostAt >= 0f && manager != null) return "CONNECTION LOST, reconnecting to " + RtAddress + ":" + RtPort + " ...   (F9 = leave multiplayer)";
+            if (serverPeer != null) return "CONNECTED to " + RtAddress + ":" + RtPort + "   (End = leave multiplayer)";
+            if (lostAt >= 0f && manager != null) return "CONNECTION LOST, reconnecting to " + RtAddress + ":" + RtPort + " ...   (End = leave multiplayer)";
             return (manager != null ? "CONNECTING" : "CLIENT (connects when the city has loaded; load the same save as the host)") + ": " + RtAddress + ":" + RtPort;
         }
 
@@ -3323,7 +3345,7 @@ namespace SodCoop
                         {
                             lostAt = Time.realtimeSinceStartup;
                             ClientReleaseWorld();
-                            Toast("Lost connection to the host (" + info.Reason + "). Reconnecting...  F9 = leave.");
+                            Toast("Lost connection to the host (" + info.Reason + "). Reconnecting...  End = leave.");
                         }
                         connecting = false;
                         nextAttempt = Time.realtimeSinceStartup + 3f;
@@ -3529,6 +3551,7 @@ namespace SodCoop
                             combat = true; cao = Plugin.CfgBlockCao.Value;
                             if (Plugin.CfgBlockArms.Value >= 0) armsSt = Plugin.CfgBlockArms.Value;
                         }
+                        if (!remoteBlocking && remoteWeaponCao >= 0) { combat = true; cao = remoteWeaponCao; }
                         int itemArms = remoteBlocking ? -1 : ItemArms(remoteItem);
                         if (remoteConsuming && remoteHeld.Count > 0 && !combat && Plugin.CfgConsumeArms.Value >= 0) itemArms = Plugin.CfgConsumeArms.Value;
                         if (itemArms >= 0 && !combat) armsSt = itemArms;
@@ -4140,6 +4163,7 @@ namespace SodCoop
             try
             {
                 if (KeyDown(KeyCode.F6)) GiveMoney(Plugin.CfgMoneyAmount.Value);
+                if (KeyDown(KeyCode.F12)) SpawnNextWeapon();
                 if (KeyDown(KeyCode.F7)) SpawnItem(Plugin.CfgItemPreset.Value);
                 if (KeyDown(KeyCode.F8)) { Plugin.CfgPauseNpc.Value = !Plugin.CfgPauseNpc.Value; ApplyPause(); Plugin.L.LogInfo($"[CHEAT] пауза ИИ NPC: {Plugin.CfgPauseNpc.Value}"); }
                 if (KeyDown(KeyCode.F10)) GiveSocial(Plugin.CfgSocialAmount.Value);
@@ -4354,6 +4378,36 @@ namespace SodCoop
                 Plugin.L.LogInfo(it != null ? $"[CHEAT] создан предмет '{preset}' (id={it.id})" : $"[CHEAT] не удалось создать '{preset}'");
             }
             catch (Exception e) { Plugin.L.LogWarning($"[CHEAT] предмет: {e.Message}"); }
+        }
+
+        static System.Collections.Generic.List<InteractablePreset> weaponPresets;
+        static int weaponIdx;
+
+        // F12: создаёт перед игроком следующее оружие из игры (подобрать как обычный предмет)
+        static void SpawnNextWeapon()
+        {
+            try
+            {
+                if (weaponPresets == null)
+                {
+                    weaponPresets = new System.Collections.Generic.List<InteractablePreset>();
+                    foreach (var p in Resources.FindObjectsOfTypeAll<InteractablePreset>())
+                        if (p != null && p.weapon != null && !string.IsNullOrEmpty(p.name)) weaponPresets.Add(p);
+                    weaponPresets.Sort((a, b) => string.CompareOrdinal(a.name, b.name));
+                    var names = new System.Collections.Generic.List<string>();
+                    foreach (var p in weaponPresets) names.Add(p.name + "(" + p.weapon.type + ")");
+                    Plugin.L.LogInfo($"[CHEAT] оружие в игре ({weaponPresets.Count}): " + string.Join(", ", names.ToArray()));
+                }
+                if (weaponPresets.Count == 0) { Plugin.L.LogWarning("[CHEAT] оружейных пресетов не найдено"); return; }
+                var w = weaponPresets[weaponIdx % weaponPresets.Count];
+                weaponIdx++;
+                var cam = Camera.main;
+                Vector3 pos = cam != null ? cam.transform.position + cam.transform.forward * 1.0f : Player.Instance.transform.position + Vector3.up;
+                var it = InteractableCreator.Instance.CreateWorldInteractable(w, null, null, null, pos, Vector3.zero, null, null, "");
+                Plugin.L.LogInfo($"[CHEAT] оружие '{w.name}' ({w.weapon.type}) создано перед вами: {(it != null ? "ok" : "ошибка")}");
+                Net.Toast("Weapon spawned: " + w.name + " - pick it up (F12 = next)");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[CHEAT] оружие: {e.Message}"); }
         }
 
         static void SearchPresets(string q)
@@ -5828,7 +5882,9 @@ namespace SodCoop
         {
             try
             {
-                if (!IsHost || applyingRemote || !Plugin.CfgNpcSync.Value || ev == null || manager == null || manager.ConnectedPeersCount == 0) return;
+                if (applyingRemote || ev == null || manager == null || manager.ConnectedPeersCount == 0) return;
+                if (who != null && who.isPlayer) { OnPlayerSound(ev, pos); return; }
+                if (!IsHost || !Plugin.CfgNpcSync.Value) return;
                 var c = who as Citizen;
                 if (c == null || c == puppet) return;
                 string name = ev.name; if (string.IsNullOrEmpty(name)) return;
@@ -5844,13 +5900,235 @@ namespace SodCoop
             catch (Exception) { }
         }
 
+        // ---------- Оружие второго игрока: звуки, выстрелы, вспышки ----------
+        static readonly System.Text.RegularExpressions.Regex playerSoundRx = new System.Text.RegularExpressions.Regex("gun|shot|shoot|fire|pistol|revolver|rifle|bullet|punch|kick|swing|reload|knife|sword|melee|block|brass|casing|weapon|attack|equip|holster|cock|hammer|slash|stab|bat|crowbar|whoosh", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        static readonly System.Collections.Generic.HashSet<string> fireEventNames = new System.Collections.Generic.HashSet<string>();
+        static System.Collections.Generic.Dictionary<string, MurderWeaponPreset> weaponByName, weaponByPrefab;
+        static int wpnLog;
+        static MurderWeaponPreset lastShotWp; static float lastShotAt;
+
+        static void BuildWeaponMaps()
+        {
+            if (weaponByName != null) return;
+            weaponByName = new System.Collections.Generic.Dictionary<string, MurderWeaponPreset>();
+            weaponByPrefab = new System.Collections.Generic.Dictionary<string, MurderWeaponPreset>();
+            try
+            {
+                foreach (var wp in Resources.FindObjectsOfTypeAll<MurderWeaponPreset>())
+                {
+                    if (wp == null) continue;
+                    weaponByName[wp.name] = wp;
+                    try { if (wp.fireEvent != null) fireEventNames.Add(wp.fireEvent.name); } catch (Exception) { }
+                    try { if (wp.itemRightOverride != null) weaponByPrefab[wp.itemRightOverride.name] = wp; } catch (Exception) { }
+                    try { if (wp.itemLeftOverride != null) weaponByPrefab[wp.itemLeftOverride.name] = wp; } catch (Exception) { }
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[WEAPON] список оружия: " + e.Message); }
+            Plugin.L.LogInfo("[WEAPON] видов оружия: " + weaponByName.Count + ", моделей в руках: " + weaponByPrefab.Count);
+        }
+
+        static MurderWeaponPreset FindWeapon(string name)
+        {
+            BuildWeaponMaps();
+            MurderWeaponPreset w; weaponByName.TryGetValue(name ?? "", out w); return w;
+        }
+
+        static Citizen RemotePuppet()
+        {
+            if (IsHost) return puppet;
+            Citizen c = null; if (puppetId >= 0 && npcById != null) npcById.TryGetValue(puppetId, out c);
+            return c;
+        }
+
+        // какое оружие у меня в руках: по имени модели, которую игра создаёт в руке (префаб из MurderWeaponPreset)
+        static string DetectHeldWeapon(out string names)
+        {
+            names = "";
+            try
+            {
+                var fp = FirstPersonItemController.Instance;
+                if (fp == null || fp.forceHolstered) return "";
+                BuildWeaponMaps();
+                var sb = new StringBuilder();
+                MurderWeaponPreset wp;
+                foreach (var pr in new[] { fp.rightPrefabReference, fp.leftPrefabReference })
+                {
+                    if (pr == null) continue;
+                    string k = pr.name.Replace("(Clone)", "").Trim();
+                    sb.Append("ref:" + k + ";");
+                    if (weaponByPrefab.TryGetValue(k, out wp)) { names = sb.ToString(); return wp.name; }
+                }
+                for (int side = 0; side < 2; side++)
+                {
+                    Transform par = side == 0 ? fp.rightHandObjectParent : fp.leftHandObjectParent;
+                    if (par == null) continue;
+                    for (int i = 0; i < par.childCount; i++)
+                    {
+                        string k = par.GetChild(i).name.Replace("(Clone)", "").Trim();
+                        sb.Append(k + ";");
+                        if (weaponByPrefab.TryGetValue(k, out wp)) { names = sb.ToString(); return wp.name; }
+                    }
+                }
+                names = sb.ToString();
+            }
+            catch (Exception) { }
+            return "";
+        }
+
+        static string weaponSent = null; static float weaponResendAt; static string remoteWeaponName = ""; static int remoteWeaponCao = -1;
+
+        static void SendWeaponIfChanged()
+        {
+            string names; string wn = DetectHeldWeapon(out names);
+            bool changed = wn != weaponSent;
+            if (!changed && Time.realtimeSinceStartup < weaponResendAt) return;
+            weaponSent = wn; weaponResendAt = Time.realtimeSinceStartup + 5f;
+            if (changed) Plugin.L.LogInfo("[WEAPON] у меня в руках оружие: '" + wn + "' (предмет '" + curItem + "', модели в руках: " + names + ")");
+            var w = new NetDataWriter(); w.Put(MsgWeapon); w.Put(wn);
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+        }
+
+        static void OnWeaponMessage(NetDataReader r)
+        {
+            string prevWeapon = remoteWeaponName;
+            remoteWeaponName = r.GetString(); remoteWeaponCao = -1;
+            var wp = remoteWeaponName != "" ? FindWeapon(remoteWeaponName) : null;
+            if (wp != null)
+            {
+                switch (wp.type)
+                {
+                    // игроки не стреляют: любое оружие в их руках это дубина (как в оригинале)
+                    case MurderWeaponPreset.WeaponType.poison: case MurderWeaponPreset.WeaponType.strangulation: case MurderWeaponPreset.WeaponType.fists: remoteWeaponCao = -1; break;
+                    default: remoteWeaponCao = 4; break;
+                }
+            }
+            if (prevWeapon == remoteWeaponName) return;
+            remoteHeldDirty = true;
+            Plugin.L.LogInfo("[WEAPON] у второго игрока в руках оружие: '" + remoteWeaponName + "' тип=" + (wp != null ? "" + wp.type : "-") + " поза=" + remoteWeaponCao);
+        }
+
+        // мой звук (оружие, удары, замах) -> второму игроку
+        static void OnPlayerSound(AudioEvent ev, Vector3 pos)
+        {
+            string name = ev.name; if (string.IsNullOrEmpty(name)) return;
+            bool match = playerSoundRx.IsMatch(name);
+            if (soundLogged.Count < 120 && soundLogged.Add("me:" + name)) Plugin.Dbg($"[SOUND] мой звук '{name}' (отправляю={match})");
+            if (!match) return;
+            var w = new NetDataWriter();
+            w.Put(MsgSound); w.Put(-1); w.Put(name); w.Put(pos.x); w.Put(pos.y); w.Put(pos.z);
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+        }
+
+        // мой выстрел -> второму игроку (до расчёта попадания, чтобы звук/вспышка пришли раньше сообщения об уроне)
+        internal static void OnShoot(Actor who, Vector3 muzzle, Vector3 aim, float range, float acc, float dmg, MurderWeaponPreset wp, bool eject, Vector3 ejectPt)
+        {
+            try
+            {
+                if (applyingRemote || who == null || !who.isPlayer || manager == null || manager.ConnectedPeersCount == 0) return;
+                var w = new NetDataWriter();
+                w.Put(MsgShot); w.Put(wp != null ? (wp.name ?? "") : "");
+                w.Put(muzzle.x); w.Put(muzzle.y); w.Put(muzzle.z); w.Put(aim.x); w.Put(aim.y); w.Put(aim.z);
+                w.Put(range); w.Put(eject); w.Put(ejectPt.x); w.Put(ejectPt.y); w.Put(ejectPt.z);
+                manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+                if (wpnLog++ < 8) Plugin.L.LogInfo($"[WEAPON] мой выстрел: {(wp != null ? wp.name : "?")}, урон {dmg:F2}, дальность {range:F1}, гильза={eject}");
+            }
+            catch (Exception) { }
+        }
+
+        static bool IsUnder(Transform t, Transform root)
+        {
+            for (int i = 0; t != null && i < 40; i++) { if (t == root) return true; t = t.parent; }
+            return false;
+        }
+
+        static void SpawnCasing(MurderWeaponPreset wp, Vector3 pos, Vector3 right)
+        {
+            try
+            {
+                if (wp.shellCasing == null) return;
+                applyingRemote = true;
+                Interactable it;
+                try { it = InteractableCreator.Instance.CreateWorldInteractable(wp.shellCasing, null, null, null, pos, new Vector3(UnityEngine.Random.Range(0f, 360f), UnityEngine.Random.Range(0f, 360f), 0f), null, null, ""); }
+                finally { applyingRemote = false; }
+                if (it == null) return;
+                GameObject go = it.spawnedObject;
+                if (go == null && it.controller != null) go = it.controller.gameObject;
+                if (go != null)
+                {
+                    var rb = go.GetComponentInChildren<Rigidbody>();
+                    if (rb != null) { rb.isKinematic = false; rb.velocity = right * UnityEngine.Random.Range(1.2f, 2.2f) + Vector3.up * UnityEngine.Random.Range(1.0f, 2.0f); rb.angularVelocity = UnityEngine.Random.insideUnitSphere * 12f; }
+                }
+                casings.Add(new KeyValuePair<Interactable, float>(it, Time.unscaledTime + 20f));
+            }
+            catch (Exception e) { if (brassLog++ < 4) Plugin.L.LogWarning("[FX] гильза игрока: " + e.Message); }
+        }
+
+        // выстрел второго игрока у меня: звук, вспышка, гильза, след попадания (урона здесь нет: его считает стрелявший и присылает отдельно)
+        static void OnShotMessage(NetDataReader r)
+        {
+            string wn = r.GetString();
+            Vector3 muzzle = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat());
+            Vector3 aim = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat());
+            float range = r.GetFloat(); bool eject = r.GetBool();
+            Vector3 ep = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat());
+            try
+            {
+                var wp = FindWeapon(wn);
+                var pc = RemotePuppet();
+                lastShotWp = wp; lastShotAt = Time.realtimeSinceStartup;
+                Vector3 dir = aim - muzzle; if (dir.sqrMagnitude < 0.0001f) dir = Vector3.forward; dir.Normalize();
+                if (wp == null) { if (wpnLog++ < 8) Plugin.L.LogWarning("[WEAPON] выстрел из неизвестного оружия '" + wn + "'"); return; }
+                if (wp.fireEvent != null)
+                {
+                    applyingRemote = true;
+                    try { AudioController.Instance.PlayWorldOneShot(wp.fireEvent, pc, pc != null ? pc.currentNode : null, muzzle); }
+                    finally { applyingRemote = false; }
+                }
+                if (wp.muzzleFlash != null)
+                {
+                    GameObject fx = UnityEngine.Object.Instantiate(wp.muzzleFlash);
+                    fx.SetActive(true);
+                    fx.transform.position = muzzle; fx.transform.rotation = Quaternion.LookRotation(dir);
+                    foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true)) { try { ps.Play(true); } catch (Exception) { } }
+                    foreach (var l in fx.GetComponentsInChildren<Light>(true)) { try { l.enabled = true; } catch (Exception) { } }
+                    UnityEngine.Object.Destroy(fx, 0.35f);
+                }
+                if (eject) SpawnCasing(wp, ep, Vector3.Cross(Vector3.up, dir).normalized);
+                // куда попала пуля: брызги/искры/дыра в поверхности (себя и аватар/двойника пропускаем)
+                float maxd = range > 1f ? range : 60f;
+                try { if (wp.maximumBulletRange > 1f) maxd = Mathf.Min(maxd, wp.maximumBulletRange); } catch (Exception) { }
+                var all = Physics.RaycastAll(muzzle, dir, maxd, ~0, QueryTriggerInteraction.Ignore);
+                var list = new System.Collections.Generic.List<RaycastHit>();
+                foreach (var h in all) list.Add(h);
+                list.Sort((a, b) => a.distance.CompareTo(b.distance));
+                var me = Player.Instance;
+                foreach (var h in list)
+                {
+                    var col = h.collider; if (col == null) continue;
+                    var ct = col.transform;
+                    if ((avatar != null && IsUnder(ct, avatar.transform)) || (pc != null && IsUnder(ct, pc.transform)) || (me != null && IsUnder(ct, me.transform))) continue;
+                    applyingRemote = true;
+                    try { Toolbox.Instance.CreateBulletSurfaceContactFX(wp, h); }
+                    catch (Exception e) { if (wpnLog++ < 8) Plugin.L.LogWarning("[WEAPON] след пули: " + e.Message); }
+                    finally { applyingRemote = false; }
+                    break;
+                }
+                if (wpnLog++ < 8) Plugin.L.LogInfo($"[WEAPON] выстрел второго игрока: {wp.name}, вспышка={(wp.muzzleFlash != null)}, звук={(wp.fireEvent != null ? wp.fireEvent.name : "нет")}, гильза={eject}");
+            }
+            catch (Exception e) { if (wpnLog++ < 8) Plugin.L.LogWarning("[WEAPON] выстрел второго игрока: " + e.Message); }
+        }
+
         static void OnSoundMessage(NetDataReader r)
         {
             int id = r.GetInt(); string name = r.GetString();
             Vector3 pos = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat());
+            if (id >= 0 && (IsHost || !Plugin.CfgNpcSync.Value)) return;
+            BuildWeaponMaps();
+            if (id < 0 && fireEventNames.Contains(name)) return;   // звук выстрела играет сообщение о выстреле
             try
             {
-                Citizen c = null; if (npcById != null) npcById.TryGetValue(id, out c);
+                Citizen c = null;
+                if (id < 0) c = RemotePuppet(); else if (npcById != null) npcById.TryGetValue(id, out c);
                 AudioEvent ev;
                 if (!audioByName.TryGetValue(name, out ev) || ev == null)
                 {
@@ -5929,7 +6207,11 @@ namespace SodCoop
             {
                 var cit = from as Citizen;
                 AudioEvent ev = null;
-                if (cit != null && cit.ai != null)
+                if (cit == null && lastShotWp != null && Time.realtimeSinceStartup - lastShotAt < 0.8f)
+                {
+                    ev = lastShotWp.impactEventPlayer; if (ev == null) ev = lastShotWp.impactEventBody;
+                }
+                if (ev == null && cit != null && cit.ai != null)
                 {
                     var wp = cit.ai.currentWeaponPreset;
                     if (wp != null) { ev = wp.impactEventPlayer; if (ev == null) ev = wp.impactEventBody; }
@@ -7432,6 +7714,7 @@ namespace SodCoop
             heldScanAt = Time.realtimeSinceStartup + 0.5f;
             var parts = new System.Collections.Generic.List<HeldPart>();
             ScanHeld(parts);
+            SendWeaponIfChanged();
             string sig = HeldSig(parts);
             if (sig == heldSentSig && Time.realtimeSinceStartup < heldResendAt) return;
             if (sig != heldSentSig)
@@ -7515,7 +7798,7 @@ namespace SodCoop
         {
             if (heldL != null) UnityEngine.Object.Destroy(heldL);
             if (heldR != null) UnityEngine.Object.Destroy(heldR);
-            heldL = heldR = null;
+            heldL = heldR = null; heldWeaponMode = false;
         }
 
         static GameObject Container(Transform bone)
@@ -7526,13 +7809,117 @@ namespace SodCoop
             return go;
         }
 
+        static bool heldWeaponMode;
+        static System.Collections.Generic.Dictionary<string, InteractablePreset> weaponItemPreset;
+
+        static void SetLayerRec(Transform t, int layer)
+        {
+            t.gameObject.layer = layer;
+            for (int i = 0; i < t.childCount; i++) SetLayerRec(t.GetChild(i), layer);
+        }
+
+        // Оружие в руке: модель из данных игры (как её держат NPC), а не из вида от первого лица
+        static Transform FindHandDesc(Transform t, int depth)
+        {
+            for (int i = 0; i < t.childCount; i++)
+            {
+                var c = t.GetChild(i);
+                string n = c.name.ToLowerInvariant();
+                if (n.Contains("hand") && !n.Contains("finger") && !n.Contains("thumb") && !n.Contains("index") && !n.Contains("pinky")) return c;
+            }
+            if (depth > 0)
+                for (int i = 0; i < t.childCount; i++) { var r = FindHandDesc(t.GetChild(i), depth - 1); if (r != null) return r; }
+            return null;
+        }
+
+        static void DumpTree(Transform t, int depth, StringBuilder sb)
+        {
+            sb.Append(t.name).Append('(').Append(t.localPosition.ToString("F2")).Append(')');
+            if (depth <= 0 || t.childCount == 0) return;
+            sb.Append('[');
+            for (int i = 0; i < t.childCount && i < 6; i++) { if (i > 0) sb.Append(", "); DumpTree(t.GetChild(i), depth - 1, sb); }
+            sb.Append(']');
+        }
+
+        static bool handLogged;
+
+        // Кисть, а не предплечье: у предплечья начало в локте, оружие торчало оттуда
+        static Transform FindHandBone(bool left)
+        {
+            string hn = left ? handNameL : handNameR;
+            Transform t = hn != "" ? FindDeep(avatarModel, hn) : null;
+            Transform arm = FindDeep(avatarModel, left ? "LowerArmLeft" : "LowerArmRight");
+            if (t == null) t = arm;
+            if (t == null) return null;
+            string ln = t.name.ToLowerInvariant();
+            if (!ln.Contains("hand"))
+            {
+                var h = FindHandDesc(t, 3);
+                if (h == null && t.childCount > 0) h = t.GetChild(0);
+                if (h != null) t = h;
+            }
+            if (!handLogged)
+            {
+                handLogged = true;
+                var sb = new StringBuilder();
+                if (arm != null) DumpTree(arm, 3, sb);
+                Plugin.L.LogInfo($"[WEAPON] кость руки: '{t.name}' (сустав NPC '{hn}'); дерево предплечья: {sb}");
+            }
+            return t;
+        }
+
+        static bool BuildWeaponModel()
+        {
+            try
+            {
+                var wp = FindWeapon(remoteWeaponName);
+                if (wp == null) return false;
+                GameObject pf = null; Vector3 lp = Vector3.zero, le = Vector3.zero; bool left = false; string src = "";
+                if (wp.itemRightOverride != null) { pf = wp.itemRightOverride; lp = wp.itemRightLocalPos; le = wp.itemRightLocalEuler; src = "itemRightOverride"; }
+                else if (wp.itemLeftOverride != null) { pf = wp.itemLeftOverride; lp = wp.itemLeftLocalPos; le = wp.itemLeftLocalEuler; left = true; src = "itemLeftOverride"; }
+                else
+                {
+                    if (weaponItemPreset == null)
+                    {
+                        weaponItemPreset = new System.Collections.Generic.Dictionary<string, InteractablePreset>();
+                        foreach (var ip in Resources.FindObjectsOfTypeAll<InteractablePreset>())
+                            if (ip != null && ip.weapon != null && ip.prefab != null && !weaponItemPreset.ContainsKey(ip.weapon.name)) weaponItemPreset[ip.weapon.name] = ip;
+                    }
+                    InteractablePreset ipr;
+                    if (weaponItemPreset.TryGetValue(wp.name, out ipr)) { pf = ipr.prefab; src = "модель предмета " + ipr.name; }
+                }
+                if (pf == null) { Plugin.L.LogWarning("[WEAPON] нет модели для '" + wp.name + "', показываю как есть"); return false; }
+                Transform bone = FindHandBone(left);
+                if (bone == null) return false;
+                var cont = Container(bone);
+                if (left) heldL = cont; else heldR = cont;
+                var inst = UnityEngine.Object.Instantiate<GameObject>(pf);
+                inst.name = "WeaponModel";
+                inst.transform.SetParent(cont.transform, false);
+                inst.transform.localPosition = lp;
+                inst.transform.localRotation = Quaternion.Euler(le);
+                inst.transform.localScale = Vector3.one;
+                foreach (var c in inst.GetComponentsInChildren<Collider>(true)) UnityEngine.Object.Destroy(c);
+                foreach (var rb in inst.GetComponentsInChildren<Rigidbody>(true)) UnityEngine.Object.Destroy(rb);
+                SetLayerRec(cont.transform, bone.gameObject.layer);
+                inst.SetActive(true);
+                heldU = 1f;
+                heldWeaponMode = true;
+                Plugin.L.LogInfo($"[WEAPON] модель '{wp.name}' в руке аватара: источник {src}, кость {bone.name}, локальная поза {lp} / {le}, масштаб кости {bone.lossyScale}");
+                return true;
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[WEAPON] модель в руке: " + e.Message); ClearHeld(); return false; }
+        }
+
         static void BuildHeld()
         {
             ClearHeld();
-            if (remoteHeld.Count == 0 || avatarModel == null) return;
+            if (avatarModel == null) return;
+            if (remoteWeaponName != "" && BuildWeaponModel()) return;
+            if (remoteHeld.Count == 0) return;
             if (meshCache.Count == 0) RebuildCaches();
-            var bl = (handNameL != "" ? FindDeep(avatarModel, handNameL) : null) ?? FindDeep(avatarModel, "LowerArmLeft");
-            var br = (handNameR != "" ? FindDeep(avatarModel, handNameR) : null) ?? FindDeep(avatarModel, "LowerArmRight");
+            var bl = FindHandBone(true);
+            var br = FindHandBone(false);
             string hand = (Plugin.CfgHeldHand.Value ?? "Auto").Trim().ToLowerInvariant();
             int made = 0;
             foreach (var p in remoteHeld)
@@ -7588,13 +7975,18 @@ namespace SodCoop
         static void UpdateHeld()
         {
             if (avatarModel == null) return;
-            if (remoteHeldDirty || (heldL == null && heldR == null && remoteHeld.Count > 0 && Plugin.CfgHeldShow.Value && Time.realtimeSinceStartup > meshMissAt))
+            if (remoteHeldDirty || (heldL == null && heldR == null && (remoteHeld.Count > 0 || remoteWeaponName != "") && Plugin.CfgHeldShow.Value && Time.realtimeSinceStartup > meshMissAt))
             {
                 remoteHeldDirty = false;
                 meshMissAt = Math.Max(meshMissAt, Time.realtimeSinceStartup + 2f);
                 if (Plugin.CfgHeldShow.Value) BuildHeld(); else ClearHeld();
             }
             if (heldL == null && heldR == null) return;
+            if (heldWeaponMode)
+            {
+                ApplyHeld(heldR ?? heldL, ParseV3(Plugin.CfgWpnPos.Value, Vector3.zero), Quaternion.Euler(ParseV3(Plugin.CfgWpnRot.Value, Vector3.zero)), Plugin.CfgWpnScale.Value);
+                return;
+            }
             Vector3 pos = ParseV3(Plugin.CfgHeldPos.Value, Vector3.zero);
             Quaternion rot = Quaternion.Euler(ParseV3(Plugin.CfgHeldRot.Value, Vector3.zero));
             float sc = Plugin.CfgHeldScale.Value;
@@ -7949,7 +8341,15 @@ namespace SodCoop
             }
             else if (type == MsgSound)
             {
-                if (!IsHost && Plugin.CfgNpcSync.Value) OnSoundMessage(reader);
+                OnSoundMessage(reader);
+            }
+            else if (type == MsgShot)
+            {
+                OnShotMessage(reader);
+            }
+            else if (type == MsgWeapon)
+            {
+                OnWeaponMessage(reader);
             }
             else if (type == MsgNpcAct)
             {
