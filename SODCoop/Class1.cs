@@ -20,7 +20,7 @@ namespace SodCoop
 {
     public enum NetMode { Off, Host, Client }
 
-    [BepInPlugin("com.yourname.sodcoop", "SodCoop", "0.9.62")]
+    [BepInPlugin("com.yourname.sodcoop", "SodCoop", "0.10.0")]
     public class Plugin : BasePlugin
     {
         internal static ManualLogSource L;
@@ -34,6 +34,7 @@ namespace SodCoop
         internal static ConfigEntry<bool> CfgUseCitizenModel;
         internal static ConfigEntry<float> CfgAvatarYOffset;
         internal static ConfigEntry<float> CfgAvatarScale;
+        internal static ConfigEntry<int> CfgMaxPlayers;
         internal static ConfigEntry<float> CfgAvatarYawOffset;
         internal static ConfigEntry<float> CfgMaxSpeed;
         internal static ConfigEntry<int> CfgArmsState;
@@ -124,6 +125,8 @@ namespace SodCoop
                 "Use a cloned NPC model for the other player (false = green capsule)");
             CfgAvatarYOffset = Config.Bind("Avatar", "YOffset", 0f,
                 "Extra vertical offset of the avatar in meters (if it floats above or sinks into the floor)");
+            CfgMaxPlayers = Config.Bind("Network", "MaxPlayers", 4,
+                "Maximum number of players on the server including the host (2..4). Host only");
             CfgAvatarScale = Config.Bind("Avatar", "Scale", 0.92f,
                 "Size of the other player's avatar relative to the model (1 = as is). Lower it if the avatar looks taller than NPCs; edit while the game runs");
             CfgAvatarYawOffset = Config.Bind("Avatar", "YawOffset", 0f,
@@ -2002,7 +2005,7 @@ namespace SodCoop
                             using (var bw = new BinaryWriter(ms))
                             {
                                 bw.Write(A); bw.Write(Net.RtName ?? ""); bw.Write(!string.IsNullOrEmpty(Net.RtPassword));
-                                bw.Write(Net.PlayerCount); bw.Write(2); bw.Write(Net.RtPort); bw.Write(Net.SeedInfo()); bw.Write(Net.BuildInfo());
+                                bw.Write(Net.PlayerCount); bw.Write(Net.MaxPlayersPublic); bw.Write(Net.RtPort); bw.Write(Net.SeedInfo()); bw.Write(Net.BuildInfo());
                             }
                             var rb = ms.ToArray();
                             hostSock.Send(rb, rb.Length, ep);
@@ -2230,7 +2233,7 @@ namespace SodCoop
             fPass = GUI.PasswordField(new Rect(x, y, 600f, 40f), fPass ?? "", '*', 32, field); y += 56f;
             GUI.Label(new Rect(x, y, 600f, 30f), "Port", lab); y += 32f;
             fPort = GUI.TextField(new Rect(x, y, 200f, 40f), fPort ?? "", 5, field); y += 56f;
-            GUI.Label(new Rect(x, y, 800f, 30f), "Max players: 2 (more in a future version)", lab);
+            GUI.Label(new Rect(x, y, 800f, 30f), "Max players: " + Mathf.Clamp(Plugin.CfgMaxPlayers.Value, 2, 4) + " (Network/MaxPlayers in the config, 2..4)", lab);
             y += 50f;
             GUI.Label(new Rect(x, y, 1100f, 30f), "HOST returns to the main menu: load a save or start a new game yourself. The server starts when the city has loaded.", lab); y += 60f;
             if (GUI.Button(new Rect(x, y, 300f, 50f), "HOST (LOAD GAME)", btn)) StartHost(false);
@@ -2546,6 +2549,260 @@ namespace SodCoop
     internal static class Net
     {
         const string Key = "sodcoop-1";
+
+        // ---------- контекст удалённого игрока ----------
+        // Состояние одного второго игрока. Статические поля ниже (avatar, puppet, remote*...) - рабочая копия активного игрока:
+        // Enter(rp) загружает их из rp, Leave() сохраняет обратно. Так весь код аватара работает на любое число игроков.
+        sealed class RP
+        {
+            public int pid; public NetPeer peer; public string clientId = ""; public string label = "";
+            public float combatUntil;
+            public bool attackAlt;
+            public string remoteItem = "";
+            public GameObject avatar;
+            public Vector3 targetPos;
+            public float targetYaw;
+            public bool avatarSnap;
+            public Animator avatarAnim;
+            public Transform avatarModel;
+            public Vector3 modelBaseScale = Vector3.one;
+            public Vector3 modelBasePos;
+            public Quaternion modelBaseRot = Quaternion.identity;
+            public Transform boneUL;
+            public Transform boneUR;
+            public Transform boneLL;
+            public Transform boneLR;
+            public Transform boneTorso;
+            public float remoteLean;
+            public float leanSmooth;
+            public bool remoteBlocking;
+            public bool remoteConsuming;
+            public bool remoteSitting;
+            public bool paramSit;
+            public bool paramCrouch;
+            public bool remoteCarryObj;
+            public float sitK;
+            public float crouchBoneK;
+            public float crouchAnimK;
+            public float crouchK;
+            public bool remoteCrouched;
+            public bool remoteRunning;
+            public bool remoteFists;
+            public float armsW;
+            public float animSpeed;
+            public Appearance remoteApp;
+            public string remoteAppJson = "";
+            public bool remotePending;
+            public int remoteTries;
+            public List<Renderer> remoteLod = new List<Renderer>();
+            public Citizen puppet;
+            public int puppetId = -1;
+            public float puppetAt;
+            public float puppetAiAt;
+            public float puppetLocAt;
+            public float puppetIdAt;
+            public float puppetHideAt;
+            public bool puppetCrouch;
+            public Renderer[] puppetRends;
+            public Collider[] puppetCols;
+            public int puppetHideId = -1;
+            public float puppetClientHideAt;
+            public string remoteWeaponName = "";
+            public int remoteWeaponCao = -1;
+            public List<HeldPart> remoteHeld = new List<HeldPart>();
+            public bool remoteHeldDirty;
+            public string remoteHeldSig = "";
+            public GameObject heldL;
+            public GameObject heldR;
+            public float meshMissAt;
+            public float heldU = 1f;
+            public bool heldWeaponMode;
+            public string poseCur = "";
+            public int poseLayer = -1;
+            public int posePrevHash;
+            public int posePrevLayer;
+            public bool poseAnimCrouch;
+            public bool poseAnimLean;
+            public bool poseAnimSit;
+            public float poseKick;
+            public bool fxDead;
+            public float fxDeadUntil;
+            public float fxHitAt;
+            public Transform mapTracked;
+        }
+
+        static readonly List<RP> players = new List<RP>();
+        static RP curRp;
+        internal static int MyPid;   // у хоста 0, у клиента номер, выданный хостом
+
+        static RP RpByPid(int pid) { for (int i = 0; i < players.Count; i++) if (players[i].pid == pid) return players[i]; return null; }
+        static RP RpByPeer(NetPeer peer) { if (peer == null) return null; for (int i = 0; i < players.Count; i++) if (players[i].peer == peer) return players[i]; return null; }
+
+        static void Enter(RP rp)
+        {
+            if (rp == curRp) return;
+            Leave();
+            if (rp == null) return;
+            LoadRp(rp); curRp = rp;
+        }
+        static void Leave() { if (curRp == null) return; SaveRp(curRp); curRp = null; }
+        // для кода, который читает поля игроков вне цикла: свежие значения активного игрока попадают в его RP
+        static void SyncCur() { if (curRp != null) SaveRp(curRp); }
+
+        static void LoadRp(RP r)
+        {
+            combatUntil = r.combatUntil;
+            attackAlt = r.attackAlt;
+            remoteItem = r.remoteItem;
+            avatar = r.avatar;
+            targetPos = r.targetPos;
+            targetYaw = r.targetYaw;
+            avatarSnap = r.avatarSnap;
+            avatarAnim = r.avatarAnim;
+            avatarModel = r.avatarModel;
+            modelBaseScale = r.modelBaseScale;
+            modelBasePos = r.modelBasePos;
+            modelBaseRot = r.modelBaseRot;
+            boneUL = r.boneUL;
+            boneUR = r.boneUR;
+            boneLL = r.boneLL;
+            boneLR = r.boneLR;
+            boneTorso = r.boneTorso;
+            remoteLean = r.remoteLean;
+            leanSmooth = r.leanSmooth;
+            remoteBlocking = r.remoteBlocking;
+            remoteConsuming = r.remoteConsuming;
+            remoteSitting = r.remoteSitting;
+            paramSit = r.paramSit;
+            paramCrouch = r.paramCrouch;
+            remoteCarryObj = r.remoteCarryObj;
+            sitK = r.sitK;
+            crouchBoneK = r.crouchBoneK;
+            crouchAnimK = r.crouchAnimK;
+            crouchK = r.crouchK;
+            remoteCrouched = r.remoteCrouched;
+            remoteRunning = r.remoteRunning;
+            remoteFists = r.remoteFists;
+            armsW = r.armsW;
+            animSpeed = r.animSpeed;
+            remoteApp = r.remoteApp;
+            remoteAppJson = r.remoteAppJson;
+            remotePending = r.remotePending;
+            remoteTries = r.remoteTries;
+            remoteLod = r.remoteLod;
+            puppet = r.puppet;
+            puppetId = r.puppetId;
+            puppetAt = r.puppetAt;
+            puppetAiAt = r.puppetAiAt;
+            puppetLocAt = r.puppetLocAt;
+            puppetIdAt = r.puppetIdAt;
+            puppetHideAt = r.puppetHideAt;
+            puppetCrouch = r.puppetCrouch;
+            puppetRends = r.puppetRends;
+            puppetCols = r.puppetCols;
+            puppetHideId = r.puppetHideId;
+            puppetClientHideAt = r.puppetClientHideAt;
+            remoteWeaponName = r.remoteWeaponName;
+            remoteWeaponCao = r.remoteWeaponCao;
+            remoteHeld = r.remoteHeld;
+            remoteHeldDirty = r.remoteHeldDirty;
+            remoteHeldSig = r.remoteHeldSig;
+            heldL = r.heldL;
+            heldR = r.heldR;
+            meshMissAt = r.meshMissAt;
+            heldU = r.heldU;
+            heldWeaponMode = r.heldWeaponMode;
+            poseCur = r.poseCur;
+            poseLayer = r.poseLayer;
+            posePrevHash = r.posePrevHash;
+            posePrevLayer = r.posePrevLayer;
+            poseAnimCrouch = r.poseAnimCrouch;
+            poseAnimLean = r.poseAnimLean;
+            poseAnimSit = r.poseAnimSit;
+            poseKick = r.poseKick;
+            fxDead = r.fxDead;
+            fxDeadUntil = r.fxDeadUntil;
+            fxHitAt = r.fxHitAt;
+            mapTracked = r.mapTracked;
+        }
+
+        static void SaveRp(RP r)
+        {
+            r.combatUntil = combatUntil;
+            r.attackAlt = attackAlt;
+            r.remoteItem = remoteItem;
+            r.avatar = avatar;
+            r.targetPos = targetPos;
+            r.targetYaw = targetYaw;
+            r.avatarSnap = avatarSnap;
+            r.avatarAnim = avatarAnim;
+            r.avatarModel = avatarModel;
+            r.modelBaseScale = modelBaseScale;
+            r.modelBasePos = modelBasePos;
+            r.modelBaseRot = modelBaseRot;
+            r.boneUL = boneUL;
+            r.boneUR = boneUR;
+            r.boneLL = boneLL;
+            r.boneLR = boneLR;
+            r.boneTorso = boneTorso;
+            r.remoteLean = remoteLean;
+            r.leanSmooth = leanSmooth;
+            r.remoteBlocking = remoteBlocking;
+            r.remoteConsuming = remoteConsuming;
+            r.remoteSitting = remoteSitting;
+            r.paramSit = paramSit;
+            r.paramCrouch = paramCrouch;
+            r.remoteCarryObj = remoteCarryObj;
+            r.sitK = sitK;
+            r.crouchBoneK = crouchBoneK;
+            r.crouchAnimK = crouchAnimK;
+            r.crouchK = crouchK;
+            r.remoteCrouched = remoteCrouched;
+            r.remoteRunning = remoteRunning;
+            r.remoteFists = remoteFists;
+            r.armsW = armsW;
+            r.animSpeed = animSpeed;
+            r.remoteApp = remoteApp;
+            r.remoteAppJson = remoteAppJson;
+            r.remotePending = remotePending;
+            r.remoteTries = remoteTries;
+            r.remoteLod = remoteLod;
+            r.puppet = puppet;
+            r.puppetId = puppetId;
+            r.puppetAt = puppetAt;
+            r.puppetAiAt = puppetAiAt;
+            r.puppetLocAt = puppetLocAt;
+            r.puppetIdAt = puppetIdAt;
+            r.puppetHideAt = puppetHideAt;
+            r.puppetCrouch = puppetCrouch;
+            r.puppetRends = puppetRends;
+            r.puppetCols = puppetCols;
+            r.puppetHideId = puppetHideId;
+            r.puppetClientHideAt = puppetClientHideAt;
+            r.remoteWeaponName = remoteWeaponName;
+            r.remoteWeaponCao = remoteWeaponCao;
+            r.remoteHeld = remoteHeld;
+            r.remoteHeldDirty = remoteHeldDirty;
+            r.remoteHeldSig = remoteHeldSig;
+            r.heldL = heldL;
+            r.heldR = heldR;
+            r.meshMissAt = meshMissAt;
+            r.heldU = heldU;
+            r.heldWeaponMode = heldWeaponMode;
+            r.poseCur = poseCur;
+            r.poseLayer = poseLayer;
+            r.posePrevHash = posePrevHash;
+            r.posePrevLayer = posePrevLayer;
+            r.poseAnimCrouch = poseAnimCrouch;
+            r.poseAnimLean = poseAnimLean;
+            r.poseAnimSit = poseAnimSit;
+            r.poseKick = poseKick;
+            r.fxDead = fxDead;
+            r.fxDeadUntil = fxDeadUntil;
+            r.fxHitAt = fxHitAt;
+            r.mapTracked = mapTracked;
+        }
+
         const byte MsgHello = 1;
         const byte MsgHelloReply = 2;
         const byte MsgPos = 3;
@@ -2577,6 +2834,9 @@ namespace SodCoop
         const byte MsgBodyFx = 17;      // игрок -> игрок: меня ударили / я упал / я встал / я умер (для анимации аватара)
         const byte MsgShot = 24;        // игрок -> игрок: я выстрелил (оружие, дуло, точка прицеливания)
         const byte MsgWeapon = 25;      // игрок -> игрок: какое оружие у меня в руках
+        const byte MsgRelay = 26;       // хост -> клиент: [pid отправителя][тип][данные] - сообщение другого клиента
+        const byte MsgPlayerInfo = 27;  // хост -> клиент: [pid][внешний вид] - сведения о другом игроке
+        const byte MsgPlayerLeft = 28;  // хост -> клиент: [pid] - игрок вышел
         const byte MsgSound = 16;       // хост -> клиент: звук горожанина в бою
         const byte MsgPuppetHurt = 13;  // хост -> клиент: горожанин ударил двойника = ударил тебя
 
@@ -2682,7 +2942,18 @@ namespace SodCoop
         {
             try
             {
-                if (!remoteSitting || avatar == null || it == null || enter == null) return false;
+                if (it == null || enter == null || players.Count == 0) return false;
+                SyncCur();
+                RP sitter = null; float bestD = float.MaxValue;
+                for (int pi = 0; pi < players.Count; pi++)
+                {
+                    var o = players[pi];
+                    if (!o.remoteSitting || o.avatar == null) continue;
+                    Vector3 dd = it.wPos - o.avatar.transform.position; dd.y = 0f;
+                    if (dd.sqrMagnitude < bestD) { bestD = dd.sqrMagnitude; sitter = o; }
+                }
+                if (sitter == null) return false;
+                var avatar = sitter.avatar;
                 string tn = enter.name ?? "";
                 if (tn.IndexOf("exit", StringComparison.OrdinalIgnoreCase) >= 0) return false;
                 bool match = false;
@@ -2831,13 +3102,14 @@ namespace SodCoop
             catch (Exception) { }
         }
 
-        internal static int PlayerCount { get { try { return manager == null ? 1 : manager.ConnectedPeersCount + 1; } catch (Exception) { return 1; } } }
+        internal static int PlayerCount { get { try { return manager == null ? 1 : players.Count + 1; } catch (Exception) { return 1; } } }
+        internal static int MaxPlayersPublic { get { return MaxPlayersNow(); } }
         internal static string SeedInfo() { try { return "" + CityData.Instance.seed; } catch (Exception) { return ""; } }
         internal static string BuildInfo() { try { return "" + Game.Instance.buildID; } catch (Exception) { return ""; } }
 
         // ---- уведомления, отключение и переподключение ----
         static readonly List<KeyValuePair<string, float>> toasts = new List<KeyValuePair<string, float>>();
-        static NetPeer gamePeer;                 // хост: подключённый игрок
+        static readonly string MyClientId = Guid.NewGuid().ToString("N");   // клиент: по нему хост узнаёт переподключившегося игрока
         static float lostAt = -1f;               // клиент: когда потеряна связь с хостом (-1 = связь есть/не терялась)
         static bool everConnected;               // клиент: уже был в игре на этом сервере
         static GUIStyle hudStyle, hudShadow;
@@ -2900,18 +3172,18 @@ namespace SodCoop
             Plugin.L.LogInfo("[NET] End: выход из мультиплеера");
             ApplyOff();
             if (wasClient) ClientReleaseWorld();
-            gamePeer = null; lostAt = -1f; everConnected = false;
+            lostAt = -1f; everConnected = false;
             Toast("Multiplayer is off. Use the MULTIPLAYER button in the main menu to start again.");
         }
 
         internal static void Shutdown()
         {
-            gamePeer = null; lostAt = -1f; everConnected = false; weaponSent = null; remoteWeaponName = ""; remoteWeaponCao = -1;
+            lostAt = -1f; everConnected = false; weaponSent = null;
             try { Lan.StopAdvertise(); } catch (Exception) { }
             try { if (manager != null) manager.Stop(); } catch (Exception) { }
             manager = null; listener = null; serverPeer = null; connecting = false; connectRejected = false; Started = false;
-            try { DestroyAvatar(); } catch (Exception) { }
-            remoteApp = null; remoteAppJson = "";
+            try { ClearPlayers(); } catch (Exception) { }
+            MyPid = 0;
         }
 
         internal static void ApplyHost(string name, string pass, int port)
@@ -2939,7 +3211,7 @@ namespace SodCoop
             if (MenuAuto.Notice != "") return MenuAuto.Notice;
             if (RtMode == NetMode.Off) return "";
             if (RtMode == NetMode.Host && sendStage != 0) return "HOSTING: sending the save to a player...";
-            if (RtMode == NetMode.Host) return (manager != null ? "HOSTING" : "HOST (starts when the city has loaded)") + ": " + RtName + " : " + RtPort + (manager != null ? (gamePeer != null ? "   [2/2 players]" : "   [1/2 players, waiting]") + "   (End = stop)" : "");
+            if (RtMode == NetMode.Host) return (manager != null ? "HOSTING" : "HOST (starts when the city has loaded)") + ": " + RtName + " : " + RtPort + (manager != null ? "   [" + (players.Count + 1) + "/" + Mathf.Clamp(Plugin.CfgMaxPlayers.Value, 2, 4) + " players" + (players.Count == 0 ? ", waiting" : "") + "]   (End = stop)" : "");
             if (connectRejected) return "REJECTED by " + RtAddress + ":" + RtPort + " (wrong password?)";
             if (serverPeer != null) return "CONNECTED to " + RtAddress + ":" + RtPort + "   (End = leave multiplayer)";
             if (lostAt >= 0f && manager != null) return "CONNECTION LOST, reconnecting to " + RtAddress + ":" + RtPort + " ...   (End = leave multiplayer)";
@@ -3009,7 +3281,7 @@ namespace SodCoop
         }
 
         // ---- клиент ----
-        static void ClientOnMeta(NetPacketReader r)
+        static void ClientOnMeta(NetDataReader r)
         {
             xfFiles.Clear();
             int n = r.GetInt();
@@ -3035,7 +3307,7 @@ namespace SodCoop
             xferText = "Receiving the save...";
         }
 
-        static void ClientOnChunk(NetPacketReader r)
+        static void ClientOnChunk(NetDataReader r)
         {
             int idx = r.GetByte(); int n = r.GetInt();
             var buf = new byte[n]; r.GetBytes(buf, 0, n);
@@ -3201,7 +3473,7 @@ namespace SodCoop
             catch (Exception e) { HostFail("send error: " + e.Message); }
         }
 
-        static void HostOnWant(NetPacketReader r)
+        static void HostOnWant(NetDataReader r)
         {
             if (sendStage != 2 || sendFiles == null) return;
             int n = r.GetInt();
@@ -3326,6 +3598,7 @@ namespace SodCoop
                             w.Put(MsgHello);
                             w.Put(Describe());
                             w.Put(MyAppearanceJson());
+                            w.Put(MyClientId);
                         }
                         peer.Send(w, DeliveryMethod.ReliableOrdered);
                     }
@@ -3334,14 +3607,14 @@ namespace SodCoop
                 listener.PeerDisconnectedEvent += (peer, info) =>
                 {
                     Plugin.L.LogInfo($"[NET] Отключение: {peer}, причина: {info.Reason}");
-                    DestroyAvatar();
-                    if (IsHost && peer == gamePeer)
+                    if (IsHost)
                     {
-                        gamePeer = null;
-                        Toast("The other player left the game (" + info.Reason + ").");
+                        var gone = RpByPeer(peer);
+                        if (gone != null) RemovePlayer(gone, "" + info.Reason);
                     }
                     if (!IsHost)
                     {
+                        ClearPlayers();
                         bool hadHost = serverPeer != null && !xferMode;
                         serverPeer = null;
                         if (hadHost && info.Reason != DisconnectReason.ConnectionRejected)
@@ -3367,7 +3640,7 @@ namespace SodCoop
 
                 listener.NetworkReceiveEvent += (peer, reader, channel, method) =>
                 {
-                    try { OnReceive(peer, reader); }
+                    try { OnReceive(peer, reader, method); }
                     finally { reader.Recycle(); }
                 };
 
@@ -3423,6 +3696,7 @@ namespace SodCoop
         {
             bool debug = Plugin.CfgDebugAvatar.Value;
             if (manager == null && !debug) return;
+            Leave();
             try
             {
                 float dt = Time.unscaledDeltaTime;
@@ -3437,9 +3711,12 @@ namespace SodCoop
                     if (fwd.sqrMagnitude < 0.001f) fwd = Vector3.forward;
                     fwd = fwd.normalized;
                     Vector3 flat = origin + fwd * 3f;
+                    var drp = RpByPid(0) ?? (players.Count == 0 ? NewRp(0) : players[0]);
+                    Enter(drp);
                     targetPos = new Vector3(flat.x, FeetY(p), flat.z);
                     targetYaw = LookYaw(p) + 180f;
                     if (avatar == null) CreateAvatar();
+                    Leave();
                 }
                 PollRemoteModel();
 
@@ -3513,140 +3790,146 @@ namespace SodCoop
                     DoorTick();
                 }
 
-                // Плавное движение удалённого игрока
-                if (avatar != null)
+                // Плавное движение удалённых игроков
+                for (int pi = 0; pi < players.Count; pi++)
                 {
-                    var tr = avatar.transform;
-                    Vector3 tp = targetPos + new Vector3(0f, Plugin.CfgAvatarYOffset.Value, 0f);
-                    Quaternion tq = Quaternion.Euler(0f, targetYaw + Plugin.CfgAvatarYawOffset.Value, 0f);
+                    Enter(players[pi]);
+                    if (avatar != null)
+                    {
+                        var tr = avatar.transform;
+                        Vector3 tp = targetPos + new Vector3(0f, Plugin.CfgAvatarYOffset.Value, 0f);
+                        Quaternion tq = Quaternion.Euler(0f, targetYaw + Plugin.CfgAvatarYawOffset.Value, 0f);
 
-                    Vector3 before = tr.position;
-                    if (avatarSnap || (tr.position - tp).sqrMagnitude > 25f)
-                    {
-                        avatarSnap = false;
-                        tr.position = tp;
-                        tr.rotation = tq;
-                        animSpeed = 0f;
-                    }
-                    else
-                    {
-                        float k = 1f - Mathf.Exp(-15f * dt);
-                        tr.position = Vector3.Lerp(tr.position, tp, k);
-                        tr.rotation = Quaternion.Slerp(tr.rotation, tq, k);
-                        Vector3 d = tr.position - before;
-                        d.y = 0f;
-                        float inst = dt > 0.0001f ? d.magnitude / dt : 0f;
-                        animSpeed = Mathf.Lerp(animSpeed, inst, 1f - Mathf.Exp(-8f * dt));
-                    }
-
-                    // Анимация ходьбы: параметр moveSpeed (0..1) по скорости перемещения
-                    if (avatarAnim != null)
-                    {
-                        float ms = Mathf.Clamp01(animSpeed / Plugin.CfgMaxSpeed.Value);
-                        if (remoteRunning && animSpeed > 0.5f) ms = 1f;
-                        if (ms < 0.03f) ms = 0f;
-                        avatarAnim.SetFloat("moveSpeed", ms);
-                        bool combat = remoteFists || Time.realtimeSinceStartup < combatUntil;
-                        int cao = Plugin.CfgCombatArms.Value;
-                        int armsSt = Plugin.CfgArmsState.Value;
-                        if (remoteBlocking)
+                        Vector3 before = tr.position;
+                        if (avatarSnap || (tr.position - tp).sqrMagnitude > 25f)
                         {
-                            combat = true; cao = Plugin.CfgBlockCao.Value;
-                            if (Plugin.CfgBlockArms.Value >= 0) armsSt = Plugin.CfgBlockArms.Value;
+                            avatarSnap = false;
+                            tr.position = tp;
+                            tr.rotation = tq;
+                            animSpeed = 0f;
                         }
-                        if (!remoteBlocking && remoteWeaponCao >= 0) { combat = true; cao = remoteWeaponCao; }
-                        int itemArms = remoteBlocking ? -1 : ItemArms(remoteItem);
-                        if (remoteConsuming && remoteHeld.Count > 0 && !combat && Plugin.CfgConsumeArms.Value >= 0) itemArms = Plugin.CfgConsumeArms.Value;
-                        if (itemArms >= 0 && !combat) armsSt = itemArms;
-                        if (Plugin.CfgDebugCycle.Value)
+                        else
                         {
-                            // Подбор: каждые 5 с следующее значение combatArmsOverride, каждые 2 с удар
-                            combat = true;
-                            float t = Time.realtimeSinceStartup;
-                            cao = (int)(t / 5f) % 6;
-                            if (cao != lastCycleCao) { lastCycleCao = cao; Plugin.Dbg($"[ANIM] подбор: combatArmsOverride={cao}"); }
-                            if (t >= nextCycleAttack)
+                            float k = 1f - Mathf.Exp(-15f * dt);
+                            tr.position = Vector3.Lerp(tr.position, tp, k);
+                            tr.rotation = Quaternion.Slerp(tr.rotation, tq, k);
+                            Vector3 d = tr.position - before;
+                            d.y = 0f;
+                            float inst = dt > 0.0001f ? d.magnitude / dt : 0f;
+                            animSpeed = Mathf.Lerp(animSpeed, inst, 1f - Mathf.Exp(-8f * dt));
+                        }
+
+                        // Анимация ходьбы: параметр moveSpeed (0..1) по скорости перемещения
+                        if (avatarAnim != null)
+                        {
+                            float ms = Mathf.Clamp01(animSpeed / Plugin.CfgMaxSpeed.Value);
+                            if (remoteRunning && animSpeed > 0.5f) ms = 1f;
+                            if (ms < 0.03f) ms = 0f;
+                            avatarAnim.SetFloat("moveSpeed", ms);
+                            bool combat = remoteFists || Time.realtimeSinceStartup < combatUntil;
+                            int cao = Plugin.CfgCombatArms.Value;
+                            int armsSt = Plugin.CfgArmsState.Value;
+                            if (remoteBlocking)
                             {
-                                nextCycleAttack = t + 2f;
-                                avatarAnim.SetTrigger("attack");
+                                combat = true; cao = Plugin.CfgBlockCao.Value;
+                                if (Plugin.CfgBlockArms.Value >= 0) armsSt = Plugin.CfgBlockArms.Value;
                             }
-                        }
-                        avatarAnim.SetBool("inCombat", combat);
-                        avatarAnim.SetInteger("combatArmsOverride", combat ? cao : 0);
-
-                        // Руки свободны: отключаем слои-оверрайды (ArmsOverride, UmbrellaOverride)
-                        // и состояния "несёт предмет"
-                        int lc = avatarAnim.layerCount;
-                        armsW = Mathf.MoveTowards(armsW, ((combat || itemArms >= 0 || (Plugin.CfgCarryAnim.Value && (remoteHeld.Count > 0 || remoteCarryObj))) && lc > 1) ? 1f : 0f, dt * 5f);
-                        for (int li = 1; li < lc; li++)
-                            avatarAnim.SetLayerWeight(li, li == 1 ? armsW : 0f);
-                        bool carrying = Plugin.CfgCarryAnim.Value && !combat && ((remoteHeld.Count > 0 && (itemArms < 0 || remoteConsuming)) || remoteCarryObj);
-                        avatarAnim.SetBool("carryingItem", carrying);
-                        avatarAnim.SetInteger("carryItem", carrying ? (remoteCarryObj ? Plugin.CfgCarryObjValue.Value : Plugin.CfgCarryValue.Value) : 0);
-                        avatarAnim.SetBool("armsLock", false);
-                        avatarAnim.SetInteger("ArmsState", armsSt);
-                        int idleVal = Plugin.CfgIdleState.Value;
-                        paramSit = remoteSitting && Plugin.CfgSitIdleValue.Value >= 0;
-                        paramCrouch = !paramSit && remoteCrouched && Plugin.CfgCrouchIdleValue.Value >= 0 && animSpeed < 0.3f;
-                        if (paramSit) idleVal = Plugin.CfgSitIdleValue.Value;
-                        else if (paramCrouch) idleVal = Plugin.CfgCrouchIdleValue.Value;
-                        avatarAnim.SetInteger("IdleAnimationState", idleVal);
-
-                        // Ручной подбор из конфига (Debug.Force*)
-                        if (Plugin.CfgForceCombat.Value >= 0) avatarAnim.SetBool("inCombat", Plugin.CfgForceCombat.Value > 0);
-                        if (Plugin.CfgForceCao.Value >= 0) avatarAnim.SetInteger("combatArmsOverride", Plugin.CfgForceCao.Value);
-                        if (Plugin.CfgForceArms.Value >= 0) avatarAnim.SetInteger("ArmsState", Plugin.CfgForceArms.Value);
-                        if (Plugin.CfgForceIdle.Value >= 0) avatarAnim.SetInteger("IdleAnimationState", Plugin.CfgForceIdle.Value);
-                        string ls = Plugin.CfgForceLayers.Value ?? "";
-                        if (ls != layersStr)
-                        {
-                            layersStr = ls;
-                            var parts = ls.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                            layersVal = new float[parts.Length];
-                            for (int pi = 0; pi < parts.Length; pi++)
+                            if (!remoteBlocking && remoteWeaponCao >= 0) { combat = true; cao = remoteWeaponCao; }
+                            int itemArms = remoteBlocking ? -1 : ItemArms(remoteItem);
+                            if (remoteConsuming && remoteHeld.Count > 0 && !combat && Plugin.CfgConsumeArms.Value >= 0) itemArms = Plugin.CfgConsumeArms.Value;
+                            if (itemArms >= 0 && !combat) armsSt = itemArms;
+                            if (Plugin.CfgDebugCycle.Value)
                             {
-                                float fv;
-                                float.TryParse(parts[pi], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out fv);
-                                layersVal[pi] = fv;
+                                // Подбор: каждые 5 с следующее значение combatArmsOverride, каждые 2 с удар
+                                combat = true;
+                                float t = Time.realtimeSinceStartup;
+                                cao = (int)(t / 5f) % 6;
+                                if (cao != lastCycleCao) { lastCycleCao = cao; Plugin.Dbg($"[ANIM] подбор: combatArmsOverride={cao}"); }
+                                if (t >= nextCycleAttack)
+                                {
+                                    nextCycleAttack = t + 2f;
+                                    avatarAnim.SetTrigger("attack");
+                                }
                             }
+                            avatarAnim.SetBool("inCombat", combat);
+                            avatarAnim.SetInteger("combatArmsOverride", combat ? cao : 0);
+
+                            // Руки свободны: отключаем слои-оверрайды (ArmsOverride, UmbrellaOverride)
+                            // и состояния "несёт предмет"
+                            int lc = avatarAnim.layerCount;
+                            armsW = Mathf.MoveTowards(armsW, ((combat || itemArms >= 0 || (Plugin.CfgCarryAnim.Value && (remoteHeld.Count > 0 || remoteCarryObj))) && lc > 1) ? 1f : 0f, dt * 5f);
+                            for (int li = 1; li < lc; li++)
+                                avatarAnim.SetLayerWeight(li, li == 1 ? armsW : 0f);
+                            bool carrying = Plugin.CfgCarryAnim.Value && !combat && ((remoteHeld.Count > 0 && (itemArms < 0 || remoteConsuming)) || remoteCarryObj);
+                            avatarAnim.SetBool("carryingItem", carrying);
+                            avatarAnim.SetInteger("carryItem", carrying ? (remoteCarryObj ? Plugin.CfgCarryObjValue.Value : Plugin.CfgCarryValue.Value) : 0);
+                            avatarAnim.SetBool("armsLock", false);
+                            avatarAnim.SetInteger("ArmsState", armsSt);
+                            int idleVal = Plugin.CfgIdleState.Value;
+                            paramSit = remoteSitting && Plugin.CfgSitIdleValue.Value >= 0;
+                            paramCrouch = !paramSit && remoteCrouched && Plugin.CfgCrouchIdleValue.Value >= 0 && animSpeed < 0.3f;
+                            if (paramSit) idleVal = Plugin.CfgSitIdleValue.Value;
+                            else if (paramCrouch) idleVal = Plugin.CfgCrouchIdleValue.Value;
+                            avatarAnim.SetInteger("IdleAnimationState", idleVal);
+
+                            // Ручной подбор из конфига (Debug.Force*)
+                            if (Plugin.CfgForceCombat.Value >= 0) avatarAnim.SetBool("inCombat", Plugin.CfgForceCombat.Value > 0);
+                            if (Plugin.CfgForceCao.Value >= 0) avatarAnim.SetInteger("combatArmsOverride", Plugin.CfgForceCao.Value);
+                            if (Plugin.CfgForceArms.Value >= 0) avatarAnim.SetInteger("ArmsState", Plugin.CfgForceArms.Value);
+                            if (Plugin.CfgForceIdle.Value >= 0) avatarAnim.SetInteger("IdleAnimationState", Plugin.CfgForceIdle.Value);
+                            string ls = Plugin.CfgForceLayers.Value ?? "";
+                            if (ls != layersStr)
+                            {
+                                layersStr = ls;
+                                var parts = ls.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                                layersVal = new float[parts.Length];
+                                for (int lk = 0; lk < parts.Length; lk++)
+                                {
+                                    float fv;
+                                    float.TryParse(parts[lk], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out fv);
+                                    layersVal[lk] = fv;
+                                }
+                            }
+                            for (int lk = 0; lk < layersVal.Length && lk + 1 < lc; lk++)
+                                avatarAnim.SetLayerWeight(lk + 1, layersVal[lk]);
                         }
-                        for (int pi = 0; pi < layersVal.Length && pi + 1 < lc; pi++)
-                            avatarAnim.SetLayerWeight(pi + 1, layersVal[pi]);
-                    }
 
-                    // Аниматор выключен и обновляется вручную: так мы можем поверх анимации
-                    // довернуть кости (присед), и игра не перезапишет их до следующего кадра
-                    if (avatarAnim != null) UpdatePose(dt);
-                    if (avatarAnim != null) avatarAnim.Update(dt);
+                        // Аниматор выключен и обновляется вручную: так мы можем поверх анимации
+                        // довернуть кости (присед), и игра не перезапишет их до следующего кадра
+                        if (avatarAnim != null) UpdatePose(dt);
+                        if (avatarAnim != null) avatarAnim.Update(dt);
 
-                    crouchK = Mathf.MoveTowards(crouchK, remoteCrouched ? 1f : 0f, dt * 6f);
-                    crouchBoneK = Mathf.MoveTowards(crouchBoneK, (remoteCrouched && !poseAnimCrouch) ? 1f : 0f, dt * 6f);
-                    crouchAnimK = Mathf.MoveTowards(crouchAnimK, (remoteCrouched && poseAnimCrouch) ? 1f : 0f, dt * 6f);
-                    if (avatarModel != null)
-                    {
-                        // Корпус вниз (ноги уходят в пол) и наклон по Q/E
-                        sitK = Mathf.MoveTowards(sitK, poseAnimSit ? 1f : 0f, dt * 4f);
-                        avatarModel.localScale = modelBaseScale * Mathf.Clamp(Plugin.CfgAvatarScale.Value, 0.3f, 2f);
-                        avatarModel.localPosition = modelBasePos + new Vector3(0f, -(Plugin.CfgCrouchDrop.Value * crouchBoneK + Plugin.CfgDropWithAnim.Value * crouchAnimK + Plugin.CfgSitDrop.Value * sitK), 0f);
-                        leanSmooth = Mathf.Lerp(leanSmooth, remoteLean, 1f - Mathf.Exp(-10f * dt));
-                        avatarModel.localRotation = Quaternion.Euler(0f, 0f, -leanSmooth * (poseAnimLean ? Plugin.CfgTiltWithAnim.Value : Plugin.CfgLeanScale.Value)) * modelBaseRot;
-                    }
-                    UpdateHeld();
+                        crouchK = Mathf.MoveTowards(crouchK, remoteCrouched ? 1f : 0f, dt * 6f);
+                        crouchBoneK = Mathf.MoveTowards(crouchBoneK, (remoteCrouched && !poseAnimCrouch) ? 1f : 0f, dt * 6f);
+                        crouchAnimK = Mathf.MoveTowards(crouchAnimK, (remoteCrouched && poseAnimCrouch) ? 1f : 0f, dt * 6f);
+                        if (avatarModel != null)
+                        {
+                            // Корпус вниз (ноги уходят в пол) и наклон по Q/E
+                            sitK = Mathf.MoveTowards(sitK, poseAnimSit ? 1f : 0f, dt * 4f);
+                            avatarModel.localScale = modelBaseScale * Mathf.Clamp(Plugin.CfgAvatarScale.Value, 0.3f, 2f);
+                            avatarModel.localPosition = modelBasePos + new Vector3(0f, -(Plugin.CfgCrouchDrop.Value * crouchBoneK + Plugin.CfgDropWithAnim.Value * crouchAnimK + Plugin.CfgSitDrop.Value * sitK), 0f);
+                            leanSmooth = Mathf.Lerp(leanSmooth, remoteLean, 1f - Mathf.Exp(-10f * dt));
+                            avatarModel.localRotation = Quaternion.Euler(0f, 0f, -leanSmooth * (poseAnimLean ? Plugin.CfgTiltWithAnim.Value : Plugin.CfgLeanScale.Value)) * modelBaseRot;
+                        }
+                        UpdateHeld();
 
-                    if (crouchBoneK > 0.001f)
-                    {
-                        float hip = Plugin.CfgCrouchHip.Value * crouchBoneK;
-                        float knee = Plugin.CfgCrouchKnee.Value * crouchBoneK;
-                        if (boneUL != null) boneUL.localRotation = boneUL.localRotation * AxisRot(hip);
-                        if (boneUR != null) boneUR.localRotation = boneUR.localRotation * AxisRot(hip);
-                        if (boneLL != null) boneLL.localRotation = boneLL.localRotation * AxisRot(knee);
-                        if (boneLR != null) boneLR.localRotation = boneLR.localRotation * AxisRot(knee);
-                        if (boneTorso != null) boneTorso.localRotation = boneTorso.localRotation * AxisRot(Plugin.CfgCrouchTorso.Value * crouchBoneK);
+                        if (crouchBoneK > 0.001f)
+                        {
+                            float hip = Plugin.CfgCrouchHip.Value * crouchBoneK;
+                            float knee = Plugin.CfgCrouchKnee.Value * crouchBoneK;
+                            if (boneUL != null) boneUL.localRotation = boneUL.localRotation * AxisRot(hip);
+                            if (boneUR != null) boneUR.localRotation = boneUR.localRotation * AxisRot(hip);
+                            if (boneLL != null) boneLL.localRotation = boneLL.localRotation * AxisRot(knee);
+                            if (boneLR != null) boneLR.localRotation = boneLR.localRotation * AxisRot(knee);
+                            if (boneTorso != null) boneTorso.localRotation = boneTorso.localRotation * AxisRot(Plugin.CfgCrouchTorso.Value * crouchBoneK);
+                        }
                     }
                 }
+                Leave();
             }
             catch (Exception e)
             {
+                Leave();
                 if (!errorLogged)
                 {
                     errorLogged = true;
@@ -3680,8 +3963,9 @@ namespace SodCoop
         {
             // Пока мир не загружен, аватар не создаём: иначе вместо персонажа останется капсула
             if (Plugin.CfgUseCitizenModel.Value && !CitizenModelAvailable()) return;
+            if (CharEditor.RemoteBusy) return;   // другой игрок собирается: подождём (пакет позиции повторит попытку)
 
-            avatar = new GameObject("SodCoop_RemotePlayer");
+            avatar = new GameObject("SodCoop_RemotePlayer" + (curRp != null ? "_" + curRp.pid : ""));
 
             bool ok = false;
             var app = remoteApp;
@@ -3703,7 +3987,18 @@ namespace SodCoop
         static bool remotePending; static int remoteTries;
         static List<Renderer> remoteLod = new List<Renderer>();
 
+        // сборка моделей: игроки по очереди (редактор персонажа собирает одну модель за раз)
         static void PollRemoteModel()
+        {
+            for (int i = 0; i < players.Count; i++)
+            {
+                Enter(players[i]);
+                try { PollRemoteModelOne(); } catch (Exception) { }
+            }
+            Leave();
+        }
+
+        static void PollRemoteModelOne()
         {
             try
             {
@@ -3989,12 +4284,13 @@ namespace SodCoop
             if (gidOf.TryGetValue(it.id, out g)) return g;
             // предметы, созданные во время игры, нумеруются у каждого игрока по-своему и совпадают с чужими:
             // помечаем их стороной-создателем, чтобы общий номер был уникальным
-            if (it.id >= RuntimeIdStart && (it.id & (SideHost | SideClient)) == 0) return it.id | (IsHost ? SideHost : SideClient);
+            if (it.id >= RuntimeIdStart && (it.id & SideMask) == 0) return it.id | SideOf(MyPid);
             return it.id;
         }
         const int RuntimeIdStart = 10000000;
-        const int SideHost = 1 << 29;
-        const int SideClient = 1 << 30;
+        // кто создал предмет во время игры: 3 бита (28..30) = номер игрока + 1 (хост = 1, клиенты = 2..4)
+        const int SideMask = 7 << 28;
+        static int SideOf(int pid) { return (pid + 1) << 28; }
 
         static string PresetNameOf(Interactable it)
         {
@@ -4026,12 +4322,12 @@ namespace SodCoop
         {
             Interactable it;
             if (idMap.TryGetValue(id, out it) && it != null) return it;
-            int side = id & (SideHost | SideClient);
+            int side = id & SideMask;
             if (side != 0)
             {
                 // номер чужого рантайм-предмета: у меня он может быть только в виде созданной копии (idMap)
-                if (side != (IsHost ? SideHost : SideClient)) return null;
-                return FindById(id & ~(SideHost | SideClient));
+                if (side != SideOf(MyPid)) return null;
+                return FindById(id & ~SideMask);
             }
             return FindById(id);
         }
@@ -4574,8 +4870,19 @@ namespace SodCoop
         {
             try
             {
-                if (!Plugin.CfgAvatarLightFix.Value || avatar == null) return;
-                var rs = avatar.GetComponentsInChildren<Renderer>(true);
+                if (!Plugin.CfgAvatarLightFix.Value) return;
+                SyncCur();
+                for (int i = 0; i < players.Count; i++) FixAvatarLight(players[i] == curRp ? avatar : players[i].avatar, log);
+            }
+            catch (Exception) { }
+        }
+
+        static void FixAvatarLight(GameObject av, bool log)
+        {
+            try
+            {
+                if (av == null) return;
+                var rs = av.GetComponentsInChildren<Renderer>(true);
                 uint first = 0; bool got = false; int changed = 0;
                 for (int i = 0; i < rs.Length; i++)
                 {
@@ -5395,14 +5702,18 @@ namespace SodCoop
         {
             try
             {
-                if (IsHost && !applyingRemote && puppet != null && c == puppet) return !OnPuppetDamaged(amount, fromWho, pos, dir, fs, bs, erase, alert, forceRag, dur, shock, kill, recoil, ragMp);
-                if (IsHost && !applyingRemote && puppet != null && c != null && c != puppet && Plugin.CfgNoFriendlyFire.Value)
+                if (IsHost && !applyingRemote && players.Count > 0 && c != null)
+                {
+                    var vo = OwnerOfPuppet(c);
+                    if (vo != null) return !OnPuppetDamaged(vo.pid, amount, fromWho, pos, dir, fs, bs, erase, alert, forceRag, dur, shock, kill, recoil, ragMp);
+                }
+                if (IsHost && !applyingRemote && players.Count > 0 && c != null && !IsPuppetCit(c) && Plugin.CfgNoFriendlyFire.Value)
                 {
                     var att = fromWho as Citizen;
-                    if (att != null && att != c && att != puppet && att.ai != null)
+                    if (att != null && att != c && !IsPuppetCit(att) && att.ai != null)
                     {
                         bool atPuppet = false;
-                        try { atPuppet = att.ai.persuitTarget == puppet || att.ai.attackTarget == puppet; } catch (Exception) { }
+                        try { atPuppet = IsPuppetActor(att.ai.persuitTarget) || IsPuppetActor(att.ai.attackTarget); } catch (Exception) { }
                         if (atPuppet)
                         {
                             if (ffLog++ < 12) Plugin.Dbg($"[FF] удар/выстрел горожанина {att.humanID} по случайному горожанину {c.humanID} (цель - второй игрок) отменён");
@@ -5410,11 +5721,15 @@ namespace SodCoop
                         }
                     }
                 }
-                if (!IsHost && !applyingRemote && c != null && puppetId >= 0 && c.humanID == puppetId && fromWho != null && fromWho.isPlayer)
+                if (!IsHost && !applyingRemote && c != null && fromWho != null && fromWho.isPlayer)
                 {
-                    // я ударил двойника хоста = ударил игрока-хоста
-                    if (Plugin.CfgPvp.Value) OnPuppetDamaged(amount, fromWho, pos, dir, fs, bs, erase, alert, forceRag, dur, shock, kill, recoil, ragMp);
-                    return false;
+                    // я ударил двойника другого игрока = ударил этого игрока
+                    var vo = OwnerOfPuppet(c);
+                    if (vo != null)
+                    {
+                        if (Plugin.CfgPvp.Value) OnPuppetDamaged(vo.pid, amount, fromWho, pos, dir, fs, bs, erase, alert, forceRag, dur, shock, kill, recoil, ragMp);
+                        return false;
+                    }
                 }
                 if (IsHost || applyingRemote || !Plugin.CfgNpcSync.Value || manager == null || manager.ConnectedPeersCount == 0) return true;
                 if (c == null || fromWho == null || !fromWho.isPlayer) return true;
@@ -5473,16 +5788,59 @@ namespace SodCoop
         static float puppetClientHideAt;
         static readonly System.Collections.Generic.Dictionary<int, float> puppetSeenLog = new System.Collections.Generic.Dictionary<int, float>();
 
+        // двойник кого-то из игроков (хост: свои; клиент: тот, что стоит на месте аватара)
+        static Citizen PuppetOf(RP rp) { return rp == curRp ? puppet : rp.puppet; }
+        static int PuppetIdOf(RP rp) { return rp == curRp ? puppetId : rp.puppetId; }
+
+        static bool IsPuppetCit(Citizen c)
+        {
+            if (c == null) return false;
+            for (int i = 0; i < players.Count; i++)
+            {
+                if (IsHost) { if (PuppetOf(players[i]) == c) return true; }
+                else if (PuppetIdOf(players[i]) >= 0 && PuppetIdOf(players[i]) == c.humanID) return true;
+            }
+            return false;
+        }
+
+        static bool IsPuppetId(int humanId)
+        {
+            for (int i = 0; i < players.Count; i++) { int id = PuppetIdOf(players[i]); if (id >= 0 && id == humanId) return true; }
+            return false;
+        }
+
+        static bool IsPuppetActor(Actor a)
+        {
+            var c = a as Citizen;
+            return c != null && IsPuppetCit(c);
+        }
+
+        // хост: чьим двойником является горожанин / клиент: чей это двойник (по humanID)
+        static RP OwnerOfPuppet(Citizen c)
+        {
+            if (c == null) return null;
+            for (int i = 0; i < players.Count; i++)
+            {
+                if (IsHost) { if (PuppetOf(players[i]) == c) return players[i]; }
+                else if (PuppetIdOf(players[i]) >= 0 && PuppetIdOf(players[i]) == c.humanID) return players[i];
+            }
+            return null;
+        }
+
         static Citizen PickPuppet()
         {
             int want = Plugin.CfgPuppetId.Value;
             Citizen best = null; int bestScore = int.MinValue;
+            if (want >= 0)
+            {
+                foreach (var c in npcById.Values) if (c != null && c.humanID == want && !IsPuppetCit(c)) return c;
+            }
             foreach (var c in npcById.Values)
             {
                 if (c == null) continue;
                 try
                 {
-                    if (want >= 0) { if (c.humanID == want) return c; continue; }
+                    if (IsPuppetCit(c)) continue;
                     if (c.removedFromWorld || c.isDead || c.isEnforcer || c.isPlayer || c.isAsleep) continue;
                     int sc = 0;
                     if (c.isHomeless) sc += 100;
@@ -5588,15 +5946,55 @@ namespace SodCoop
                 try { p.UpdateLightLevel(); } catch (Exception) { }
             }
             try { if (puppetCrouch != remoteCrouched) { puppetCrouch = remoteCrouched; p.SetCrouched(remoteCrouched, true); } } catch (Exception) { }
-            if (now - puppetIdAt > 3f)
+        }
+
+        // хост: раз в 3 с сообщает клиентам, какой горожанин чей двойник (номер игрока -> humanID)
+        static float puppetTblAt;
+        static void PuppetTableTick()
+        {
+            float now = Time.unscaledTime;
+            if (now - puppetTblAt < 3f || manager == null) return;
+            puppetTblAt = now;
+            var ids = new List<int[]>();
+            foreach (var rp in players) { int id = PuppetIdOf(rp); if (id >= 0) ids.Add(new[] { rp.pid, id }); }
+            if (ids.Count == 0) return;
+            var w = new NetDataWriter(); w.Put(MsgPuppet); w.Put((byte)ids.Count);
+            foreach (var pr in ids) { w.Put((byte)pr[0]); w.Put(pr[1]); }
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+        }
+
+        // клиент: таблица двойников. Для хоста (мой аватар №0) двойник это тот горожанин, которого хост выбрал двойником меня;
+        // для остальных клиентов - их собственные двойники
+        static void OnPuppetTable(NetDataReader r)
+        {
+            int n = r.GetByte();
+            for (int i = 0; i < n; i++)
             {
-                puppetIdAt = now;
-                var w = new NetDataWriter(); w.Put(MsgPuppet); w.Put(puppetId);
-                manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+                int pid = r.GetByte(); int npc = r.GetInt();
+                RP t = RpByPid(pid == MyPid ? 0 : pid);
+                if (t == null) continue;
+                Enter(t); OnPuppetId(npc); Leave();
             }
         }
 
-        // клиент: у меня двойник хоста-стороны это обычный житель, его надо спрятать и сделать неосязаемым
+        // все игроки за кадр: двойники
+        static void PuppetsFrame(float dt)
+        {
+            for (int i = 0; i < players.Count; i++)
+            {
+                Enter(players[i]);
+                try
+                {
+                    if (IsHost) PuppetTick(dt);
+                    else { PuppetClientTick(); PuppetClientFollow(); }
+                }
+                catch (Exception e) { if (!puppetErrLogged) { puppetErrLogged = true; Plugin.L.LogWarning($"[PUPPET] {e}"); } }
+            }
+            Leave();
+            if (IsHost) { try { PuppetTableTick(); } catch (Exception) { } }
+        }
+
+        // клиент: двойник другого игрока это обычный житель, его надо спрятать и сделать неосязаемым
         static void OnPuppetId(int id)
         {
             if (id == puppetId) return;
@@ -5639,7 +6037,7 @@ namespace SodCoop
         }
 
         // горожанин ударил двойника = ударил клиента. true = урон перехвачен
-        static bool OnPuppetDamaged(float amount, Actor fromWho, Vector3 pos, Vector3 dir, SpatterPatternPreset fs, SpatterPatternPreset bs, int erase, bool alert, bool forceRag, float dur, float shock, bool kill, bool recoil, float ragMp)
+        static bool OnPuppetDamaged(int victimPid, float amount, Actor fromWho, Vector3 pos, Vector3 dir, SpatterPatternPreset fs, SpatterPatternPreset bs, int erase, bool alert, bool forceRag, float dur, float shock, bool kill, bool recoil, float ragMp)
         {
             try
             {
@@ -5648,15 +6046,21 @@ namespace SodCoop
                 int aid = -1;
                 try { var h = fromWho as Human; if (h != null && !h.isPlayer) aid = h.humanID; } catch (Exception) { }
                 var w = new NetDataWriter();
-                w.Put(MsgPuppetHurt);
+                w.Put(MsgPuppetHurt); w.Put((byte)victimPid);
                 w.Put(aid); w.Put(amount);
                 w.Put(pos.x); w.Put(pos.y); w.Put(pos.z); w.Put(dir.x); w.Put(dir.y); w.Put(dir.z);
                 w.Put(fs != null ? (fs.name ?? "") : ""); w.Put(bs != null ? (bs.name ?? "") : "");
                 w.Put(erase);
                 int fl = (alert ? 1 : 0) | (forceRag ? 2 : 0) | (kill ? 4 : 0) | (recoil ? 8 : 0);
                 w.Put((byte)fl); w.Put(dur); w.Put(shock); w.Put(ragMp);
-                manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
-                if (Plugin.CfgPuppetLog.Value) Plugin.L.LogInfo($"[PUPPET] по второму игроку ударили (урон {amount:F2}, от {(aid >= 0 ? aid.ToString() : "игрока")}), переслал ему");
+                if (IsHost)
+                {
+                    var vr = RpByPid(victimPid);
+                    if (vr == null || vr.peer == null) return true;
+                    vr.peer.Send(w, DeliveryMethod.ReliableOrdered);
+                }
+                else manager.SendToAll(w, DeliveryMethod.ReliableOrdered);   // хост получит и перешлёт пострадавшему
+                if (Plugin.CfgPuppetLog.Value) Plugin.L.LogInfo($"[PUPPET] по игроку {victimPid} ударили (урон {amount:F2}, от {(aid >= 0 ? aid.ToString() : "игрока")}), переслал ему");
                 return true;
             }
             catch (Exception e) { Plugin.L.LogWarning($"[PUPPET] {e.Message}"); return false; }
@@ -5705,7 +6109,7 @@ namespace SodCoop
                 string st = "";
                 try { st = $"бой={ai.inCombat} атака={ai.attackActive} оружие={(ai.currentWeaponPreset != null ? ai.currentWeaponPreset.name : "нет")}"; } catch (Exception) { }
                 string tst = ""; try { tst = $"цель: ko={tc.ai != null && tc.ai.ko} бой={tc.ai != null && tc.ai.inCombat}"; } catch (Exception) { }
-                string pd = ""; try { pd = $"; двойник в {Vector3.Distance(puppet.transform.position, h.transform.position):F1} м от него, цель в {Vector3.Distance(tc.transform.position, h.transform.position):F1} м"; } catch (Exception) { }
+                string pd = ""; try { pd = $"; двойник в {Vector3.Distance(tc.transform.position, h.transform.position):F1} м от него, цель в {Vector3.Distance(tc.transform.position, h.transform.position):F1} м"; } catch (Exception) { }
                 Plugin.Dbg($"[AGGRO] горожанин {h.humanID} ({h.citizenName}) {what} ДРУГОГО жителя {tc.humanID} ({tc.citizenName}); {st}; {tst}{pd}");
             }
             catch (Exception) { }
@@ -5716,8 +6120,8 @@ namespace SodCoop
         {
             try
             {
-                if (IsHost && puppet != null && target != null && target != puppet && what != "заметил" && Plugin.CfgPuppetLog.Value && ai != null) AggroNote(what, ai, target);
-                if (!IsHost || puppet == null || target == null || target != puppet || !Plugin.CfgPuppetLog.Value || ai == null) return;
+                if (!IsHost || players.Count == 0 || target == null || !Plugin.CfgPuppetLog.Value || ai == null) return;
+                if (!IsPuppetActor(target)) { if (what != "заметил") AggroNote(what, ai, target); return; }
                 var h = ai.human;
                 int id = h != null ? h.humanID : -1;
                 float last; string key = what + id;
@@ -5744,7 +6148,7 @@ namespace SodCoop
             for (int i = 0; i < all.Count; i++)
             {
                 var c = all[i];
-                if (c == null || c == puppet) continue;
+                if (c == null || IsPuppetCit(c)) continue;
                 try
                 {
                     var ai = c.ai; if (ai == null) continue;
@@ -5890,7 +6294,7 @@ namespace SodCoop
                 if (who != null && who.isPlayer) { OnPlayerSound(ev, pos); return; }
                 if (!IsHost || !Plugin.CfgNpcSync.Value) return;
                 var c = who as Citizen;
-                if (c == null || c == puppet) return;
+                if (c == null || IsPuppetCit(c)) return;
                 string name = ev.name; if (string.IsNullOrEmpty(name)) return;
                 bool fight = false;
                 try { var ai = c.ai; fight = ai != null && (ai.inCombat || ai.attackActive || ai.ko); } catch (Exception) { }
@@ -6301,8 +6705,9 @@ namespace SodCoop
             if (!Plugin.CfgNpcSync.Value || manager == null || manager.ConnectedPeersCount == 0) return;
             if (npcById == null || npcById.Count == 0 || Time.unscaledTime - npcMapAt > 30f) BuildNpcMap();
             if (npcById.Count == 0) return;
-            if (IsHost) { try { PuppetTick(dt); } catch (Exception e) { if (!puppetErrLogged) { puppetErrLogged = true; Plugin.L.LogWarning($"[PUPPET] {e}"); } } NpcSendTick(); }
-            else { try { PuppetClientTick(); PuppetClientFollow(); } catch (Exception) { } NpcClientTick(dt); }
+            PuppetsFrame(dt);
+            if (IsHost) NpcSendTick();
+            else NpcClientTick(dt);
         }
 
         static void PutNpc(NetDataWriter w, Citizen c)
@@ -6356,7 +6761,9 @@ namespace SodCoop
             npcSendAt = now;
             Vector3 hp = Vector3.zero; bool hasH = false;
             try { hp = Player.Instance.transform.position; hasH = true; } catch (Exception) { }
-            bool hasC = avatar != null; Vector3 cp = targetPos;
+            var cps = new List<Vector3>();
+            SyncCur();
+            foreach (var rp in players) if (rp.avatar != null) cps.Add(rp.targetPos);
             float rMid = Plugin.CfgNpcRange.Value; float rNear = rMid * 0.33f;
             float rNear2 = rNear * rNear, rMid2 = rMid * rMid;
             float baseIv = Mathf.Max(0.03f, Plugin.CfgNpcRate.Value);
@@ -6366,14 +6773,14 @@ namespace SodCoop
             for (int i = 0; i < all.Count; i++)
             {
                 var c = all[i];
-                if (c == null || c == puppet) continue;
+                if (c == null || IsPuppetCit(c)) continue;
                 try { if (c.removedFromWorld) continue; } catch (Exception) { }
                 float d2 = float.MaxValue;
                 try
                 {
                     Vector3 p = c.transform.position;
                     if (hasH) d2 = Mathf.Min(d2, (p - hp).sqrMagnitude);
-                    if (hasC) d2 = Mathf.Min(d2, (p - cp).sqrMagnitude);
+                    for (int ci = 0; ci < cps.Count; ci++) d2 = Mathf.Min(d2, (p - cps[ci]).sqrMagnitude);
                 }
                 catch (Exception) { continue; }
                 // чем дальше горожанин от игроков, тем реже он обновляется
@@ -6458,7 +6865,7 @@ namespace SodCoop
                 try
                 {
                     if (c == null) continue;
-                    if (kv.Key == puppetId) continue; // двойник клиента: его ведёт хост, у меня он невидим
+                    if (IsPuppetId(kv.Key)) continue; // двойник другого игрока: у меня он невидим и стоит на месте его аватара
                     var tr = c.transform;
                     if (tr == null) continue;
                     bool talking = false;
@@ -6637,6 +7044,16 @@ namespace SodCoop
         {
             if (Time.unscaledTime - lastMapTry < 1f) return;
             lastMapTry = Time.unscaledTime;
+            for (int i = 0; i < players.Count; i++)
+            {
+                Enter(players[i]);
+                try { MapTickOne(); } catch (Exception) { }
+            }
+            Leave();
+        }
+
+        static void MapTickOne()
+        {
             if (!Plugin.CfgMapIcon.Value) { if (mapTracked != null) MapUntrack(); return; }
             if (avatar == null) { if (mapTracked != null) MapUntrack(); return; }
             var mc = MapController.Instance;
@@ -8236,26 +8653,137 @@ namespace SodCoop
             }
         }
 
-        static void OnReceive(NetPeer peer, NetPacketReader reader)
+        // ---------- игроки: добавление, удаление, ретрансляция через хост ----------
+        static RP NewRp(int pid)
         {
-            byte type = reader.GetByte();
+            var rp = new RP(); rp.pid = pid; rp.label = "P" + pid;
+            players.Add(rp);
+            return rp;
+        }
 
+        static int FreePid()
+        {
+            for (int i = 1; i < 8; i++) if (RpByPid(i) == null) return i;
+            return 7;
+        }
+
+        static int MaxPlayersNow() { return Mathf.Clamp(Plugin.CfgMaxPlayers.Value, 2, 4); }
+
+        // убрать игрока: аватар, двойник, иконка на карте
+        static void RemovePlayer(RP rp, string why)
+        {
+            try
+            {
+                Enter(rp);
+                DestroyAvatar();
+                if (puppet != null) ReleasePuppet("игрок вышел");
+                Leave();
+            }
+            catch (Exception e) { Leave(); Plugin.L.LogWarning("[NET] RemovePlayer: " + e.Message); }
+            players.Remove(rp);
+            Plugin.L.LogInfo($"[NET] игрок {rp.pid} убран ({why}); осталось удалённых игроков: {players.Count}");
+            if (IsHost)
+            {
+                Toast("Player " + rp.pid + " left the game (" + why + ").");
+                var w = new NetDataWriter(); w.Put(MsgPlayerLeft); w.Put((byte)rp.pid);
+                foreach (var o in players) if (o.peer != null) { try { o.peer.Send(w, DeliveryMethod.ReliableOrdered); } catch (Exception) { } }
+            }
+        }
+
+        static void ClearPlayers()
+        {
+            var copy = new List<RP>(players);
+            foreach (var rp in copy)
+            {
+                try
+                {
+                    Enter(rp);
+                    DestroyAvatar();
+                    if (puppet != null) ReleasePuppet("сеть закрыта");
+                    Leave();
+                }
+                catch (Exception) { Leave(); }
+            }
+            Leave();
+            players.Clear();
+        }
+
+        static bool IsRelayed(byte t)
+        {
+            return t == MsgPos || t == MsgAction || t == MsgItem || t == MsgHeld || t == MsgObj || t == MsgItemEv || t == MsgDoor || t == MsgBodyFx || t == MsgShot || t == MsgWeapon || t == MsgSound;
+        }
+
+        static bool NeedsCtx(byte t)
+        {
+            return t == MsgPos || t == MsgAction || t == MsgItem || t == MsgHeld || t == MsgBodyFx || t == MsgShot || t == MsgWeapon || t == MsgSound || t == MsgNpcHit;
+        }
+
+        static void RelayFromPlayer(RP from, byte type, byte[] rest, DeliveryMethod method)
+        {
+            if (players.Count < 2) return;
+            var w = new NetDataWriter();
+            w.Put(MsgRelay); w.Put((byte)from.pid); w.Put(type); w.Put(rest, 0, rest.Length);
+            foreach (var o in players)
+                if (o != from && o.peer != null) { try { o.peer.Send(w, method); } catch (Exception) { } }
+        }
+
+        static void OnReceive(NetPeer peer, NetPacketReader raw, DeliveryMethod method)
+        {
+            byte type = raw.GetByte();
+            int senderPid;
+            if (type == MsgRelay && !IsHost) { senderPid = raw.GetByte(); type = raw.GetByte(); }
+            else if (IsHost) { var hp = RpByPeer(peer); senderPid = hp != null ? hp.pid : -1; }
+            else senderPid = 0;
+            byte[] rest = raw.GetRemainingBytes();
+            var reader = new NetDataReader();
+            reader.SetSource(rest);
+            RP rp = senderPid >= 0 ? RpByPid(senderPid) : null;
+            if (rp == null && !IsHost && senderPid >= 0 && senderPid != MyPid && NeedsCtx(type)) rp = NewRp(senderPid);
+            if (IsHost && rp != null && IsRelayed(type)) RelayFromPlayer(rp, type, rest, method);
+            bool ctx = rp != null && NeedsCtx(type);
+            if (NeedsCtx(type) && rp == null) return;   // пакет игрока, который ещё не представился
+            if (ctx) Enter(rp);
+            try { HandleMsg(peer, type, reader, rp); }
+            finally { if (ctx) Leave(); }
+        }
+
+        static void HandleMsg(NetPeer peer, byte type, NetDataReader reader, RP rp)
+        {
             if (type == MsgHello && IsHost)
             {
                 string theirs = reader.GetString();
-                SetRemoteAppearance(reader.AvailableBytes > 0 ? reader.GetString() : "");
+                string theirApp = reader.AvailableBytes > 0 ? reader.GetString() : "";
+                string cid = reader.AvailableBytes > 0 ? reader.GetString() : "";
                 string mine = Describe();
                 bool ok = theirs == mine;
-                if (gamePeer != null && gamePeer != peer)
+                RP me = RpByPeer(peer);
+                if (me == null && cid != "")
                 {
                     // старое соединение этого игрока ещё не отвалилось по таймауту: заменяем его новым
-                    var stale = gamePeer; gamePeer = null;
-                    try { stale.Disconnect(); } catch (Exception) { }
-                    Plugin.L.LogInfo("[NET] новое подключение заменило старое соединение игрока");
+                    RP stale = null;
+                    foreach (var o in players) if (o.clientId == cid && o.peer != peer) { stale = o; break; }
+                    if (stale != null)
+                    {
+                        var sp = stale.peer; RemovePlayer(stale, "переподключился");
+                        try { if (sp != null) sp.Disconnect(); } catch (Exception) { }
+                        Plugin.L.LogInfo("[NET] новое подключение заменило старое соединение игрока");
+                    }
                 }
-                gamePeer = peer;
-                Toast(ok ? "A player joined the game." : "A player connected, but their world does not match yours.");
-                Plugin.L.LogInfo($"[NET] Handshake от клиента: ok={ok}");
+                if (me == null)
+                {
+                    if (players.Count >= MaxPlayersNow() - 1)
+                    {
+                        Plugin.L.LogWarning($"[NET] сервер полон ({players.Count + 1}/{MaxPlayersNow()}), отклоняю игрока");
+                        var fw = new NetDataWriter();
+                        fw.Put(MsgHelloReply); fw.Put(false); fw.Put("FULL"); fw.Put(""); fw.Put((byte)255); fw.Put(true);
+                        peer.Send(fw, DeliveryMethod.ReliableOrdered);
+                        return;
+                    }
+                    me = NewRp(FreePid()); me.peer = peer; me.clientId = cid;
+                }
+                Enter(me); SetRemoteAppearance(theirApp); Leave();
+                Toast(ok ? "Player " + me.pid + " joined the game." : "A player connected, but their world does not match yours.");
+                Plugin.L.LogInfo($"[NET] Handshake от клиента: ok={ok}, ему выдан номер {me.pid}");
                 Plugin.L.LogInfo($"[NET]   клиент: {theirs}");
                 Plugin.L.LogInfo($"[NET]   хост:   {mine}");
 
@@ -8264,19 +8792,61 @@ namespace SodCoop
                 w.Put(ok);
                 w.Put(mine);
                 w.Put(MyAppearanceJson());
+                w.Put((byte)me.pid);
+                w.Put(false);
                 peer.Send(w, DeliveryMethod.ReliableOrdered);
-                if (ok) { SendDoorSnapshot(peer); SendRoomSnapshot(peer); SendWindowSnapshot(peer); SendTime(); SendSoldSnapshot(peer); SendFurnSnapshot(peer); }
+                if (ok)
+                {
+                    SendDoorSnapshot(peer); SendRoomSnapshot(peer); SendWindowSnapshot(peer); SendTime(); SendSoldSnapshot(peer); SendFurnSnapshot(peer);
+                    foreach (var o in players)
+                    {
+                        if (o == me || o.peer == null) continue;
+                        var i1 = new NetDataWriter(); i1.Put(MsgPlayerInfo); i1.Put((byte)o.pid); i1.Put(o.remoteAppJson ?? "");
+                        peer.Send(i1, DeliveryMethod.ReliableOrdered);
+                        var i2 = new NetDataWriter(); i2.Put(MsgPlayerInfo); i2.Put((byte)me.pid); i2.Put(me.remoteAppJson ?? "");
+                        o.peer.Send(i2, DeliveryMethod.ReliableOrdered);
+                    }
+                }
             }
             else if (type == MsgHelloReply && !IsHost)
             {
                 bool ok = reader.GetBool();
                 string hostInfo = reader.GetString();
-                SetRemoteAppearance(reader.AvailableBytes > 0 ? reader.GetString() : "");
-                Plugin.L.LogInfo($"[NET] Ответ хоста: ok={ok}");
+                string hostApp = reader.AvailableBytes > 0 ? reader.GetString() : "";
+                int pid = reader.AvailableBytes > 0 ? reader.GetByte() : 0;
+                bool full = reader.AvailableBytes > 0 && reader.GetBool();
+                if (full)
+                {
+                    Toast("The server is full.");
+                    Plugin.L.LogWarning("[NET] Сервер полон, повторов не будет");
+                    connectRejected = true;
+                    try { peer.Disconnect(); } catch (Exception) { }
+                    return;
+                }
+                MyPid = pid;
+                var hostRp = RpByPid(0) ?? NewRp(0);
+                Enter(hostRp); SetRemoteAppearance(hostApp); Leave();
+                Plugin.L.LogInfo($"[NET] Ответ хоста: ok={ok}, мой номер {pid}");
                 if (!ok) Toast("Your world does not match the host's (different city or build). Leave to the main menu and use CONNECT to download the host's save.");
                 Plugin.L.LogInfo($"[NET]   хост:   {hostInfo}");
                 Plugin.L.LogInfo($"[NET]   клиент: {Describe()}");
                 if (ok) SendFurnSnapshot(null);
+            }
+            else if (type == MsgPlayerInfo && !IsHost)
+            {
+                int pid = reader.GetByte(); string app = reader.GetString();
+                if (pid != MyPid)
+                {
+                    var o = RpByPid(pid) ?? NewRp(pid);
+                    Enter(o); SetRemoteAppearance(app); Leave();
+                    Plugin.L.LogInfo($"[NET] в игре ещё один игрок: номер {pid}");
+                }
+            }
+            else if (type == MsgPlayerLeft && !IsHost)
+            {
+                int pid = reader.GetByte();
+                var o = RpByPid(pid);
+                if (o != null) { RemovePlayer(o, "вышел"); Toast("Player " + pid + " left the game."); }
             }
             else if (type == MsgAction)
             {
@@ -8361,11 +8931,23 @@ namespace SodCoop
             }
             else if (type == MsgPuppet)
             {
-                if (!IsHost) OnPuppetId(reader.GetInt());
+                if (!IsHost) OnPuppetTable(reader);
             }
             else if (type == MsgPuppetHurt)
             {
-                if (!IsHost || Plugin.CfgPvp.Value) OnPuppetHurt(reader);
+                int victim = reader.GetByte();
+                if (IsHost && victim != 0)
+                {
+                    // удар по двойнику другого клиента: пересылаем пострадавшему
+                    var vr = RpByPid(victim);
+                    if (vr != null && vr.peer != null)
+                    {
+                        byte[] tail = reader.GetRemainingBytes();
+                        var fw = new NetDataWriter(); fw.Put(MsgPuppetHurt); fw.Put((byte)victim); fw.Put(tail, 0, tail.Length);
+                        try { vr.peer.Send(fw, DeliveryMethod.ReliableOrdered); } catch (Exception) { }
+                    }
+                }
+                else if (!IsHost || Plugin.CfgPvp.Value) OnPuppetHurt(reader);
             }
             else if (type == MsgNpc)
             {

@@ -7,27 +7,37 @@
 		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 	</PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="BepInEx.Unity.IL2CPP" Version="6.0.0-be.788" />
-    <PackageReference Include="LiteNetLib" Version="2.1.4" />
-    <PackageReference Include="SOD.Common" Version="2.1.5" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="BepInEx.Unity.IL2CPP" Version="6.0.0-be.788" />
+		<PackageReference Include="LiteNetLib" Version="2.1.4" />
+		<PackageReference Include="SOD.Common" Version="2.1.5" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <Reference Include="Assembly-CSharp">
-      <HintPath>..\..\..\Shadows of Doubt\BepInEx\interop\Assembly-CSharp.dll</HintPath>
-    </Reference>
-    <Reference Include="Il2Cppmscorlib">
-      <HintPath>..\..\..\Shadows of Doubt\BepInEx\interop\Il2Cppmscorlib.dll</HintPath>
-    </Reference>
-    <Reference Include="UnityEngine.CoreModule">
-      <HintPath>..\..\..\Shadows of Doubt\BepInEx\interop\UnityEngine.CoreModule.dll</HintPath>
-    </Reference>
-	  <Reference Include="C:\SODMP\Shadows of Doubt\BepInEx\interop\*.dll" Private="false" />
-  </ItemGroup>
-	
+	<ItemGroup>
+		<Reference Include="Assembly-CSharp">
+			<HintPath>..\..\..\Shadows of Doubt\BepInEx\interop\Assembly-CSharp.dll</HintPath>
+		</Reference>
+		<Reference Include="Il2Cppmscorlib">
+			<HintPath>..\..\..\Shadows of Doubt\BepInEx\interop\Il2Cppmscorlib.dll</HintPath>
+		</Reference>
+		<Reference Include="UnityEngine.CoreModule">
+			<HintPath>..\..\..\Shadows of Doubt\BepInEx\interop\UnityEngine.CoreModule.dll</HintPath>
+		</Reference>
+		<Reference Include="C:\SODMP\Shadows of Doubt\BepInEx\interop\*.dll" Private="false" />
+	</ItemGroup>
+
 	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
-		<Exec Command="copy /Y &quot;$(TargetDir)SodCoop.dll&quot; &quot;C:\SODMP\Shadows of Doubt\BepInEx\plugins\&quot;&#xD;&#xA;copy /Y &quot;$(TargetDir)LiteNetLib.dll&quot; &quot;C:\SODMP\Shadows of Doubt\BepInEx\plugins\&quot;&#xD;&#xA;&#xD;&#xA;copy /Y &quot;$(TargetDir)SodCoop.dll&quot; &quot;C:\SODMP\Shadows of Doubt 2\BepInEx\plugins\&quot;&#xD;&#xA;copy /Y &quot;$(TargetDir)LiteNetLib.dll&quot; &quot;C:\SODMP\Shadows of Doubt 2\BepInEx\plugins\&quot;" />
+		<Exec Command="copy /Y &quot;$(TargetDir)SodCoop.dll&quot; &quot;C:\SODMP\Shadows of Doubt\BepInEx\plugins\&quot;&#xD;&#xA;
+copy /Y &quot;$(TargetDir)LiteNetLib.dll&quot; &quot;C:\SODMP\Shadows of Doubt\BepInEx\plugins\&quot;&#xD;&#xA;
+
+copy /Y &quot;$(TargetDir)SodCoop.dll&quot; &quot;C:\SODMP\Shadows of Doubt 2\BepInEx\plugins\&quot;&#xD;&#xA;
+copy /Y &quot;$(TargetDir)LiteNetLib.dll&quot; &quot;C:\SODMP\Shadows of Doubt 2\BepInEx\plugins\&quot;&#xD;&#xA;
+
+copy /Y &quot;$(TargetDir)SodCoop.dll&quot; &quot;C:\SODMP\Shadows of Doubt 3\BepInEx\plugins\&quot;&#xD;&#xA;
+copy /Y &quot;$(TargetDir)LiteNetLib.dll&quot; &quot;C:\SODMP\Shadows of Doubt 3\BepInEx\plugins\&quot;&#xD;&#xA;
+
+copy /Y &quot;$(TargetDir)SodCoop.dll&quot; &quot;C:\SODMP\Shadows of Doubt 4\BepInEx\plugins\&quot;&#xD;&#xA;
+copy /Y &quot;$(TargetDir)LiteNetLib.dll&quot; &quot;C:\SODMP\Shadows of Doubt 4\BepInEx\plugins\&quot;" />
 	</Target>
 
 </Project>
