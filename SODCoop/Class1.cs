@@ -1,4 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text.Json;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -17,7 +20,7 @@ namespace SodCoop
 {
     public enum NetMode { Off, Host, Client }
 
-    [BepInPlugin("com.yourname.sodcoop", "SodCoop", "0.9.24")]
+    [BepInPlugin("com.yourname.sodcoop", "SodCoop", "0.9.39")]
     public class Plugin : BasePlugin
     {
         internal static ManualLogSource L;
@@ -1128,14 +1131,704 @@ namespace SodCoop
 
     // ---- Разведка для редактора персонажа: Insert в меню или в игре пишет BepInEx\SodCoop_probe.txt ----
     // Живёт и в меню, и в игре (Harmony-патчи на Update меню не срабатывают от движка)
+    // Внешность игрока. Хранится в BepInEx\config\SodCoop_character.json
+    public class Appearance
+    {
+        public int Gender;      // 0 male, 1 female, 2 nonBinary (Human.Gender)
+        public int Build = 1;  // Descriptors.BuildType: 0 skinny, 1 average, 2 overweight, 3 muscular
+        public int Eyes;        // Descriptors.EyeColour
+        public int Skin;        // индекс в CharEditor.Skins
+        public int HairCol;     // индекс в CharEditor.HairCols
+        public string Head = "";
+        public string Hair = "";
+        public string Top = "";
+        public string Bottom = "";
+        public string Shoes = "";
+        public string Hat = "";
+        public string Glasses = "";
+        public int TopCol = 3;
+        public int BottomCol = 5;
+        public int ShoesCol = 0;
+    }
+
+    // Редактор персонажа. Этап 1: окно на IMGUI поверх главного меню, предпросмотр модели в RenderTexture.
+    internal static class CharEditor
+    {
+        internal static readonly Color[] Skins =
+        {
+            new Color(0.97f, 0.89f, 0.87f, 1f), new Color(0.93f, 0.80f, 0.68f, 1f), new Color(0.85f, 0.69f, 0.52f, 1f),
+            new Color(0.70f, 0.52f, 0.37f, 1f), new Color(0.55f, 0.38f, 0.26f, 1f), new Color(0.38f, 0.26f, 0.18f, 1f),
+            new Color(0.25f, 0.17f, 0.12f, 1f)
+        };
+        internal static readonly string[] HairColNames = { "black", "brown", "blonde", "ginger", "red", "blue", "green", "purple", "pink", "grey", "white" };
+        internal static readonly Color[] HairCols =
+        {
+            new Color(0.05f, 0.04f, 0.04f, 1f), new Color(0.30f, 0.18f, 0.10f, 1f), new Color(0.85f, 0.72f, 0.40f, 1f),
+            new Color(0.70f, 0.30f, 0.12f, 1f), new Color(0.61f, 0.09f, 0.09f, 1f), new Color(0.15f, 0.25f, 0.75f, 1f),
+            new Color(0.15f, 0.60f, 0.25f, 1f), new Color(0.45f, 0.20f, 0.65f, 1f), new Color(0.90f, 0.45f, 0.65f, 1f),
+            new Color(0.55f, 0.55f, 0.55f, 1f), new Color(0.92f, 0.92f, 0.92f, 1f)
+        };
+        internal static readonly Color[] Cloth =
+        {
+            new Color(0.10f, 0.10f, 0.10f, 1f), new Color(0.95f, 0.95f, 0.95f, 1f), new Color(0.50f, 0.50f, 0.50f, 1f),
+            new Color(0.20f, 0.30f, 0.60f, 1f), new Color(0.65f, 0.15f, 0.15f, 1f), new Color(0.20f, 0.45f, 0.25f, 1f),
+            new Color(0.80f, 0.65f, 0.25f, 1f), new Color(0.45f, 0.28f, 0.15f, 1f), new Color(0.80f, 0.55f, 0.65f, 1f),
+            new Color(0.35f, 0.20f, 0.50f, 1f), new Color(0.85f, 0.45f, 0.15f, 1f), new Color(0.75f, 0.70f, 0.60f, 1f)
+        };
+        static readonly string[] GenderNames = { "Male", "Female", "Non-binary" };
+        static readonly string[] BuildNames = { "Skinny", "Average", "Overweight", "Muscular" };
+        static readonly string[] EyeNames = { "Blue", "Brown", "Green", "Grey" };
+
+        internal static bool Open;
+        static Appearance cur = new Appearance();
+        static string status = "";
+        static GameObject donor, camGo, lightGo, menuCanvas;
+        static Camera cam;
+        static RenderTexture rt;
+        static float yaw = 180f, zoom = 3.2f, camY;
+        static bool dirty, poolsDirty = true, dumped; static int frameDue; static bool fillNaked = true;
+        static float applyAt;
+        static readonly Vector3 FarPos = new Vector3(7000f, 7000f, 7000f);
+
+        // каталоги одежды под текущие пол и телосложение
+        static readonly List<ClothesPreset> heads = new List<ClothesPreset>(), hairs = new List<ClothesPreset>(), tops = new List<ClothesPreset>(),
+            bottoms = new List<ClothesPreset>(), shoes = new List<ClothesPreset>(), hats = new List<ClothesPreset>(), glasses = new List<ClothesPreset>();
+        static readonly List<ClothesPreset> nakedAll = new List<ClothesPreset>();
+
+        static string SavePath { get { return Path.Combine(BepInEx.Paths.ConfigPath, "SodCoop_character.json"); } }
+
+        // ---------- данные ----------
+        internal static Appearance Load()
+        {
+            try { if (File.Exists(SavePath)) { var a = JsonSerializer.Deserialize<Appearance>(File.ReadAllText(SavePath), new JsonSerializerOptions { IncludeFields = true }); if (a != null) return a; } }
+            catch (Exception e) { Plugin.L.LogWarning("[CHAR] не прочитал " + SavePath + ": " + e.Message); }
+            return null;
+        }
+
+        static void Save()
+        {
+            try { File.WriteAllText(SavePath, JsonSerializer.Serialize(cur, new JsonSerializerOptions { WriteIndented = true, IncludeFields = true })); status = "Saved"; Plugin.L.LogInfo("[CHAR] сохранено: " + SavePath); }
+            catch (Exception e) { status = "Save failed: " + e.Message; Plugin.L.LogWarning("[CHAR] " + e.Message); }
+        }
+
+        static bool Has<T>(Il2CppSystem.Collections.Generic.List<T> l, T v) where T : struct
+        {
+            if (l == null) return false;
+            for (int i = 0; i < l.Count; i++) if (EqualityComparer<T>.Default.Equals(l[i], v)) return true;
+            return false;
+        }
+
+        static bool Covers(ClothesPreset c, CitizenOutfitController.CharacterAnchor a) { return Has(c.covers, a); }
+        static bool Undressed(ClothesPreset c) { return Has(c.outfitCategories, ClothesPreset.OutfitCategory.undressed); }
+
+        static void BuildPools()
+        {
+            poolsDirty = false;
+            heads.Clear(); hairs.Clear(); tops.Clear(); bottoms.Clear(); shoes.Clear(); hats.Clear(); glasses.Clear(); nakedAll.Clear();
+            var all = Toolbox.Instance.allClothes;
+            var g = (Human.Gender)cur.Gender; var b = (Descriptors.BuildType)cur.Build;
+            for (int i = 0; i < all.Count; i++)
+            {
+                var c = all[i]; if (c == null) continue;
+                if (!Has(c.suitableForGenders, g) || !Has(c.suitableForBuilds, b)) continue;
+                var A = CitizenOutfitController.CharacterAnchor.Head;
+                if (c.isHead && Covers(c, A)) { heads.Add(c); continue; }
+                if (Covers(c, CitizenOutfitController.CharacterAnchor.Hair)) { hairs.Add(c); continue; }
+                if (Covers(c, CitizenOutfitController.CharacterAnchor.Hat)) { hats.Add(c); continue; }
+                if (Covers(c, CitizenOutfitController.CharacterAnchor.Glasses)) { glasses.Add(c); continue; }
+                if (Covers(c, CitizenOutfitController.CharacterAnchor.beard)) continue;
+                if (Undressed(c)) { nakedAll.Add(c); continue; }
+                if (Covers(c, CitizenOutfitController.CharacterAnchor.upperTorso)) tops.Add(c);
+                else if (Covers(c, CitizenOutfitController.CharacterAnchor.UpperLegRight) || Covers(c, CitizenOutfitController.CharacterAnchor.UpperLegLeft) || Covers(c, CitizenOutfitController.CharacterAnchor.lowerTorso)) bottoms.Add(c);
+                else if (Covers(c, CitizenOutfitController.CharacterAnchor.RightFoot) || Covers(c, CitizenOutfitController.CharacterAnchor.LeftFoot)) shoes.Add(c);
+            }
+            Comparison<ClothesPreset> cmp = (x, y) => string.CompareOrdinal(x.name, y.name);
+            heads.Sort(cmp); hairs.Sort(cmp); tops.Sort(cmp); bottoms.Sort(cmp); shoes.Sort(cmp); hats.Sort(cmp); glasses.Sort(cmp);
+            Fix(ref cur.Head, heads, false); Fix(ref cur.Hair, hairs, true); Fix(ref cur.Top, tops, true); Fix(ref cur.Bottom, bottoms, true);
+            Fix(ref cur.Shoes, shoes, true); Fix(ref cur.Hat, hats, true); Fix(ref cur.Glasses, glasses, true);
+        }
+
+        // properties нельзя передавать по ref, поэтому через временные переменные
+        static void Fix(ref string v, List<ClothesPreset> pool, bool allowNone)
+        {
+            if (string.IsNullOrEmpty(v) && allowNone) return;
+            for (int i = 0; i < pool.Count; i++) if (pool[i].name == v) return;
+            v = (allowNone || pool.Count == 0) ? "" : pool[0].name;
+        }
+
+        static ClothesPreset Find(List<ClothesPreset> pool, string name)
+        {
+            if (string.IsNullOrEmpty(name)) return null;
+            for (int i = 0; i < pool.Count; i++) if (pool[i].name == name) return pool[i];
+            return null;
+        }
+
+        // ---------- донор: настоящий горожанин из префаба игры ----------
+        static void DestroyDonor()
+        {
+            try { if (donor != null) UnityEngine.Object.Destroy(donor); } catch (Exception) { }
+            donor = null;
+        }
+
+        static bool CreateDonor()
+        {
+            try
+            {
+                var prefab = PrefabControls.Instance.citizen;
+                if (prefab == null) { status = "No citizen prefab"; return false; }
+                var holder = new GameObject("SodCoop_DonorHolder"); holder.SetActive(false);
+                var go = UnityEngine.Object.Instantiate<GameObject>(prefab, holder.transform);
+                go.name = "SodCoop_Donor";
+                rebound = false; scaled.Clear();
+                go.transform.SetParent(null, false);
+                go.transform.position = FarPos;
+                go.transform.rotation = Quaternion.identity;
+                UnityEngine.Object.Destroy(holder);
+                var hum = go.GetComponent<Citizen>();
+                if (hum != null)
+                {
+                    try { hum.gender = (Human.Gender)cur.Gender; } catch (Exception) { }
+                    try { if (hum.descriptors == null) hum.descriptors = new Descriptors(hum); } catch (Exception e) { Plugin.L.LogWarning("[CHAR] descriptors: " + e.Message); }
+                }
+                // ИИ и прочие игровые скрипты донору не нужны: оставляем только одежду и аниматор
+                var mbs = go.GetComponentsInChildren<MonoBehaviour>(true);
+                for (int i = 0; i < mbs.Length; i++)
+                {
+                    var m = mbs[i]; if (m == null) continue;
+                    if (m.TryCast<CitizenOutfitController>() != null) continue;
+                    try { m.enabled = false; } catch (Exception) { }
+                }
+                go.SetActive(true);
+                donor = go;
+                Plugin.L.LogInfo("[CHAR] донор создан из префаба, citizen=" + (hum != null));
+                return true;
+            }
+            catch (Exception e) { status = "Donor failed: " + e.Message; Plugin.L.LogWarning("[CHAR] донор: " + e); return false; }
+        }
+
+        static Color Src(ClothesPreset.ClothingColourSource s, Color own, Color skin, Color hair, Color dflt)
+        {
+            switch (s)
+            {
+                case ClothesPreset.ClothingColourSource.skin: return skin;
+                case ClothesPreset.ClothingColourSource.hair: return hair;
+                case ClothesPreset.ClothingColourSource.white: return Color.white;
+                case ClothesPreset.ClothingColourSource.garment:
+                case ClothesPreset.ClothingColourSource.underneathColour1:
+                case ClothesPreset.ClothingColourSource.underneathColour2:
+                case ClothesPreset.ClothingColourSource.underneathColour3: return own;
+                default: return dflt;
+            }
+        }
+
+        static CitizenOutfitController.OutfitClothes Make(ClothesPreset p, Color own, Color skin, Color hair)
+        {
+            var oc = new CitizenOutfitController.OutfitClothes();
+            oc.clothes = p.name;
+            var clear = new Color(0f, 0f, 0f, 0f);
+            oc.baseColor = Src(p.baseColourSource, own, skin, hair, Color.white);
+            oc.color1 = Src(p.colour1Source, own, skin, hair, clear);
+            oc.color2 = Src(p.colour2Source, own, skin, hair, clear);
+            oc.color3 = Src(p.colour3Source, own, skin, hair, clear);
+            return oc;
+        }
+
+        static readonly CitizenOutfitController.CharacterAnchor[] BodyAnchors =
+        {
+            CitizenOutfitController.CharacterAnchor.lowerTorso, CitizenOutfitController.CharacterAnchor.upperTorso, CitizenOutfitController.CharacterAnchor.Midriff,
+            CitizenOutfitController.CharacterAnchor.UpperArmRight, CitizenOutfitController.CharacterAnchor.UpperArmLeft,
+            CitizenOutfitController.CharacterAnchor.LowerArmRight, CitizenOutfitController.CharacterAnchor.LowerArmLeft,
+            CitizenOutfitController.CharacterAnchor.HandRight, CitizenOutfitController.CharacterAnchor.HandLeft,
+            CitizenOutfitController.CharacterAnchor.UpperLegRight, CitizenOutfitController.CharacterAnchor.UpperLegLeft,
+            CitizenOutfitController.CharacterAnchor.LowerLegRight, CitizenOutfitController.CharacterAnchor.LowerLegLeft,
+            CitizenOutfitController.CharacterAnchor.RightFoot, CitizenOutfitController.CharacterAnchor.LeftFoot
+        };
+
+        // собирает наряд из выбора игрока, голые части добавляет там, где ничего не надето
+        static CitizenOutfitController.Outfit BuildOutfit()
+        {
+            Color skin = Skins[Mathf.Clamp(cur.Skin, 0, Skins.Length - 1)];
+            Color hair = HairCols[Mathf.Clamp(cur.HairCol, 0, HairCols.Length - 1)];
+            var chosen = new List<KeyValuePair<ClothesPreset, Color>>();
+            Action<ClothesPreset, Color> add = (p, c) => { if (p != null) chosen.Add(new KeyValuePair<ClothesPreset, Color>(p, c)); };
+            add(Find(heads, cur.Head), Color.white);
+            add(Find(hairs, cur.Hair), hair);
+            add(Find(tops, cur.Top), Cloth[cur.TopCol % Cloth.Length]);
+            add(Find(bottoms, cur.Bottom), Cloth[cur.BottomCol % Cloth.Length]);
+            add(Find(shoes, cur.Shoes), Cloth[cur.ShoesCol % Cloth.Length]);
+            add(Find(hats, cur.Hat), Cloth[cur.TopCol % Cloth.Length]);
+            add(Find(glasses, cur.Glasses), Color.white);
+
+            var covered = new HashSet<CitizenOutfitController.CharacterAnchor>();
+            foreach (var kv in chosen) for (int i = 0; i < kv.Key.covers.Count; i++) covered.Add(kv.Key.covers[i]);
+            if (fillNaked) foreach (var a in BodyAnchors)
+            {
+                if (covered.Contains(a)) continue;
+                ClothesPreset best = null;
+                for (int i = 0; i < nakedAll.Count; i++)
+                {
+                    var n = nakedAll[i]; if (!Covers(n, a)) continue;
+                    if (n.name.Contains("Prosthetic")) continue;   // протезы и прочее: перекрывают голое тело и мерцают
+                    if (best == null) { best = n; continue; }
+                    int sn = n.covers.Count * 10 + (n.name.Contains("Naked") ? 0 : 1), sb = best.covers.Count * 10 + (best.name.Contains("Naked") ? 0 : 1);
+                    if (sn < sb || (sn == sb && string.CompareOrdinal(n.name, best.name) < 0)) best = n;
+                }
+                if (best == null) continue;
+                add(best, Color.white);
+                for (int i = 0; i < best.covers.Count; i++) covered.Add(best.covers[i]);
+            }
+
+            var outfit = new CitizenOutfitController.Outfit();
+            outfit.category = ClothesPreset.OutfitCategory.casual;
+            var list = new Il2CppSystem.Collections.Generic.List<CitizenOutfitController.OutfitClothes>();
+            foreach (var kv in chosen) list.Add(Make(kv.Key, kv.Value, skin, hair));
+            outfit.clothes = list;
+            return outfit;
+        }
+
+        static void ApplyToDonor()
+        {
+            dirty = false;
+            if (donor == null && !CreateDonor()) return;
+            try
+            {
+                var hum = donor.GetComponent<Citizen>();
+                Color skin = Skins[Mathf.Clamp(cur.Skin, 0, Skins.Length - 1)];
+                Color hair = HairCols[Mathf.Clamp(cur.HairCol, 0, HairCols.Length - 1)];
+                if (hum != null)
+                {
+                    hum.gender = (Human.Gender)cur.Gender;
+                    var d = hum.descriptors;
+                    if (d != null)
+                    {
+                        d.build = (Descriptors.BuildType)cur.Build;
+                        d.skinColour = skin; d.hairColour = hair;
+                        d.hairColourCategory = (Descriptors.HairColour)Mathf.Clamp(cur.HairCol, 0, HairColNames.Length - 1);
+                        d.eyeColour = (Descriptors.EyeColour)cur.Eyes;
+                        d.hairType = string.IsNullOrEmpty(cur.Hair) ? Descriptors.HairStyle.bald : Descriptors.HairStyle.shortHair;
+                    }
+                    try { hum.SetPhysicalModelParams(); } catch (Exception) { }
+                }
+                var oc = donor.GetComponentInChildren<CitizenOutfitController>(true);
+                if (oc == null) { status = "No outfit controller"; return; }
+                try { oc.enabled = true; } catch (Exception) { }
+                var outfit = BuildOutfit();
+                try { oc.RemoveCurrentOutfit(); } catch (Exception) { }
+                oc.outfits.Clear();
+                oc.outfits.Add(outfit);
+                oc.SetCurrentOutfit(ClothesPreset.OutfitCategory.casual, true, true, false);
+                try { oc.LoadExpression(); } catch (Exception) { }
+                FixLights();
+                var rs = donor.GetComponentsInChildren<Renderer>(true);
+                int on = 0; for (int i = 0; i < rs.Length; i++) if (rs[i] != null && rs[i].enabled) on++;
+                frameDue = 2;
+                status = "Parts: " + outfit.clothes.Count + ", renderers: " + on + "/" + rs.Length;
+                Plugin.L.LogInfo("[CHAR] наряд применён: " + status);
+            }
+            catch (Exception e) { status = "Apply failed: " + e.Message; Plugin.L.LogWarning("[CHAR] наряд: " + e); }
+        }
+
+        static bool LodPart(Transform t)
+        {
+            for (int d = 0; d < 20 && t != null; d++) { string n = t.name; if (n.Contains("LODS") || n.StartsWith("Level0")) return true; t = t.parent; }
+            return false;
+        }
+
+        static Vector3 frameCenter = new Vector3(0f, 0.95f, 0f); static float frameH = 1.8f;
+
+        // точные дубликаты (одна и та же сетка в одном месте, например обе ноги = один меш бёдер) дают борьбу за глубину
+        static void Dedupe()
+        {
+            try
+            {
+                var seen = new HashSet<string>();
+                var rs = donor.GetComponentsInChildren<Renderer>(false);
+                int removed = 0;
+                for (int i = 0; i < rs.Length; i++)
+                {
+                    var r = rs[i]; if (r == null || !r.enabled || LodPart(r.transform) || r.name == "DistantLOD") continue;
+                    var mf = r.GetComponent<MeshFilter>(); if (mf == null || mf.sharedMesh == null) continue;
+                    var p = r.transform.position - donor.transform.position;
+                    string key = mf.sharedMesh.GetInstanceID() + "|" + Mathf.Round(p.x * 500f) + "|" + Mathf.Round(p.y * 500f) + "|" + Mathf.Round(p.z * 500f) + "|" + Mathf.Sign(r.transform.lossyScale.x);
+                    if (!seen.Add(key)) { r.enabled = false; lodList.Add(r); removed++; }
+                }
+                if (removed > 0) Plugin.Dbg("[CHAR] убрано дублей: " + removed);
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[CHAR] Dedupe: " + e.Message); }
+        }
+
+        // голый низ торса лежит в одной плоскости с бёдрами: чуть увеличиваем его, как игра делает с одеждой (масштаб 1.05)
+        static readonly HashSet<int> scaled = new HashSet<int>();
+        static void Offset()
+        {
+            try
+            {
+                var rs = donor.GetComponentsInChildren<Renderer>(false);
+                for (int i = 0; i < rs.Length; i++)
+                {
+                    var r = rs[i]; if (r == null || !r.enabled || LodPart(r.transform)) continue;
+                    string n = r.name;
+                    if (!n.Contains("Naked")) continue;
+                    int id = r.gameObject.GetInstanceID(); if (scaled.Contains(id)) continue;
+                    float k = 0f;
+                    if (n.Contains("LowerTorso")) k = 1.03f;
+                    else if (n.Contains("LowerArm") || n.Contains("LowerLeg")) k = 1.025f;   // локти и колени
+                    else if (n.Contains("Hand") || n.Contains("Foot")) k = 1.03f;
+                    if (k > 0f) { scaled.Add(id); r.transform.localScale = r.transform.localScale * k; }
+                }
+            }
+            catch (Exception) { }
+        }
+
+        static void Frame()
+        {
+            Dedupe(); Offset();
+            try
+            {
+                var rs = donor.GetComponentsInChildren<Renderer>(false);
+                bool any = false; Bounds b = new Bounds();
+                for (int i = 0; i < rs.Length; i++)
+                {
+                    var r = rs[i]; if (r == null || !r.enabled || LodPart(r.transform)) continue;
+                    if (!any) { b = r.bounds; any = true; } else b.Encapsulate(r.bounds);
+                }
+                if (!dumped)
+                {
+                    dumped = true;
+                    var all = donor.GetComponentsInChildren<Renderer>(true);
+                    for (int i = 0; i < all.Length && i < 60; i++)
+                    {
+                        var r = all[i]; if (r == null) continue;
+                        string mesh = "-";
+                        try { var smr = r.TryCast<SkinnedMeshRenderer>(); if (smr != null) mesh = "SMR mesh=" + (smr.sharedMesh != null ? smr.sharedMesh.name + "/" + smr.sharedMesh.vertexCount : "null") + " root=" + (smr.rootBone != null) + " lb=" + smr.localBounds.size; else { var mf = r.GetComponent<MeshFilter>(); mesh = "MR mesh=" + (mf != null && mf.sharedMesh != null ? mf.sharedMesh.name + "/" + mf.sharedMesh.vertexCount : "null"); } } catch (Exception) { }
+                        Plugin.L.LogInfo("[CHAR-R] " + r.name + " en=" + r.enabled + " go=" + r.gameObject.activeInHierarchy + " lod=" + LodPart(r.transform) + " mats=" + r.sharedMaterials.Length + " " + mesh + " pos=" + (r.transform.position - donor.transform.position));
+                    }
+                }
+                if (!dumpedB)
+                {
+                    dumpedB = true;
+                    try
+                    {
+                        var an = donor.GetComponentInChildren<Animator>(true);
+                        Plugin.L.LogInfo("[CHAR-A] animator=" + (an != null) + (an == null ? "" : " ctrl=" + (an.runtimeAnimatorController != null ? an.runtimeAnimatorController.name : "null") + " avatar=" + (an.avatar != null ? an.avatar.name + " human=" + an.avatar.isHuman + " valid=" + an.avatar.isValid : "null") + " init=" + an.isInitialized + " hier=" + an.hasTransformHierarchy + " layers=" + an.layerCount + " enabled=" + an.enabled + " go=" + an.gameObject.name + " speed=" + an.speed));
+                        var trs = donor.GetComponentsInChildren<Transform>(true);
+                        Plugin.L.LogInfo("[CHAR-A] всего transform=" + trs.Length);
+                        for (int i = 0; i < trs.Length && i < 70; i++)
+                        {
+                            var t = trs[i]; if (t == null) continue;
+                            int d = 0; var p = t; while (p != null && p != donor.transform && d < 30) { p = p.parent; d++; }
+                            Plugin.L.LogInfo("[CHAR-T] " + new string(' ', d) + t.name + " lp=" + t.localPosition + " wp=" + (t.position - donor.transform.position) + " ls=" + t.localScale);
+                        }
+                    }
+                    catch (Exception e) { Plugin.L.LogWarning("[CHAR-A] " + e.Message); }
+                }
+                if (!any || b.size.y < 0.3f) { Plugin.L.LogWarning("[CHAR] нет видимых рендереров/нулевые границы"); return; }
+                // кадр фиксированный: шапки и причёски не должны менять масштаб предпросмотра
+                frameCenter = new Vector3(0f, 1.0f, 0f); frameH = 2.0f;
+                Plugin.L.LogInfo("[CHAR] донор pos=" + donor.transform.position + " bounds.center=" + b.center + " size=" + b.size + " scale=" + donor.transform.lossyScale);
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[CHAR] Frame: " + e.Message); }
+        }
+
+        static void FixLights()
+        {
+            if (donor == null) return;
+            try { var m = donor.transform.Find("Model"); if (m != null) m.localScale = Vector3.one; } catch (Exception) { }
+            try
+            {
+                var tr = donor.GetComponentsInChildren<Transform>(true);
+                for (int i = 0; i < tr.Length; i++) if (tr[i] != null) tr[i].gameObject.layer = 0;
+                var lgs = donor.GetComponentsInChildren<LODGroup>(true);
+                for (int i = 0; i < lgs.Length; i++) if (lgs[i] != null) lgs[i].enabled = false;
+                var rr = donor.GetComponentsInChildren<Renderer>(true);
+                lodList.Clear();
+                for (int i = 0; i < rr.Length; i++) if (rr[i] != null && (LodPart(rr[i].transform) || rr[i].name == "DistantLOD")) { rr[i].enabled = false; lodList.Add(rr[i]); }
+            }
+            catch (Exception) { }
+            try
+            {
+                var sk = donor.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+                for (int i = 0; i < sk.Length; i++) if (sk[i] != null) sk[i].updateWhenOffscreen = true;
+                var an = donor.GetComponentsInChildren<Animator>(true);
+                for (int i = 0; i < an.Length; i++) if (an[i] != null) an[i].cullingMode = AnimatorCullingMode.AlwaysAnimate;
+            }
+            catch (Exception) { }
+            var rs = donor.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < rs.Length; i++) { try { if (rs[i] != null) rs[i].renderingLayerMask = 0xFFFFFFFFu; } catch (Exception) { } }
+        }
+
+        // ---------- камера предпросмотра ----------
+        static void EnsureCamera()
+        {
+            if (cam != null) return;
+            try
+            {
+                rt = new RenderTexture(640, 960, 24, RenderTextureFormat.ARGB32);
+                rt.Create();
+                camGo = new GameObject("SodCoop_PreviewCam");
+                camGo.transform.position = FarPos + new Vector3(0f, 1f, 3f);
+                cam = camGo.AddComponent<Camera>();
+                cam.targetTexture = rt;
+                cam.clearFlags = CameraClearFlags.SolidColor;
+                cam.backgroundColor = new Color(0.08f, 0.07f, 0.12f, 1f);
+                cam.fieldOfView = 30f; cam.nearClipPlane = 0.05f; cam.farClipPlane = 50f;
+                cam.cullingMask = -1; cam.allowHDR = true;
+                try
+                {
+                    var hd = camGo.AddComponent<UnityEngine.Rendering.HighDefinition.HDAdditionalCameraData>();
+                    hd.clearColorMode = UnityEngine.Rendering.HighDefinition.HDAdditionalCameraData.ClearColorMode.Color;
+                    hd.backgroundColorHDR = cam.backgroundColor;
+                    hd.antialiasing = UnityEngine.Rendering.HighDefinition.HDAdditionalCameraData.AntialiasingMode.None;
+                }
+                catch (Exception e) { Plugin.L.LogWarning("[CHAR] HD-камера: " + e.Message); }
+                lightGo = new GameObject("SodCoop_PreviewLight");
+                lightGo.transform.position = FarPos + new Vector3(2f, 3f, 4f);
+                lightGo.transform.rotation = Quaternion.Euler(30f, 200f, 0f);
+                var l = lightGo.AddComponent<Light>();
+                l.type = LightType.Directional;
+                l.intensity = 3f;
+                try { var hl = lightGo.AddComponent<UnityEngine.Rendering.HighDefinition.HDAdditionalLightData>(); hl.intensity = 2600f; hl.lightUnit = UnityEngine.Rendering.HighDefinition.LightUnit.Lux; }
+                catch (Exception e) { Plugin.L.LogWarning("[CHAR] HD-свет: " + e.Message); }
+                var fill = new GameObject("SodCoop_PreviewFill");
+                fill.transform.SetParent(lightGo.transform, false);
+                fill.transform.rotation = Quaternion.Euler(10f, 20f, 0f);
+                var l2 = fill.AddComponent<Light>(); l2.type = LightType.Directional; l2.intensity = 1f;
+                try { var h2 = fill.AddComponent<UnityEngine.Rendering.HighDefinition.HDAdditionalLightData>(); h2.intensity = 1000f; h2.lightUnit = UnityEngine.Rendering.HighDefinition.LightUnit.Lux; }
+                catch (Exception) { }
+            }
+            catch (Exception e) { status = "Camera failed: " + e.Message; Plugin.L.LogWarning("[CHAR] камера: " + e); }
+        }
+
+        static void UpdateCamera()
+        {
+            if (cam == null || donor == null) return;
+            donor.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+            var look = donor.transform.position + frameCenter + new Vector3(0f, camY, 0f);
+            camGo.transform.position = look + new Vector3(0f, 0.1f, zoom * (frameH / 1.8f));
+            camGo.transform.LookAt(look);
+        }
+
+        // ---------- открытие / закрытие ----------
+        internal static void OpenEditor()
+        {
+            if (Open) return;
+            var saved = Load(); if (saved != null) cur = saved;
+            poolsDirty = true; Open = true; status = "";
+            try { menuCanvas = GameObject.Find("MenuCanvas"); if (menuCanvas != null) menuCanvas.SetActive(false); } catch (Exception) { }
+            BuildPools(); EnsureCamera(); dirty = true; applyAt = 0f;
+        }
+
+        internal static void CloseEditor()
+        {
+            Open = false;
+            try { if (menuCanvas != null) menuCanvas.SetActive(true); } catch (Exception) { }
+            menuCanvas = null;
+            DestroyDonor();
+            try { if (camGo != null) UnityEngine.Object.Destroy(camGo); if (lightGo != null) UnityEngine.Object.Destroy(lightGo); } catch (Exception) { }
+            try { if (rt != null) { rt.Release(); UnityEngine.Object.Destroy(rt); } } catch (Exception) { }
+            camGo = null; lightGo = null; cam = null; rt = null;
+        }
+
+        internal static void Tick()
+        {
+            if (!Open) return;
+            if (poolsDirty) BuildPools();
+            if (dirty && Time.realtimeSinceStartup >= applyAt) { applyAt = Time.realtimeSinceStartup + 0.15f; ApplyToDonor(); }
+            PoseDonor();
+            for (int i = 0; i < lodList.Count; i++) { try { if (lodList[i] != null && lodList[i].enabled) lodList[i].enabled = false; } catch (Exception) { } }
+            if (frameDue > 0 && --frameDue == 0) { Frame(); try { var oc = donor.GetComponentInChildren<CitizenOutfitController>(true); if (oc != null) oc.enabled = false; } catch (Exception) { } }
+            UpdateCamera();
+        }
+
+        // аниматор донора обновляем вручную: без этого все части лежат в нуле
+        static void PoseDonor()
+        {
+            if (donor == null) return;
+            try
+            {
+                var an = donor.GetComponent<Animator>();
+                if (an == null) an = donor.GetComponentInChildren<Animator>(true);
+                if (an == null) return;
+                if (an.transform.localScale.x < 0.5f) an.transform.localScale = Vector3.one;   // игра прячет модель, масштабируя «Model» в ноль
+                if (an.enabled) { an.enabled = false; an.fireEvents = false; an.applyRootMotion = false; }
+                for (int li = 1; li < an.layerCount; li++) an.SetLayerWeight(li, 0f);
+                an.SetBool("armsLock", false); an.SetBool("carryingItem", false); an.SetBool("restrained", false);
+                an.SetInteger("carryItem", 0); an.SetInteger("ArmsState", 0);
+                if (!rebound) { rebound = true; try { an.Rebind(); } catch (Exception) { } }
+                an.Update(0.02f);
+            }
+            catch (Exception e) { if (!poseWarn) { poseWarn = true; Plugin.L.LogWarning("[CHAR] PoseDonor: " + e.Message); } }
+        }
+        static readonly List<Renderer> lodList = new List<Renderer>();
+        static bool poseWarn, dumpedB, rebound;
+
+        // ---------- IMGUI ----------
+        static GUIStyle btnStyle, labelStyle, titleStyle;
+
+        static void Styles()
+        {
+            if (btnStyle != null) return;
+            btnStyle = new GUIStyle(GUI.skin.button) { fontSize = 18 };
+            labelStyle = new GUIStyle(GUI.skin.label) { fontSize = 18 };
+            labelStyle.normal.textColor = new Color(0.95f, 0.85f, 0.9f, 1f);
+            titleStyle = new GUIStyle(GUI.skin.label) { fontSize = 34, fontStyle = FontStyle.Bold };
+            titleStyle.normal.textColor = new Color(0.95f, 0.3f, 0.35f, 1f);
+        }
+
+        static bool MenuVisible()
+        {
+            try
+            {
+                var mm = MainMenuController.Instance;
+                return mm != null && mm.mainMenuActive;
+            }
+            catch (Exception) { return false; }
+        }
+
+        internal static void OnGui()
+        {
+            try
+            {
+                Styles();
+                float s = Screen.height / 1080f;
+                var old = GUI.matrix;
+                GUI.matrix = Matrix4x4.Scale(new Vector3(s, s, 1f));
+                if (!Open)
+                {
+                    if (MenuVisible() && GUI.Button(new Rect(278f, 940f, 297f, 48f), "CHARACTER CREATE", btnStyle)) OpenEditor();
+                    GUI.matrix = old; return;
+                }
+                float W = Screen.width / s, H = Screen.height / s;
+                GUI.color = new Color(0f, 0f, 0f, 1f);
+                GUI.DrawTexture(new Rect(0f, 0f, W, H), Texture2D.whiteTexture);
+                GUI.color = Color.white;
+                GUI.Label(new Rect(40f, 20f, 800f, 50f), "CHARACTER CREATE", titleStyle);
+
+                float x = 40f, y = 90f, w = 520f;
+                bool ch = false;
+                ch |= Choice(ref y, x, w, "Gender", GenderNames, ref cur.Gender, true);
+                ch |= Choice(ref y, x, w, "Build", BuildNames, ref cur.Build, true);
+                ch |= Choice(ref y, x, w, "Eyes", EyeNames, ref cur.Eyes, false);
+                ch |= Swatches(ref y, x, w, "Skin tone", Skins, ref cur.Skin);
+                ch |= Swatches(ref y, x, w, "Hair colour", HairCols, ref cur.HairCol);
+                bool pool = false;
+                pool |= Pick(ref y, x, w, "Face", heads, v => cur.Head = v, cur.Head, false);
+                pool |= Pick(ref y, x, w, "Hair", hairs, v => cur.Hair = v, cur.Hair, true);
+                pool |= Pick(ref y, x, w, "Top", tops, v => cur.Top = v, cur.Top, true);
+                ch |= Swatches(ref y, x, w, "Top colour", Cloth, ref cur.TopCol);
+                pool |= Pick(ref y, x, w, "Bottom", bottoms, v => cur.Bottom = v, cur.Bottom, true);
+                ch |= Swatches(ref y, x, w, "Bottom colour", Cloth, ref cur.BottomCol);
+                pool |= Pick(ref y, x, w, "Shoes", shoes, v => cur.Shoes = v, cur.Shoes, true);
+                ch |= Swatches(ref y, x, w, "Shoes colour", Cloth, ref cur.ShoesCol);
+                pool |= Pick(ref y, x, w, "Hat", hats, v => cur.Hat = v, cur.Hat, true);
+                pool |= Pick(ref y, x, w, "Glasses", glasses, v => cur.Glasses = v, cur.Glasses, true);
+                if (ch) { poolsDirty = true; }
+                if (ch || pool) dirty = true;
+
+                // предпросмотр
+                var pr = new Rect(620f, 90f, 640f, 900f);
+                if (rt != null) GUI.DrawTexture(pr, rt, ScaleMode.ScaleToFit, false);
+                var e = Event.current;
+                if (e != null && pr.Contains(e.mousePosition))
+                {
+                    if (e.type == EventType.MouseDrag)
+                    {
+                        if (e.button == 2) camY = Mathf.Clamp(camY - e.delta.y * 0.004f * zoom, -0.9f, 0.9f);
+                        else yaw += e.delta.x * 0.6f;
+                        e.Use();
+                    }
+                    else if (e.type == EventType.ScrollWheel) { zoom = Mathf.Clamp(zoom + e.delta.y * 0.15f, 0.5f, 6f); e.Use(); }
+                }
+                GUI.Label(new Rect(620f, 995f, 640f, 30f), "LMB drag: rotate   MMB drag: up/down   Wheel: zoom", labelStyle);
+
+                if (GUI.Button(new Rect(1320f, 880f, 240f, 56f), "SAVE", btnStyle)) Save();
+                if (GUI.Button(new Rect(1320f, 950f, 240f, 56f), "CLOSE", btnStyle)) CloseEditor();
+                if (GUI.Button(new Rect(1320f, 810f, 240f, 56f), "RANDOM", btnStyle)) Randomize();
+                GUI.Label(new Rect(1320f, 90f, 560f, 120f), status, labelStyle);
+                bool fn = GUI.Toggle(new Rect(1320f, 740f, 400f, 36f), fillNaked, " Fill bare body parts myself", btnStyle);
+                if (fn != fillNaked) { fillNaked = fn; dirty = true; }
+                GUI.matrix = old;
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[CHAR] GUI: " + e.Message); }
+        }
+
+        static void Randomize()
+        {
+            var r = new System.Random();
+            cur.Gender = r.Next(0, 3); cur.Build = r.Next(0, 4); cur.Eyes = r.Next(0, 4);
+            cur.Skin = r.Next(0, Skins.Length); cur.HairCol = r.Next(0, HairCols.Length);
+            cur.TopCol = r.Next(0, Cloth.Length); cur.BottomCol = r.Next(0, Cloth.Length); cur.ShoesCol = r.Next(0, Cloth.Length);
+            BuildPools();
+            Func<List<ClothesPreset>, string> any = l => l.Count == 0 ? "" : l[r.Next(0, l.Count)].name;
+            cur.Head = any(heads); cur.Hair = any(hairs); cur.Top = any(tops); cur.Bottom = any(bottoms); cur.Shoes = any(shoes);
+            cur.Hat = ""; cur.Glasses = "";
+            dirty = true;
+        }
+
+        // ряд кнопок-вариантов
+        static bool Choice(ref float y, float x, float w, string label, string[] names, ref int v, bool unused)
+        {
+            GUI.Label(new Rect(x, y, 150f, 34f), label, labelStyle);
+            float bw = (w - 160f) / names.Length; bool ch = false;
+            for (int i = 0; i < names.Length; i++)
+            {
+                GUI.color = i == v ? new Color(1f, 0.45f, 0.5f, 1f) : Color.white;
+                if (GUI.Button(new Rect(x + 160f + i * bw, y, bw - 4f, 34f), names[i], btnStyle)) { if (v != i) { v = i; ch = true; } }
+            }
+            GUI.color = Color.white; y += 42f; return ch;
+        }
+
+        static bool Swatches(ref float y, float x, float w, string label, Color[] cols, ref int v)
+        {
+            GUI.Label(new Rect(x, y, 150f, 30f), label, labelStyle);
+            float bw = (w - 160f) / cols.Length; bool ch = false;
+            for (int i = 0; i < cols.Length; i++)
+            {
+                var rc = new Rect(x + 160f + i * bw, y, bw - 3f, 28f);
+                GUI.color = cols[i];
+                GUI.DrawTexture(rc, Texture2D.whiteTexture);
+                GUI.color = Color.white;
+                if (i == v) GUI.Box(rc, "");
+                if (GUI.Button(rc, GUIContent.none, GUIStyle.none)) { if (v != i) { v = i; ch = true; } }
+            }
+            y += 36f; return ch;
+        }
+
+        // [<] имя [>]
+        static bool Pick(ref float y, float x, float w, string label, List<ClothesPreset> pool, Action<string> set, string curName, bool allowNone)
+        {
+            GUI.Label(new Rect(x, y, 150f, 34f), label, labelStyle);
+            int idx = -1; for (int i = 0; i < pool.Count; i++) if (pool[i].name == curName) { idx = i; break; }
+            string shown = idx >= 0 ? pool[idx].name : (allowNone ? "(none)" : "-");
+            bool ch = false;
+            int count = pool.Count + (allowNone ? 1 : 0);
+            if (count > 0)
+            {
+                int pos = allowNone ? idx + 1 : Mathf.Max(0, idx); // 0 = (none) при allowNone
+                int np = pos;
+                if (GUI.Button(new Rect(x + 160f, y, 40f, 34f), "<", btnStyle)) np = (pos + count - 1) % count;
+                if (GUI.Button(new Rect(x + w - 40f, y, 40f, 34f), ">", btnStyle)) np = (pos + 1) % count;
+                if (np != pos)
+                {
+                    int pi = allowNone ? np - 1 : np;
+                    set(pi < 0 ? "" : pool[pi].name); ch = true;
+                }
+            }
+            GUI.Label(new Rect(x + 206f, y, w - 250f, 34f), shown, labelStyle);
+            y += 40f; return ch;
+        }
+    }
+
     public class SodCoopDriver : MonoBehaviour
     {
         public SodCoopDriver(IntPtr ptr) : base(ptr) { }
         float nextLog; bool alive; KeyCode key = KeyCode.F4; bool keyParsed;
+        public void OnGUI() { CharEditor.OnGui(); }
         public void Update()
         {
             try
             {
+                CharEditor.Tick();
                 if (!alive) { alive = true; Plugin.L.LogInfo("[DRV] Update работает"); }
                 if (!keyParsed)
                 {
