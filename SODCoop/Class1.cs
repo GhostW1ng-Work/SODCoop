@@ -20,7 +20,7 @@ namespace SodCoop
 {
     public enum NetMode { Off, Host, Client }
 
-    [BepInPlugin("com.yourname.sodcoop", "SodCoop", "0.9.41")]
+    [BepInPlugin("com.yourname.sodcoop", "SodCoop", "0.9.55")]
     public class Plugin : BasePlugin
     {
         internal static ManualLogSource L;
@@ -1906,6 +1906,7 @@ namespace SodCoop
                 u.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
                 u.Client.Bind(new IPEndPoint(IPAddress.Any, DiscPort));
                 u.Client.Blocking = false;
+                try { u.Client.IOControl(-1744830452, new byte[] { 0 }, null); } catch (Exception) { }
                 hostSock = u;
                 Plugin.L.LogInfo("[LAN] Сервер виден в локальной сети (UDP " + DiscPort + ")");
             }
@@ -1933,6 +1934,7 @@ namespace SodCoop
                     scanSock = new UdpClient(new IPEndPoint(IPAddress.Any, 0));
                     scanSock.EnableBroadcast = true;
                     scanSock.Client.Blocking = false;
+                    try { scanSock.Client.IOControl(-1744830452, new byte[] { 0 }, null); } catch (Exception) { }
                 }
                 var data = Encoding.UTF8.GetBytes(Q);
                 var targets = new HashSet<string> { "255.255.255.255", "127.0.0.1" };
@@ -2012,7 +2014,54 @@ namespace SodCoop
                 if (NetMenu.Open && Time.realtimeSinceStartup >= nextScan) { nextScan = Time.realtimeSinceStartup + 2.5f; Scan(); }
                 if (!NetMenu.Open && scanSock != null) { CloseScan(); Servers.Clear(); }
             }
+            catch (SocketException) { }
             catch (Exception e) { Plugin.L.LogWarning("[LAN] Tick: " + e.Message); }
+        }
+    }
+
+
+    // Автопрохождение меню игры: нажимает те же кнопки, что и игрок (пути и обработчики взяты из разведки)
+    // Подсказки в главном меню для хоста/клиента (само меню игры мод не трогает: сохранение выбирает и запускает игрок)
+    internal static class MenuAuto
+    {
+        internal static string Notice = "";
+        static string lastNotice = ""; static float noticeAt;
+
+        internal static List<string> SaveNames()
+        {
+            var l = new List<KeyValuePair<DateTime, string>>();
+            try
+            {
+                foreach (var f in Directory.GetFiles(Net.SaveDir(), "*.sodb"))
+                {
+                    if (Path.GetFileName(f) == "SodCoop_sync.sodb") continue;
+                    l.Add(new KeyValuePair<DateTime, string>(File.GetLastWriteTimeUtc(f), Path.GetFileName(f)));
+                }
+            }
+            catch (Exception) { }
+            l.Sort((x, y) => y.Key.CompareTo(x.Key));
+            var r = new List<string>(); foreach (var kv in l) r.Add(kv.Value);
+            return r;
+        }
+
+        internal static void LoadSave(string fileName)
+        {
+            Notice = (fileName ?? "") == ""
+                ? "HOST: choose a save with Load Game and press Start. The server starts when the city has loaded."
+                : "Save received. Press Load Game, pick '" + Path.GetFileNameWithoutExtension(fileName) + "' and press Start. You connect automatically when the city has loaded.";
+            Plugin.L.LogInfo("[MENU] ручная загрузка: " + (fileName ?? "(хост)"));
+        }
+
+        internal static void NewGame()
+        {
+            Notice = "HOST: start a New Game. The server starts when the city has loaded.";
+            Plugin.L.LogInfo("[MENU] ручная новая игра");
+        }
+
+        internal static void Tick()
+        {
+            if (Notice != lastNotice) { lastNotice = Notice; noticeAt = Time.realtimeSinceStartup; }
+            if (Notice != "" && Time.realtimeSinceStartup - noticeAt > 120f) { Notice = ""; lastNotice = ""; }
         }
     }
 
@@ -2045,7 +2094,7 @@ namespace SodCoop
 
         static void OpenMenu()
         {
-            Net.EnsureRt();
+            Net.EnsureRt(); MenuAuto.Notice = "";
             Open = true; page = 0; msg = ""; selIp = ""; selPort = 0;
             fName = Net.RtName; fPass = Net.RtPassword; fPort = "" + Net.RtPort; fAddr = Net.RtAddress; fAPort = "" + Net.RtPort; fAPass = "";
             try { menuCanvas = GameObject.Find("MenuCanvas"); if (menuCanvas != null) menuCanvas.SetActive(false); } catch (Exception) { }
@@ -2124,7 +2173,7 @@ namespace SodCoop
             }
 
             float by = H - 70f;
-            if (GUI.Button(new Rect(40f, by, 200f, 50f), "HOST", btn)) { page = 1; msg = ""; }
+            if (GUI.Button(new Rect(40f, by, 200f, 50f), "HOST", btn)) { page = 1; msg = ""; hostSaves = MenuAuto.SaveNames(); hostSel = 0; }
             Server_Connect(new Rect(250f, by, 200f, 50f));
             if (GUI.Button(new Rect(460f, by, 200f, 50f), "DIRECT", btn)) { page = 2; msg = ""; }
             if (GUI.Button(new Rect(670f, by, 200f, 50f), "REFRESH", btn)) { Lan.Servers.Clear(); Lan.Scan(); }
@@ -2140,12 +2189,14 @@ namespace SodCoop
             if (GUI.Button(r, "CONNECT", btn) && sv != null)
             {
                 if (sv.Pw) { fAPass = ""; page = 3; msg = ""; }
-                else { Net.ApplyClient(sv.Ip, sv.Port, ""); Done("Connecting to '" + sv.Name + "'. Now load the same save as the host (seed " + sv.Seed + ")."); }
+                else { Net.ApplyClient(sv.Ip, sv.Port, ""); Net.StartTransfer(); Done(""); }
             }
             GUI.enabled = true;
         }
 
         static void Done(string m) { msg = m; CloseMenu(); }
+
+        static List<string> hostSaves = new List<string>(); static int hostSel;
 
         static void PageHost()
         {
@@ -2156,15 +2207,23 @@ namespace SodCoop
             fPass = GUI.PasswordField(new Rect(x, y, 600f, 40f), fPass ?? "", '*', 32, field); y += 56f;
             GUI.Label(new Rect(x, y, 600f, 30f), "Port", lab); y += 32f;
             fPort = GUI.TextField(new Rect(x, y, 200f, 40f), fPort ?? "", 5, field); y += 56f;
-            GUI.Label(new Rect(x, y, 800f, 30f), "Max players: 2 (more in a future version)", lab); y += 60f;
-            if (GUI.Button(new Rect(x, y, 260f, 50f), "START HOSTING", btn))
-            {
-                int p;
-                if (string.IsNullOrWhiteSpace(fName)) msg = "Enter a server name.";
-                else if (!Port(fPort, out p)) msg = "Port must be a number from 1024 to 65535.";
-                else { Net.ApplyHost(fName.Trim(), fPass ?? "", p); Done("Hosting '" + fName.Trim() + "'. Start or load a game; the server goes live when the city has loaded."); }
-            }
-            if (GUI.Button(new Rect(x + 280f, y, 200f, 50f), "BACK", btn)) { page = 0; msg = ""; }
+            GUI.Label(new Rect(x, y, 800f, 30f), "Max players: 2 (more in a future version)", lab);
+            y += 50f;
+            GUI.Label(new Rect(x, y, 1100f, 30f), "HOST returns to the main menu: load a save or start a new game yourself. The server starts when the city has loaded.", lab); y += 60f;
+            if (GUI.Button(new Rect(x, y, 300f, 50f), "HOST (LOAD GAME)", btn)) StartHost(false);
+            if (GUI.Button(new Rect(x + 320f, y, 260f, 50f), "HOST NEW GAME", btn)) StartHost(true);
+            if (GUI.Button(new Rect(x + 600f, y, 200f, 50f), "BACK", btn)) { page = 0; msg = ""; }
+        }
+
+        static void StartHost(bool newGame)
+        {
+            int p;
+            if (string.IsNullOrWhiteSpace(fName)) { msg = "Enter a server name."; return; }
+            if (!Port(fPort, out p)) { msg = "Port must be a number from 1024 to 65535."; return; }
+            Net.ApplyHost(fName.Trim(), fPass ?? "", p);
+            CloseMenu();
+            if (newGame) MenuAuto.NewGame(); else MenuAuto.LoadSave("");
+            msg = "";
         }
 
         static void PageDirect()
@@ -2181,7 +2240,7 @@ namespace SodCoop
                 int p;
                 if (string.IsNullOrWhiteSpace(fAddr)) msg = "Enter the host IP address.";
                 else if (!Port(fAPort, out p)) msg = "Port must be a number from 1024 to 65535.";
-                else { Net.ApplyClient(fAddr.Trim(), p, fAPass ?? ""); Done("Connecting to " + fAddr.Trim() + ":" + p + ". Now load the same save as the host."); }
+                else { Net.ApplyClient(fAddr.Trim(), p, fAPass ?? ""); Net.StartTransfer(); Done(""); }
             }
             if (GUI.Button(new Rect(x + 280f, y, 200f, 50f), "BACK", btn)) { page = 0; msg = ""; }
         }
@@ -2198,7 +2257,8 @@ namespace SodCoop
             if (GUI.Button(new Rect(px, y, 260f, 50f), "CONNECT", btn) && sv != null)
             {
                 Net.ApplyClient(sv.Ip, sv.Port, fAPass ?? "");
-                Done("Connecting to '" + sv.Name + "'. Now load the same save as the host (seed " + sv.Seed + ").");
+                Net.StartTransfer();
+                Done("");
             }
             GUI.enabled = true;
             if (GUI.Button(new Rect(px + 280f, y, 200f, 50f), "BACK", btn)) { page = 0; msg = ""; }
@@ -2216,6 +2276,8 @@ namespace SodCoop
             {
                 CharEditor.Tick();
                 Lan.Tick();
+                Net.Poll();
+                MenuAuto.Tick();
                 if (!alive) { alive = true; Plugin.L.LogInfo("[DRV] Update работает"); }
                 if (!keyParsed)
                 {
@@ -2241,6 +2303,41 @@ namespace SodCoop
 
     internal static class Probe
     {
+        static void ListDir(StringBuilder sb, string dir, int depth)
+        {
+            try
+            {
+                if (!System.IO.Directory.Exists(dir) || depth > 2) return;
+                sb.AppendLine("[DIR] " + dir);
+                int n = 0;
+                foreach (var f in System.IO.Directory.GetFiles(dir)) { if (n++ > 40) break; var fi = new System.IO.FileInfo(f); sb.AppendLine("[FILE]   " + fi.Name + " " + fi.Length + " B " + fi.LastWriteTime); }
+                foreach (var d in System.IO.Directory.GetDirectories(dir)) ListDir(sb, d, depth + 1);
+            }
+            catch (Exception) { }
+        }
+
+        static void DumpType(StringBuilder sb, System.Reflection.Assembly asm, string name, bool brief)
+        {
+            try
+            {
+                Type t = null;
+                foreach (var x in asm.GetTypes()) if (x.Name == name) { t = x; break; }
+                if (t == null) { sb.AppendLine("[API] нет типа " + name); return; }
+                sb.AppendLine("[API] === " + t.FullName + " : " + (t.BaseType != null ? t.BaseType.Name : ""));
+                var f = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.DeclaredOnly;
+                foreach (var p in t.GetProperties(f)) sb.AppendLine("[API]   prop " + p.PropertyType.Name + " " + p.Name + (p.GetMethod != null && p.GetMethod.IsStatic ? " (static)" : ""));
+                if (brief) return;
+                foreach (var m in t.GetMethods(f))
+                {
+                    if (m.IsSpecialName || m.Name.StartsWith("_") || m.Name.StartsWith("NativeMethod")) continue;
+                    var ps = m.GetParameters(); var sig = new List<string>();
+                    foreach (var q in ps) sig.Add(q.ParameterType.Name + " " + q.Name);
+                    sb.AppendLine("[API]   " + (m.IsStatic ? "static " : "") + m.ReturnType.Name + " " + m.Name + "(" + string.Join(", ", sig.ToArray()) + ")");
+                }
+            }
+            catch (Exception e) { sb.AppendLine("[API] " + name + ": " + e.Message); }
+        }
+
         static string PathOf(Transform t)
         {
             string p = t.name;
@@ -2267,15 +2364,33 @@ namespace SodCoop
                 {
                     sb.AppendLine("[MENU] mainMenuActive=" + mm.mainMenuActive + " container=" + (mm.mainMenuContainer != null ? PathOf(mm.mainMenuContainer) : "null"));
                     try { sb.AppendLine("[MENU] components=" + mm.components.Count); } catch (Exception) { }
-                    var bs = mm.GetComponentsInChildren<ButtonController>(true);
-                    for (int i = 0; i < bs.Length && i < 80; i++)
+                    var mroot = GameObject.Find("MenuCanvas");
+                    var bs = (mroot != null ? mroot.transform : mm.transform).GetComponentsInChildren<ButtonController>(true);
+                    for (int i = 0; i < bs.Length && i < 400; i++)
                     {
                         var b = bs[i]; if (b == null) continue;
                         string txt = ""; try { txt = b.text != null ? b.text.text : ""; } catch (Exception) { }
                         string dict = ""; try { dict = b.textDictionary + "/" + b.textReference + " auto=" + b.useAutomaticText; } catch (Exception) { }
                         var rt = b.transform as RectTransform;
                         string rs = rt != null ? ("pos=" + rt.anchoredPosition + " size=" + rt.sizeDelta + " anchors=" + rt.anchorMin + "-" + rt.anchorMax) : "";
-                        sb.AppendLine("[BTN] " + PathOf(b.transform) + " | text='" + txt + "' | " + dict + " | active=" + b.gameObject.activeInHierarchy + " | " + rs);
+                        string ev = "";
+                        try
+                        {
+                            var ub = b.button;
+                            if (ub != null)
+                            {
+                                int n = ub.onClick.GetPersistentEventCount();
+                                for (int k = 0; k < n; k++)
+                                {
+                                    var tg = ub.onClick.GetPersistentTarget(k);
+                                    ev += " [" + (tg != null ? tg.GetType().Name + ":" + tg.name : "null") + "." + ub.onClick.GetPersistentMethodName(k) + "]";
+                                }
+                                if (n == 0) ev = " (нет постоянных обработчиков)";
+                            }
+                            else ev = " (нет Button)";
+                        }
+                        catch (Exception e) { ev = " (onClick: " + e.Message + ")"; }
+                        sb.AppendLine("[BTN] " + PathOf(b.transform) + " | text='" + txt + "' | active=" + b.gameObject.activeInHierarchy + " | onClick=" + ev);
                     }
                     try
                     {
@@ -2292,7 +2407,7 @@ namespace SodCoop
             {
                 var all = Toolbox.Instance.allClothes;
                 sb.AppendLine("[CLOTHES] allClothes=" + (all != null ? all.Count : -1));
-                for (int i = 0; all != null && i < all.Count; i++)
+                for (int i = 0; false && all != null && i < all.Count; i++)
                 {
                     var c = all[i]; if (c == null) continue;
                     sb.AppendLine("[CL] " + c.name + " | cat=" + Join(c.outfitCategories) + " | gender=" + Join(c.suitableForGenders) + " | build=" + Join(c.suitableForBuilds) + " | covers=" + Join(c.covers) + " | head=" + c.isHead + " | models=" + (c.models != null ? c.models.Count : -1) + " | tags=" + Join(c.tags) + " | hair=" + Join(c.suitableForHairstyle) + " | chance=" + c.baseChance);
@@ -2359,6 +2474,43 @@ namespace SodCoop
 
             try
             {
+                var asm = typeof(MainMenuController).Assembly;
+                var names = new List<string>();
+                foreach (var t in asm.GetTypes())
+                {
+                    string n = t.Name;
+                    if (n.IndexOf("Save", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Load", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("CityConstruct", StringComparison.OrdinalIgnoreCase) >= 0)
+                        if (!n.StartsWith("<") && !n.Contains("__")) names.Add(n);
+                }
+                sb.AppendLine("[API] типы с Save/Load: " + string.Join(", ", names.ToArray()));
+                string[] want = { "SaveStateController", "SaveGameEntryController", "CityConstructor", "Game", "StateSaveData", "CitySaveData", "SessionData" };
+                foreach (var w in want) DumpType(sb, asm, w, w == "SessionData");
+            }
+            catch (Exception e) { sb.AppendLine("[API] ошибка: " + e.Message); }
+
+            try
+            {
+                sb.AppendLine("[PATH] persistentDataPath=" + Application.persistentDataPath + " dataPath=" + Application.dataPath);
+                ListDir(sb, Application.persistentDataPath, 0);
+                try { ListDir(sb, System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Application.dataPath) ?? "", "Save"), 0); } catch (Exception) { }
+            }
+            catch (Exception e) { sb.AppendLine("[PATH] ошибка: " + e.Message); }
+
+            try
+            {
+                var mm2 = MainMenuController.Instance;
+                if (mm2 != null)
+                {
+                    var l1 = mm2.spawnedLoadGames; var l2 = mm2.spawnedSaveGames;
+                    sb.AppendLine("[SAVES] load=" + (l1 != null ? l1.Count : -1) + " save=" + (l2 != null ? l2.Count : -1) + " selected=" + (mm2.selectedSave != null ? mm2.selectedSave.name : "null"));
+                    for (int i = 0; l1 != null && i < l1.Count && i < 20; i++) { var e1 = l1[i]; if (e1 != null) sb.AppendLine("[SAVES]   load[" + i + "] " + e1.name + " " + e1.GetType().Name); }
+                    try { var sec = mm2.selectedSave ?? (l1 != null && l1.Count > 0 ? l1[0] : null); if (sec != null) DumpType(sb, typeof(MainMenuController).Assembly, "SaveGameEntryController", false); } catch (Exception) { }
+                }
+            }
+            catch (Exception e) { sb.AppendLine("[SAVES] ошибка: " + e.Message); }
+
+            try
+            {
                 string path = System.IO.Path.Combine(BepInEx.Paths.BepInExRootPath, "SodCoop_probe_" + (where.StartsWith("гл") ? "menu" : "game") + ".txt");
                 System.IO.File.WriteAllText(path, sb.ToString());
                 Plugin.L.LogInfo("[PROBE] записано: " + path);
@@ -2397,6 +2549,7 @@ namespace SodCoop
         const byte MsgNpcHit = 11;
         const byte MsgPuppet = 12;      // хост -> клиент: humanID горожанина-двойника
         const byte MsgNpcAct = 15;      // хост -> клиент: разовые действия горожанина (удар, бросок, блок, оружие в руках)
+        const byte MsgSaveReq = 18, MsgSaveMeta = 19, MsgSaveWant = 20, MsgSaveChunk = 21, MsgSaveDone = 22, MsgSaveFail = 23;   // передача сохранения хост -> клиент
         const byte MsgBodyFx = 17;      // игрок -> игрок: меня ударили / я упал / я встал / я умер (для анимации аватара)
         const byte MsgSound = 16;       // хост -> клиент: звук горожанина в бою
         const byte MsgPuppetHurt = 13;  // хост -> клиент: горожанин ударил двойника = ударил тебя
@@ -2686,7 +2839,10 @@ namespace SodCoop
         internal static string StatusLine()
         {
             EnsureRt();
+            if (xferMode) return "CLIENT: " + xferText;
+            if (MenuAuto.Notice != "") return MenuAuto.Notice;
             if (RtMode == NetMode.Off) return "";
+            if (RtMode == NetMode.Host && sendStage != 0) return "HOSTING: sending the save to a player...";
             if (RtMode == NetMode.Host) return (manager != null ? "HOSTING" : "HOST (starts when the city has loaded)") + ": " + RtName + " : " + RtPort;
             if (connectRejected) return "REJECTED by " + RtAddress + ":" + RtPort + " (wrong password?)";
             if (serverPeer != null) return "CONNECTED to " + RtAddress + ":" + RtPort;
@@ -2696,6 +2852,266 @@ namespace SodCoop
 
         static Appearance remoteApp;
         static string remoteAppJson = "";
+
+        // ================= Передача сохранения (хост -> клиент) =================
+        class XFile { public string Name = "", Dest = ""; public byte Kind; public long Size, Got; public bool Need; public FileStream Fs; }
+        static bool xferMode, xferFinish; static string xferFailMsg; static string xferText = "", xferSaveName = ""; static float xferAt;
+        static readonly List<XFile> xfFiles = new List<XFile>();
+        // хост
+        static NetPeer sendPeer; static int sendStage, sendIdx; static object snapTask; static float snapAt; static List<XFile> sendFiles;
+        static int snapVariant; static DateTime snapStartUtc;
+        const string SyncName = "SodCoop_sync.sodb";
+
+        internal static string SaveDir() { var d = Path.Combine(Application.persistentDataPath, "Save"); try { Directory.CreateDirectory(d); } catch (Exception) { } return d; }
+        internal static string CityDir() { var d = Path.Combine(Application.persistentDataPath, "Cities"); try { Directory.CreateDirectory(d); } catch (Exception) { } return d; }
+
+        internal static void StartTransfer()
+        {
+            xferMode = true; xferFinish = false; xferFailMsg = null; xferText = "Connecting to the host..."; xferAt = Time.realtimeSinceStartup; xferSaveName = "";
+            xfFiles.Clear();
+            Start();
+        }
+
+        static void XferFail(string m)
+        {
+            Plugin.L.LogWarning("[XFER] " + m);
+            foreach (var f in xfFiles) { try { if (f.Fs != null) f.Fs.Close(); } catch (Exception) { } f.Fs = null; }
+            xferMode = false; xferFinish = false; xferText = "Transfer failed: " + m;
+            Shutdown();
+            RtMode = NetMode.Off;
+            MenuAuto.Notice = "Could not get the host's save: " + m;
+        }
+
+        static void XferFinish()
+        {
+            try
+            {
+                foreach (var f in xfFiles)
+                {
+                    if (!f.Need) continue;
+                    if (f.Fs != null) { f.Fs.Close(); f.Fs = null; }
+                    if (f.Got != f.Size) { XferFail("file " + f.Name + " incomplete (" + f.Got + "/" + f.Size + ")"); return; }
+                    if (File.Exists(f.Dest)) File.Delete(f.Dest);
+                    File.Move(f.Dest + ".part", f.Dest);
+                }
+            }
+            catch (Exception e) { XferFail("saving files: " + e.Message); return; }
+            string name = xferSaveName;
+            Plugin.L.LogInfo("[XFER] сохранение получено: " + name);
+            xferMode = false; xferFinish = false; xferText = "";
+            Shutdown();   // на время загрузки города сеть выключаем; клиент подключится снова, когда мир загрузится
+            MenuAuto.LoadSave(name);
+        }
+
+        static void XferTick()
+        {
+            HostSendTick();
+            if (xferFailMsg != null) { var m = xferFailMsg; xferFailMsg = null; XferFail(m); return; }
+            if (xferFinish) { XferFinish(); return; }
+            if (xferMode && Time.realtimeSinceStartup - xferAt > 90f) XferFail("timed out waiting for the host (is the host in a loaded city?)");
+        }
+
+        // ---- клиент ----
+        static void ClientOnMeta(NetPacketReader r)
+        {
+            xfFiles.Clear();
+            int n = r.GetInt();
+            for (int i = 0; i < n; i++)
+            {
+                var f = new XFile(); f.Name = Path.GetFileName(r.GetString()); f.Kind = r.GetByte(); f.Size = r.GetLong();
+                xfFiles.Add(f);
+            }
+            var w = new NetDataWriter(); w.Put(MsgSaveWant); w.Put(n);
+            foreach (var f in xfFiles)
+            {
+                string ext = Path.GetExtension(f.Name).ToLowerInvariant();
+                bool okExt = ext == ".sodb" || ext == ".citb" || ext == ".txt";
+                f.Dest = Path.Combine(f.Kind == 0 ? SaveDir() : CityDir(), f.Name);
+                bool have = f.Kind == 1 && File.Exists(f.Dest) && new FileInfo(f.Dest).Length == f.Size;
+                f.Need = okExt && !have;
+                if (f.Kind == 0) xferSaveName = f.Name;
+                w.Put(f.Need);
+                Plugin.L.LogInfo($"[XFER] файл {f.Name}: {f.Size} Б, {(f.Need ? "нужен" : "уже есть")}");
+            }
+            serverPeer.Send(w, DeliveryMethod.ReliableOrdered);
+            xferAt = Time.realtimeSinceStartup;
+            xferText = "Receiving the save...";
+        }
+
+        static void ClientOnChunk(NetPacketReader r)
+        {
+            int idx = r.GetByte(); int n = r.GetInt();
+            var buf = new byte[n]; r.GetBytes(buf, 0, n);
+            if (idx < 0 || idx >= xfFiles.Count) return;
+            var f = xfFiles[idx];
+            if (f.Fs == null) f.Fs = new FileStream(f.Dest + ".part", FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
+            f.Fs.Write(buf, 0, n); f.Got += n;
+            xferAt = Time.realtimeSinceStartup;
+            long tot = 0, got = 0; foreach (var x in xfFiles) if (x.Need) { tot += x.Size; got += x.Got; }
+            xferText = "Receiving the save: " + (got / 1048576.0).ToString("F1") + " / " + (tot / 1048576.0).ToString("F1") + " MB";
+        }
+
+        // ---- хост ----
+        static void HostFail(string m)
+        {
+            Plugin.L.LogWarning("[XFER] " + m);
+            try { if (sendPeer != null) { var w = new NetDataWriter(); w.Put(MsgSaveFail); w.Put(m); sendPeer.Send(w, DeliveryMethod.ReliableOrdered); } } catch (Exception) { }
+            HostEndSend();
+        }
+
+        static void HostEndSend()
+        {
+            try { if (sendFiles != null) foreach (var f in sendFiles) { if (f.Fs != null) f.Fs.Close(); f.Fs = null; } } catch (Exception) { }
+            sendStage = 0; sendPeer = null; sendFiles = null; snapTask = null;
+        }
+
+        static void HostBeginSend(NetPeer peer)
+        {
+            if (sendStage != 0) { try { var w = new NetDataWriter(); w.Put(MsgSaveFail); w.Put("host is busy sending to another player"); peer.Send(w, DeliveryMethod.ReliableOrdered); } catch (Exception) { } return; }
+            sendPeer = peer; sendFiles = new List<XFile>(); snapTask = null; sendIdx = 0; snapVariant = 0;
+            Plugin.L.LogInfo("[XFER] клиент просит сохранение");
+            SnapStart();
+            sendStage = 1;
+        }
+
+        // игра принимает «путь» сохранения не очень понятно в каком виде: пробуем три варианта по очереди
+        static void SnapStart()
+        {
+            string full = Path.Combine(SaveDir(), SyncName);
+            string[] variants = { Path.Combine(SaveDir(), "SodCoop_sync.sod"), full, Path.GetFileNameWithoutExtension(SyncName) };
+            if (snapVariant == 0) { try { foreach (var o in Directory.GetFiles(SaveDir(), "SodCoop_sync*")) File.Delete(o); } catch (Exception) { } }
+            string path = variants[Mathf.Clamp(snapVariant, 0, variants.Length - 1)];
+            snapTask = null; snapStartUtc = DateTime.UtcNow; snapAt = Time.realtimeSinceStartup;
+            try { snapTask = SaveStateController.Instance.CaptureSaveStateAsync(path, true); Plugin.L.LogInfo("[XFER] снимок, вариант " + snapVariant + ": " + path); }
+            catch (Exception e) { Plugin.L.LogWarning("[XFER] CaptureSaveStateAsync(" + path + "): " + e.Message); snapTask = null; }
+        }
+
+        static string TaskInfo(object t)
+        {
+            if (t == null) return "null";
+            var sb = new StringBuilder();
+            foreach (var n in new[] { "Status", "IsCompleted", "IsFaulted", "IsCanceled" })
+            {
+                try { var p = t.GetType().GetProperty(n); if (p != null) sb.Append(n + "=" + p.GetValue(t, null) + " "); } catch (Exception) { }
+            }
+            try { var p = t.GetType().GetProperty("Exception"); var ex = p != null ? p.GetValue(t, null) : null; if (ex != null) sb.Append("Exception=" + ex); } catch (Exception) { }
+            return sb.ToString();
+        }
+
+        static string FindFreshSave()
+        {
+            string best = null; DateTime bt = DateTime.MinValue;
+            try
+            {
+                foreach (var f in Directory.GetFiles(SaveDir()))
+                {
+                    if (f.EndsWith(".part")) continue;
+                    var t = File.GetLastWriteTimeUtc(f);
+                    if (Path.GetFileName(f).StartsWith("SodCoop_sync")) t = t.AddDays(1);   // наш снимок важнее случайного автосохранения
+                    if (t >= snapStartUtc.AddSeconds(-1) && new FileInfo(f).Length > 0 && t > bt) { bt = t; best = f; }
+                }
+            }
+            catch (Exception) { }
+            return best;
+        }
+
+        static bool TaskDone(object t)
+        {
+            if (t == null) return true;
+            try { var p = t.GetType().GetProperty("IsCompleted"); if (p != null) return (bool)p.GetValue(t, null); } catch (Exception) { }
+            return true;
+        }
+
+        static void HostSendTick()
+        {
+            if (sendStage == 0) return;
+            try
+            {
+                if (sendPeer == null || sendPeer.ConnectionState != ConnectionState.Connected) { Plugin.L.LogWarning("[XFER] клиент отключился"); HostEndSend(); return; }
+                float now = Time.realtimeSinceStartup;
+                if (sendStage == 1)
+                {
+                    float el = now - snapAt;
+                    if (el < 1.5f) return;
+                    if (!TaskDone(snapTask) && el < 60f) return;
+                    string use = FindFreshSave();
+                    if (use == null && snapVariant < 2)
+                    {
+                        Plugin.L.LogWarning("[XFER] вариант " + snapVariant + ": файл не появился. Задача: " + TaskInfo(snapTask));
+                        snapVariant++; SnapStart(); return;
+                    }
+                    if (use != null) Plugin.L.LogInfo("[XFER] снимок готов: " + use + " (вариант " + snapVariant + "); задача: " + TaskInfo(snapTask));
+                    if (use == null)
+                    {
+                        Plugin.L.LogWarning("[XFER] снимок не получился ни одним способом, беру самое новое сохранение с диска. Задача: " + TaskInfo(snapTask));
+                        DateTime best = DateTime.MinValue;
+                        foreach (var f in Directory.GetFiles(SaveDir(), "*.sodb")) { var t = File.GetLastWriteTimeUtc(f); if (t > best) { best = t; use = f; } }
+                    }
+                    if (use == null) { HostFail("the host has no save to send"); return; }
+                    if (!use.EndsWith(".sodb", StringComparison.OrdinalIgnoreCase) || (Path.GetFileName(use).StartsWith("SodCoop_sync") && Path.GetFileName(use) != SyncName))
+                    {
+                        try
+                        {
+                            string norm = Path.Combine(SaveDir(), SyncName);
+                            File.Copy(use, norm, true);
+                            Plugin.L.LogInfo("[XFER] имя снимка исправлено: " + Path.GetFileName(use) + " -> " + SyncName);
+                            use = norm;
+                        }
+                        catch (Exception e) { HostFail("cannot rename snapshot: " + e.Message); return; }
+                    }
+                    sendFiles.Add(new XFile { Name = Path.GetFileName(use), Dest = use, Kind = 0, Size = new FileInfo(use).Length });
+                    string seed = "" + CityData.Instance.seed;
+                    if (seed.Length > 3)
+                        foreach (var f in Directory.GetFiles(CityDir()))
+                        {
+                            string ext = Path.GetExtension(f).ToLowerInvariant();
+                            if ((ext == ".citb" || ext == ".txt") && Path.GetFileName(f).Contains(seed))
+                                sendFiles.Add(new XFile { Name = Path.GetFileName(f), Dest = f, Kind = 1, Size = new FileInfo(f).Length });
+                        }
+                    var w = new NetDataWriter(); w.Put(MsgSaveMeta); w.Put(sendFiles.Count);
+                    foreach (var f in sendFiles) { w.Put(f.Name); w.Put(f.Kind); w.Put(f.Size); }
+                    sendPeer.Send(w, DeliveryMethod.ReliableOrdered);
+                    sendStage = 2; snapAt = now;
+                    Plugin.L.LogInfo("[XFER] отправил список файлов: " + sendFiles.Count);
+                }
+                else if (sendStage == 2)
+                {
+                    if (now - snapAt > 30f) HostFail("the client did not answer");
+                }
+                else if (sendStage == 3)
+                {
+                    for (int budget = 0; budget < 8 && sendIdx < sendFiles.Count;)
+                    {
+                        var f = sendFiles[sendIdx];
+                        if (!f.Need) { sendIdx++; continue; }
+                        if (f.Fs == null) f.Fs = new FileStream(f.Dest, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                        var buf = new byte[16384];
+                        int n = f.Fs.Read(buf, 0, buf.Length);
+                        if (n <= 0) { f.Fs.Close(); f.Fs = null; sendIdx++; continue; }
+                        var w = new NetDataWriter(); w.Put(MsgSaveChunk); w.Put((byte)sendIdx); w.Put(n); w.Put(buf, 0, n);
+                        sendPeer.Send(w, DeliveryMethod.ReliableOrdered);
+                        budget++;
+                    }
+                    if (sendIdx >= sendFiles.Count)
+                    {
+                        var w = new NetDataWriter(); w.Put(MsgSaveDone);
+                        sendPeer.Send(w, DeliveryMethod.ReliableOrdered);
+                        Plugin.L.LogInfo("[XFER] отправка закончена");
+                        HostEndSend();
+                    }
+                }
+            }
+            catch (Exception e) { HostFail("send error: " + e.Message); }
+        }
+
+        static void HostOnWant(NetPacketReader r)
+        {
+            if (sendStage != 2 || sendFiles == null) return;
+            int n = r.GetInt();
+            for (int i = 0; i < n && i < sendFiles.Count; i++) sendFiles[i].Need = r.GetBool();
+            sendIdx = 0; sendStage = 3;
+            Plugin.L.LogInfo("[XFER] клиент ответил, начинаю отправку");
+        }
 
         static string MyAppearanceJson()
         {
@@ -2797,9 +3213,18 @@ namespace SodCoop
                         connecting = false;
                         Plugin.L.LogInfo($"[NET] Подключен к хосту: {peer}");
                         var w = new NetDataWriter();
-                        w.Put(MsgHello);
-                        w.Put(Describe());
-                        w.Put(MyAppearanceJson());
+                        if (xferMode)
+                        {
+                            w.Put(MsgSaveReq);
+                            xferText = "Connected, waiting for the host to prepare the save...";
+                            xferAt = Time.realtimeSinceStartup;
+                        }
+                        else
+                        {
+                            w.Put(MsgHello);
+                            w.Put(Describe());
+                            w.Put(MyAppearanceJson());
+                        }
                         peer.Send(w, DeliveryMethod.ReliableOrdered);
                     }
                 };
@@ -2813,6 +3238,8 @@ namespace SodCoop
                         serverPeer = null;
                         connecting = false;
                         nextAttempt = Time.realtimeSinceStartup + 3f;
+                        if (xferMode && xferFailMsg == null && !xferFinish)
+                            xferFailMsg = info.Reason == DisconnectReason.ConnectionRejected ? "Rejected by the host (wrong password?)" : "Connection to the host failed: " + info.Reason;
                         if (info.Reason == DisconnectReason.ConnectionRejected)
                         {
                             connectRejected = true;
@@ -2854,6 +3281,8 @@ namespace SodCoop
             try
             {
                 manager.PollEvents();
+                XferTick();
+                if (manager == null) return;
 
                 // Клиент пробует подключиться, пока хост не станет доступен
                 if (!IsHost && serverPeer == null && !connecting && !connectRejected &&
@@ -7409,6 +7838,12 @@ namespace SodCoop
             {
                 if (IsHost && Plugin.CfgNpcSync.Value) OnNpcHit(reader);
             }
+            else if (type == MsgSaveReq) { if (IsHost) HostBeginSend(peer); }
+            else if (type == MsgSaveWant) { if (IsHost) HostOnWant(reader); }
+            else if (type == MsgSaveMeta) { if (xferMode) ClientOnMeta(reader); }
+            else if (type == MsgSaveChunk) { if (xferMode) ClientOnChunk(reader); }
+            else if (type == MsgSaveDone) { if (xferMode) xferFinish = true; }
+            else if (type == MsgSaveFail) { if (xferMode) xferFailMsg = "Host: " + reader.GetString(); }
             else if (type == MsgBodyFx)
             {
                 OnBodyFx(reader);
