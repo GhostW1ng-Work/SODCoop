@@ -322,7 +322,7 @@ namespace SodCoop
             Harmony.CreateAndPatchAll(typeof(PlayerPatch));
             Harmony.CreateAndPatchAll(typeof(MeleePatch));
             Harmony.CreateAndPatchAll(typeof(BlockPatch));
-            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch) })
+            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch) })
             {
                 try { Harmony.CreateAndPatchAll(t); }
                 catch (Exception e) { L.LogWarning($"[PATCH] {t.Name}: {e.Message}"); }
@@ -657,6 +657,25 @@ namespace SodCoop
         {
             return !Net.ClientFollowsHostWeather();
         }
+    }
+
+    // Хост сохраняет игру: рядом с сейвом записываем профили игроков
+    [HarmonyPatch(typeof(SaveStateController), "CaptureSaveStateAsync")]
+    public static class GameSavePatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(string __0)
+        {
+            try { Net.OnGameSaving(__0); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] снимок при сохранении: " + e.Message); }
+        }
+    }
+
+    // Начало загрузки мира (новая игра или сейв): профили хоста надо взять заново
+    [HarmonyPatch(typeof(CityConstructor), "StartLoading")]
+    public static class WorldLoadPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix() { Net.OnWorldLoading(); }
     }
 
     // Без сознания / в больнице игра ускоряет время (veryFast). В мультиплеере время общее: состояние оставляем, а множитель возвращаем к x1
@@ -2868,7 +2887,7 @@ namespace SodCoop
         const byte MsgRelay = 26;       // хост -> клиент: [pid отправителя][тип][данные] - сообщение другого клиента
         const byte MsgPlayerInfo = 27;  // хост -> клиент: [pid][внешний вид] - сведения о другом игроке
         const byte MsgPlayerLeft = 28;  // хост -> клиент: [pid] - игрок вышел
-        const byte MsgProfile = 29;     // профиль игрока: [1][json] клиент->хост сохранить; [2] клиент->хост запросить; [3][есть][json] хост->клиент
+        const byte MsgProfile = 29;     // профиль игрока: [1][json] клиент->хост сохранить; [2] клиент->хост запросить; [3][есть][json] хост->клиент; [4] хост->клиент: сохраняю игру, пришли профиль сейчас
         const byte MsgSound = 16;       // хост -> клиент: звук горожанина в бою
         const byte MsgPuppetHurt = 13;  // хост -> клиент: горожанин ударил двойника = ударил тебя
 
@@ -8712,16 +8731,33 @@ namespace SodCoop
         }
 
         // ---------- Профили игроков: деньги, соцрейтинг, здоровье, статусы, инвентарь, квартиры ----------
-        public sealed class ProfItem { public string preset = ""; public int slot; }
+        public sealed class ProfPv { public int type; public float value; public string str = ""; }
+        public sealed class ProfItem
+        {
+            public string preset = ""; public int slot;
+            public bool hasState; public float val, cs;   // сколько осталось выпить/съесть, патроны и прочие переменные предмета
+            public System.Collections.Generic.List<ProfPv> pv = new System.Collections.Generic.List<ProfPv>();
+        }
         public sealed class ProfApt { public int id; public System.Collections.Generic.List<int[]> rems = new System.Collections.Generic.List<int[]>(); }
+        public sealed class ProfCode { public int type, id; public System.Collections.Generic.List<int> digits = new System.Collections.Generic.List<int>(); }
+        public sealed class ProfDisk { public string upgrade = ""; public int state, list, level, objId, uninstallCost; }
         public sealed class ProfileData
         {
             public string id = ""; public string saved = ""; public bool valid;
+            public int version;   // 2: есть позиция, ключи, отмычки, коды, синк-диски (у старых профилей этих данных нет, их не трогаем)
             public int money; public int social;
             public float hp = -1f, maxHp = -1f, nerve = -1f, maxNerve = -1f;
             public System.Collections.Generic.Dictionary<string, float> stats = new System.Collections.Generic.Dictionary<string, float>();
             public System.Collections.Generic.List<ProfItem> items = new System.Collections.Generic.List<ProfItem>();
             public System.Collections.Generic.List<ProfApt> apts = new System.Collections.Generic.List<ProfApt>();
+            public int residence = -1;   // адрес текущего жилья игрока
+            public bool hasPos; public float px, py, pz; public int nx, ny, nz;
+            public int lockpicks = -1;
+            public System.Collections.Generic.List<int> doorKeys = new System.Collections.Generic.List<int>();
+            public System.Collections.Generic.List<int> itemKeys = new System.Collections.Generic.List<int>();
+            public System.Collections.Generic.List<ProfCode> codes = new System.Collections.Generic.List<ProfCode>();
+            public System.Collections.Generic.List<int> knowsPw = new System.Collections.Generic.List<int>();
+            public System.Collections.Generic.List<ProfDisk> disks = new System.Collections.Generic.List<ProfDisk>();
         }
 
         static bool profileApplying, helloOkFlag, profDirty, profErrLogged;
@@ -8896,10 +8932,66 @@ namespace SodCoop
                     string pn = PresetNameOf(it);
                     if (pn == "") continue;
                     var pi2 = new ProfItem(); pi2.preset = pn; pi2.slot = sl.index;
+                    try
+                    {
+                        pi2.val = it.val; pi2.cs = it.cs; pi2.hasState = true;
+                        var pv = it.pv;
+                        if (pv != null)
+                            for (int k = 0; k < pv.Count && k < 30; k++)
+                            {
+                                var x = pv[k];
+                                if (x != null) pi2.pv.Add(new ProfPv { type = (int)x.varType, value = x.value, str = x.str ?? "" });
+                            }
+                    }
+                    catch (Exception) { }
                     pd.items.Add(pi2);
                 }
             }
+            pd.version = 2;
+            try { CaptureExtra(p, pd); } catch (Exception e) { if (!profErrLogged) { profErrLogged = true; Plugin.L.LogWarning("[PROFILE] сбор профиля: " + e.Message); } }
             return pd;
+        }
+
+        // позиция, жильё, ключи, отмычки, коды, синк-диски
+        static void CaptureExtra(Player p, ProfileData pd)
+        {
+            var pos = p.transform.position;
+            pd.px = pos.x; pd.py = pos.y; pd.pz = pos.z;
+            try { var n = p.currentNode; if (n != null) { var c = n.nodeCoord; pd.nx = (int)c.x; pd.ny = (int)c.y; pd.nz = (int)c.z; pd.hasPos = true; } } catch (Exception) { }
+            pd.residence = AddrIdOf(p.residence);
+            pd.lockpicks = (int)Math.Round(GcGet("lockPicks"));
+            try { var kr = p.keyring; if (kr != null) for (int i = 0; i < kr.Count; i++) { var d = kr[i]; if (d == null) continue; int k = DoorKey(d); if (k >= 0) pd.doorKeys.Add(k); } } catch (Exception) { }
+            try { var ki = p.playerKeyringInt; if (ki != null) for (int i = 0; i < ki.Count; i++) { var it = ki[i]; if (it != null) pd.itemKeys.Add(it.id); } } catch (Exception) { }
+            var gc = GameplayController.Instance;
+            if (gc != null)
+            {
+                try
+                {
+                    var ac = gc.acquiredPasscodes;
+                    if (ac != null)
+                        for (int i = 0; i < ac.Count; i++)
+                        {
+                            var c = ac[i]; if (c == null) continue;
+                            var pc = new ProfCode { type = (int)c.type, id = c.id };
+                            var dg = c.digits; if (dg != null) for (int j = 0; j < dg.Count; j++) pc.digits.Add(dg[j]);
+                            pd.codes.Add(pc);
+                        }
+                }
+                catch (Exception) { }
+                try { var kp = gc.playerKnowsPasswords; if (kp != null) for (int i = 0; i < kp.Count; i++) pd.knowsPw.Add(kp[i]); } catch (Exception) { }
+            }
+            try
+            {
+                var uc = UpgradesController.Instance;
+                var ups = uc != null ? uc.upgrades : null;
+                if (ups != null)
+                    for (int i = 0; i < ups.Count; i++)
+                    {
+                        var u = ups[i]; if (u == null) continue;
+                        pd.disks.Add(new ProfDisk { upgrade = u.upgrade ?? "", state = (int)u.state, list = u.list, level = u.level, objId = u.objId, uninstallCost = u.uninstallCost });
+                    }
+            }
+            catch (Exception) { }
         }
 
         static void ClearInventory()
@@ -8972,6 +9064,12 @@ namespace SodCoop
                     pendingIt = InteractableCreator.Instance.CreateWorldInteractable(pr, null, null, null, pl.transform.position + Vector3.up, Vector3.zero, null, null, "");
                     pendingTries = 0; pendingAt = now + 0.4f;
                     if (pendingIt == null) { Plugin.L.LogWarning($"[PROFILE] не смог создать предмет '{pi2.preset}'"); pendingItems.RemoveAt(0); pendBad++; }
+                    else if (pi2.hasState)
+                    {
+                        var st = new ItemState(); st.val = pi2.val; st.cs = pi2.cs;
+                        foreach (var x in pi2.pv) st.pv.Add(new PassedVal { type = x.type, value = x.value, str = x.str });
+                        ApplyState(pendingIt, st);
+                    }
                     return;
                 }
                 pendingTries++;
@@ -9007,21 +9105,31 @@ namespace SodCoop
             }
         }
 
-        static void RestoreResidence(System.Collections.Generic.List<ProfApt> apts)
+        // все купленные квартиры с ключами; жильём становится то, что было жильём в профиле (иначе последняя купленная)
+        static void RestoreResidence(System.Collections.Generic.List<ProfApt> apts, int residence = -1)
         {
             if (apts == null || apts.Count == 0) return;
-            var last = apts[apts.Count - 1];
             var pl = Player.Instance;
-            NewAddress ad = null;
             var dict = CityData.Instance.addressDictionary;
-            if (pl == null || dict == null || !dict.TryGetValue(last.id, out ad) || ad == null) { Plugin.L.LogWarning($"[PROFILE] квартира (адрес {last.id}) не найдена"); return; }
-            var rc = ad.residence;
-            if (rc == null) { Plugin.L.LogWarning($"[PROFILE] у адреса {last.id} нет жилья"); return; }
-            soldAddrs.Add(last.id);
-            if (AddrIdOf(pl.residence) == last.id) { Plugin.L.LogInfo($"[PROFILE] квартира (адрес {last.id}) уже за вами"); return; }
-            pl.SetResidence(rc, false);
-            try { pl.AddToKeyring(ad, false); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] ключи от квартиры: " + e.Message); }
-            Plugin.L.LogInfo($"[PROFILE] квартира возвращена игроку: адрес {last.id}, теперь жильё игрока = {AddrIdOf(pl.residence)}");
+            if (pl == null || dict == null) return;
+            int home = apts[apts.Count - 1].id;
+            foreach (var a in apts) if (a.id == residence) home = residence;
+            var order = new System.Collections.Generic.List<int>();
+            foreach (var a in apts) if (a.id != home && !order.Contains(a.id)) order.Add(a.id);
+            order.Add(home);   // жильё - последним, чтобы SetResidence оставил именно его
+            int n = 0;
+            foreach (int id in order)
+            {
+                NewAddress ad = null;
+                if (!dict.TryGetValue(id, out ad) || ad == null) { Plugin.L.LogWarning($"[PROFILE] квартира (адрес {id}) не найдена"); continue; }
+                var rc = ad.residence;
+                if (rc == null) { Plugin.L.LogWarning($"[PROFILE] у адреса {id} нет жилья"); continue; }
+                soldAddrs.Add(id);
+                if (AddrIdOf(pl.residence) != id) pl.SetResidence(rc, false);
+                try { pl.AddToKeyring(ad, false); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] ключи от квартиры: " + e.Message); }
+                n++;
+            }
+            Plugin.L.LogInfo($"[PROFILE] квартир возвращено: {n} из {apts.Count}, жильё игрока = {AddrIdOf(pl.residence)}");
         }
 
         static void ApplyProfile(ProfileData pd)
@@ -9046,9 +9154,108 @@ namespace SodCoop
                     catch (Exception e) { Plugin.L.LogWarning("[PROFILE] статусы: " + e.Message); }
                 }
                 try { RestoreInventory(pd.items); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] инвентарь: " + e.Message); }
-                try { RestoreResidence(pd.apts); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] квартира: " + e.Message); }
+                try { RestoreResidence(pd.apts, pd.residence); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] квартира: " + e.Message); }
+                if (pd.version >= 2 && p != null) RestoreExtra(p, pd);
             }
             finally { profileApplying = false; }
+        }
+
+        static void RestoreExtra(Player p, ProfileData pd)
+        {
+            if (pd.lockpicks >= 0) { try { GcSet("lockPicks", "SetLockpicks", pd.lockpicks); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] отмычки: " + e.Message); } }
+            try { RestoreKeys(p, pd); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] ключи: " + e.Message); }
+            try { RestoreCodes(pd); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] коды: " + e.Message); }
+            try { RestoreDisks(pd.disks); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] синк-диски: " + e.Message); }
+            try { RestorePosition(p, pd); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] позиция: " + e.Message); }
+        }
+
+        // связка ключей как при загрузке сейва игрой: двери по номеру в CityData.doorDictionary, предметы-ключи через AddToKeyring
+        static void RestoreKeys(Player p, ProfileData pd)
+        {
+            var kr = p.keyring;
+            if (kr != null)
+            {
+                kr.Clear();
+                foreach (int k in pd.doorKeys) { var d = DoorByKey(k); if (d != null && !kr.Contains(d)) kr.Add(d); }
+            }
+            var ki = p.playerKeyringInt;
+            if (ki != null) ki.Clear();
+            int ok = 0;
+            foreach (int id in pd.itemKeys) { var it = FindById(id); if (it != null) { p.AddToKeyring(it, false); ok++; } }
+            foreach (var a in pd.apts) { NewAddress ad; if (CityData.Instance.addressDictionary.TryGetValue(a.id, out ad) && ad != null) p.AddToKeyring(ad, false); }
+            Plugin.L.LogInfo($"[PROFILE] ключи: дверей {(kr != null ? kr.Count : 0)} из {pd.doorKeys.Count}, предметов {ok} из {pd.itemKeys.Count}");
+        }
+
+        // известные коды: ищем настоящий код у адреса, комнаты, жителя или предмета; если не нашли - создаём с теми же цифрами
+        static void RestoreCodes(ProfileData pd)
+        {
+            var gc = GameplayController.Instance;
+            if (gc == null) return;
+            var ac = gc.acquiredPasscodes;
+            if (ac != null)
+            {
+                ac.Clear();
+                var city = CityData.Instance;
+                foreach (var c in pd.codes)
+                {
+                    GameplayController.Passcode code = null;
+                    try
+                    {
+                        switch ((GameplayController.PasscodeType)c.type)
+                        {
+                            case GameplayController.PasscodeType.address: { NewAddress a; if (city.addressDictionary.TryGetValue(c.id, out a) && a != null) code = a.passcode; break; }
+                            case GameplayController.PasscodeType.room: { NewRoom r; if (city.roomDictionary.TryGetValue(c.id, out r) && r != null) code = r.passcode; break; }
+                            case GameplayController.PasscodeType.citizen: { Human h; if (city.citizenDictionary.TryGetValue(c.id, out h) && h != null) code = h.passcode; break; }
+                            case GameplayController.PasscodeType.interactable: { var it = FindById(c.id); if (it != null) code = it.passcode; break; }
+                        }
+                    }
+                    catch (Exception) { }
+                    if (code == null)
+                    {
+                        code = new GameplayController.Passcode((GameplayController.PasscodeType)c.type);
+                        code.id = c.id;
+                        code.digits = new Il2CppSystem.Collections.Generic.List<int>();
+                        foreach (int d in c.digits) code.digits.Add(d);
+                    }
+                    if (!ac.Contains(code)) ac.Add(code);
+                }
+            }
+            var kp = gc.playerKnowsPasswords;
+            if (kp != null) { kp.Clear(); foreach (int a in pd.knowsPw) kp.Add(a); }
+            Plugin.L.LogInfo($"[PROFILE] коды: {pd.codes.Count}, известных паролей адресов: {pd.knowsPw.Count}");
+        }
+
+        // синк-диски как при загрузке сейва игрой: подставить список и пересчитать эффекты
+        static void RestoreDisks(System.Collections.Generic.List<ProfDisk> disks)
+        {
+            var uc = UpgradesController.Instance;
+            if (uc == null || uc.upgrades == null) return;
+            uc.upgrades.Clear();
+            foreach (var d in disks ?? new System.Collections.Generic.List<ProfDisk>())
+            {
+                var u = new UpgradesController.Upgrades();
+                u.upgrade = d.upgrade; u.state = (UpgradesController.SyncDiskState)d.state; u.list = d.list; u.level = d.level; u.objId = d.objId; u.uninstallCost = d.uninstallCost;
+                uc.upgrades.Add(u);
+            }
+            try { uc.UpdateActivation(); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] UpdateActivation: " + e.Message); }
+            try { var ue = UpgradeEffectController.Instance; if (ue != null) ue.OnSyncDiskChange(true); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] OnSyncDiskChange: " + e.Message); }
+            try { uc.UpdateUpgrades(); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] UpdateUpgrades: " + e.Message); }
+            Plugin.L.LogInfo($"[PROFILE] синк-дисков: {uc.upgrades.Count}");
+        }
+
+        // игрок появляется там, где вышел
+        static void RestorePosition(Player p, ProfileData pd)
+        {
+            if (!pd.hasPos) return;
+            NewNode node = null;
+            var map = PathFinder.Instance != null ? PathFinder.Instance.nodeMap : null;
+            if (map == null || !map.TryGetValue(new Vector3(pd.nx, pd.ny, pd.nz), out node) || node == null)
+            {
+                Plugin.L.LogWarning($"[PROFILE] точка выхода ({pd.nx}, {pd.ny}, {pd.nz}) не найдена, игрок остаётся где есть");
+                return;
+            }
+            p.Teleport(node, null, true, false, true);
+            Plugin.L.LogInfo($"[PROFILE] игрок перенесён туда, где вышел: ({pd.px:F1}, {pd.py:F1}, {pd.pz:F1})");
         }
 
         // первый заход: не копия вещей хоста, а чистый старт
@@ -9067,6 +9274,8 @@ namespace SodCoop
                     try { p.ResetHealthToMaximum(); p.ResetNerveToMaximum(); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] здоровье: " + e.Message); }
                     try { foreach (var n in BadStatNames) SetStat(p, n, 0f); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] статусы: " + e.Message); }
                 }
+                // синк-диски из сейва хоста - это улучшения хоста, новичку они не положены
+                try { RestoreDisks(null); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] синк-диски: " + e.Message); }
             }
             finally { profileApplying = false; }
         }
@@ -9128,7 +9337,7 @@ namespace SodCoop
                         var nt = new ProfileData(); nt.money = Plugin.CfgNewPlayerMoney.Value; nt.social = 0; nt.valid = true;
                         profTarget = nt; profVerifyAt = Time.realtimeSinceStartup + 2f; profVerifyEnd = Time.realtimeSinceStartup + 25f;
                     }
-                    if (pd != null && pd.apts.Count > 0) { profileApplying = true; try { RestoreResidence(pd.apts); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] квартира: " + e.Message); } finally { profileApplying = false; } }
+                    if (pd != null && pd.apts.Count > 0) { profileApplying = true; try { RestoreResidence(pd.apts, pd.residence); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] квартира: " + e.Message); } finally { profileApplying = false; } }
                     Plugin.L.LogInfo("[PROFILE] профиля ещё нет, это новый игрок" + (Plugin.CfgNewPlayerClean.Value ? ": чистый старт" : ""));
                 }
             }
@@ -9146,31 +9355,101 @@ namespace SodCoop
             return Path.Combine(SaveDir(), "SodCoop_profiles_" + (sb.Length > 0 ? sb.ToString() : "city") + ".json");
         }
 
-        static void ProfilesHostInit()
+        // Профили на хосте живут в двух местах:
+        //  - SodCoop_profiles_<seed>.json: последние профили этого города, обновляются всю сессию; по ним игрок получает свои вещи при переподключении;
+        //  - <сейв>.sodcoop.json рядом с каждым сохранением хоста: профили на момент сохранения.
+        // Когда хост загружает сейв, профили берутся из его снимка (откатываются вместе с миром); новая игра начинается без профилей
+        static int worldGen, profWorldGen = -1;
+        static string snapPath = "";
+        static float snapUntil;
+
+        internal static void OnWorldLoading() { worldGen++; }
+
+        static string SnapPathFor(string savePath)
         {
-            profiles.Clear(); profDirty = false; profFile = "";
-            if (!Plugin.CfgProfiles.Value) return;
-            profFile = ProfFilePath();
-            if (File.Exists(profFile))
+            return Path.Combine(Path.GetDirectoryName(savePath) ?? SaveDir(), Path.GetFileNameWithoutExtension(savePath) + ".sodcoop.json");
+        }
+
+        static string LoadedSavePath()
+        {
+            try { var r = RestartSafeController.Instance; if (r != null && r.loadSaveGame && r.saveStateFileInfo != null) return r.saveStateFileInfo.FullName ?? ""; } catch (Exception) { }
+            return "";
+        }
+
+        static bool ReadProfilesFile(string path)
+        {
+            foreach (var f in new[] { path, path + ".bak" })
             {
+                if (!File.Exists(f)) continue;
                 try
                 {
-                    var d = JsonSerializer.Deserialize<System.Collections.Generic.Dictionary<string, ProfileData>>(File.ReadAllText(profFile), ProfJson);
-                    if (d != null) foreach (var kv in d) if (kv.Value != null) profiles[kv.Key] = kv.Value;
+                    var d = JsonSerializer.Deserialize<System.Collections.Generic.Dictionary<string, ProfileData>>(File.ReadAllText(f), ProfJson);
+                    if (d == null) continue;
+                    foreach (var kv in d) if (kv.Value != null) profiles[kv.Key] = kv.Value;
+                    if (f != path) Plugin.L.LogWarning("[PROFILE] " + Path.GetFileName(path) + " повреждён, взял резервную копию");
+                    return true;
                 }
-                catch (Exception e) { Plugin.L.LogWarning("[PROFILE] не прочитал " + profFile + ": " + e.Message); }
+                catch (Exception e) { Plugin.L.LogWarning("[PROFILE] не прочитал " + f + ": " + e.Message); }
             }
+            return false;
+        }
+
+        // запись через временный файл, прошлая версия остаётся в .bak: если игра упадёт посреди записи, файл не испортится
+        static void WriteJsonSafe(string path, string json)
+        {
+            string tmp = path + ".tmp";
+            File.WriteAllText(tmp, json);
+            if (File.Exists(path)) File.Copy(path, path + ".bak", true);
+            File.Move(tmp, path, true);
+        }
+
+        static void ProfilesHostInit()
+        {
+            profDirty = false; profFile = "";
+            if (!Plugin.CfgProfiles.Value) { profiles.Clear(); return; }
+            profFile = ProfFilePath();
+            string src;
+            if (worldGen != profWorldGen)
+            {
+                // загружен другой мир: берём профили заново
+                profWorldGen = worldGen; profiles.Clear(); soldAddrs.Clear();
+                string save = LoadedSavePath();
+                string snap = save != "" ? SnapPathFor(save) : "";
+                if (snap != "" && ReadProfilesFile(snap)) { src = "снимок сейва " + Path.GetFileName(save); profDirty = true; }
+                else if (save == "" && worldGen > 0) { src = "новая игра, профилей нет"; profDirty = true; }
+                else { ReadProfilesFile(profFile); src = save != "" ? "у сейва " + Path.GetFileName(save) + " нет снимка, взял последние профили города" : "последние профили города"; }
+            }
+            else src = "профили этой сессии";   // сеть перезапущена в том же мире
             int n = 0;
             foreach (var kv in profiles)
                 foreach (var a in kv.Value.apts) { try { ApplyApartmentSold(a.id, false, a.rems); n++; } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] квартира " + a.id + ": " + e.Message); } }
-            Plugin.L.LogInfo($"[PROFILE] профилей игроков: {profiles.Count}, проданных квартир восстановлено: {n} ({profFile})");
+            Plugin.L.LogInfo($"[PROFILE] профилей игроков: {profiles.Count} ({src}), проданных квартир восстановлено: {n}");
         }
 
         static void ProfilesWrite()
         {
             if (profFile == "") return;
-            try { File.WriteAllText(profFile, JsonSerializer.Serialize(profiles, ProfJson)); profDirty = false; Plugin.Dbg("[PROFILE] файл профилей записан"); }
+            try { WriteJsonSafe(profFile, JsonSerializer.Serialize(profiles, ProfJson)); profDirty = false; Plugin.Dbg("[PROFILE] файл профилей записан"); }
             catch (Exception e) { Plugin.L.LogWarning("[PROFILE] не смог записать " + profFile + ": " + e.Message); }
+        }
+
+        static void SnapshotWrite()
+        {
+            if (snapPath == "") return;
+            try { WriteJsonSafe(snapPath, JsonSerializer.Serialize(profiles, ProfJson)); Plugin.Dbg("[PROFILE] снимок профилей записан: " + snapPath); }
+            catch (Exception e) { Plugin.L.LogWarning("[PROFILE] не смог записать снимок " + snapPath + ": " + e.Message); }
+        }
+
+        // хост сохраняет игру: рядом с сейвом - профили игроков; клиенты присылают свежие профили, и ещё 6 с снимок дописывается
+        internal static void OnGameSaving(string path)
+        {
+            if (manager == null || !IsHost || !Plugin.CfgProfiles.Value || string.IsNullOrEmpty(path)) return;
+            if (Path.GetFileName(path).StartsWith("SodCoop_")) return;   // снимок мира для передачи клиенту, не сохранение игрока
+            snapPath = SnapPathFor(path); snapUntil = Time.realtimeSinceStartup + 6f;
+            SnapshotWrite();
+            var w = new NetDataWriter(); w.Put(MsgProfile); w.Put((byte)4);
+            foreach (var o in players) if (o.peer != null) { try { o.peer.Send(w, DeliveryMethod.ReliableOrdered); } catch (Exception) { } }
+            Plugin.L.LogInfo($"[PROFILE] игра сохранена: профили игроков ({profiles.Count}) записаны в {Path.GetFileName(snapPath)}");
         }
 
         static void ProfileNoteApt(RP rp, int id, System.Collections.Generic.List<int[]> rems)
@@ -9198,6 +9477,7 @@ namespace SodCoop
                 pd.id = id; pd.saved = DateTime.UtcNow.ToString("u");
                 pd.apts = old != null ? old.apts : new System.Collections.Generic.List<ProfApt>();
                 profiles[id] = pd; profDirty = true;
+                if (snapPath != "" && Time.realtimeSinceStartup < snapUntil) SnapshotWrite();
             }
             else if (op == 2)
             {
@@ -9539,6 +9819,7 @@ namespace SodCoop
                 byte pop = reader.GetByte();
                 if (IsHost) { if (rp != null) ProfileHostMsg(rp, pop, reader); }
                 else if (pop == 3) ProfileClientData(reader);
+                else if (pop == 4) SendProfile(true);   // хост сохраняет игру и просит свежий профиль
             }
             else if (type == MsgPlayerInfo && !IsHost)
             {
