@@ -41,6 +41,9 @@ namespace SodCoop
         internal static ConfigEntry<bool> CfgKoNoTimeSkip;
         internal static ConfigEntry<float> CfgHospitalSeconds;
         internal static ConfigEntry<bool> CfgKoInstantGetUp;
+        internal static ConfigEntry<bool> CfgDowned;
+        internal static ConfigEntry<float> CfgDownedSeconds, CfgReviveHoldSeconds, CfgReviveDistance, CfgReviveHealth, CfgDownedHitPenalty;
+        internal static ConfigEntry<string> CfgReviveKey;
         internal static ConfigEntry<float> CfgAvatarYawOffset;
         internal static ConfigEntry<float> CfgMaxSpeed;
         internal static ConfigEntry<int> CfgArmsState;
@@ -147,6 +150,20 @@ namespace SodCoop
                 "How long (real seconds) a knocked out player lies in hospital when NoTimeSkip is on");
             CfgKoInstantGetUp = Config.Bind("Hospital", "InstantGetUp", true,
                 "After the pay/don't pay choice in hospital the player gets up at once instead of a second fade and progress bar (when NoTimeSkip is on)");
+            CfgDowned = Config.Bind("Downed", "Enabled", true,
+                "In multiplayer a player who runs out of health first lies on the ground and can be revived by another player. If nobody revives him in time, he is knocked out as usual (hospital)");
+            CfgDownedSeconds = Config.Bind("Downed", "Seconds", 10f,
+                "How long (real seconds) a downed player waits for help. The timer stops while someone is reviving him");
+            CfgReviveKey = Config.Bind("Downed", "ReviveKey", "H",
+                "Key to hold near a downed player to revive him (name from UnityEngine.KeyCode)");
+            CfgReviveHoldSeconds = Config.Bind("Downed", "ReviveHoldSeconds", 3f,
+                "How long (seconds) the key must be held to revive");
+            CfgReviveDistance = Config.Bind("Downed", "ReviveDistance", 2f,
+                "How close (meters) you must be to revive");
+            CfgReviveHealth = Config.Bind("Downed", "ReviveHealth", 0.3f,
+                "Health after being revived, part of maximum (0..1)");
+            CfgDownedHitPenalty = Config.Bind("Downed", "HitPenaltySeconds", 2f,
+                "Each hit a downed player takes shortens his waiting time by this many seconds");
             CfgAvatarScale = Config.Bind("Avatar", "Scale", 0.92f,
                 "Size of the other player's avatar relative to the model (1 = as is). Lower it if the avatar looks taller than NPCs; edit while the game runs");
             CfgAvatarYawOffset = Config.Bind("Avatar", "YawOffset", 0f,
@@ -322,7 +339,7 @@ namespace SodCoop
             Harmony.CreateAndPatchAll(typeof(PlayerPatch));
             Harmony.CreateAndPatchAll(typeof(MeleePatch));
             Harmony.CreateAndPatchAll(typeof(BlockPatch));
-            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch) })
+            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch) })
             {
                 try { Harmony.CreateAndPatchAll(t); }
                 catch (Exception e) { L.LogWarning($"[PATCH] {t.Name}: {e.Message}"); }
@@ -656,6 +673,28 @@ namespace SodCoop
         public static bool Prefix()
         {
             return !Net.ClientFollowsHostWeather();
+        }
+    }
+
+    // Ноль здоровья в мультиплеере: вместо KO игрок сначала лежит и ждёт, пока его поднимут
+    [HarmonyPatch(typeof(Player), "TriggerPlayerKO")]
+    public static class DownedKoPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(Vector3 __0)
+        {
+            try { return !Net.TryGoDown(__0); } catch (Exception e) { Plugin.L.LogWarning("[DOWN] " + e.Message); return true; }
+        }
+    }
+
+    // Лежачего не добивают: удары только сокращают время ожидания
+    [HarmonyPatch(typeof(Player), "RecieveDamage")]
+    public static class DownedDamagePatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(float __0)
+        {
+            return !Net.DownedHit(__0);
         }
     }
 
@@ -2606,6 +2645,7 @@ namespace SodCoop
         sealed class RP
         {
             public int pid; public NetPeer peer; public string clientId = ""; public string profileId = ""; public string label = "";
+            public bool downed; public float downUntil, reviveAt;   // игрок лежит и ждёт помощи; reviveAt - когда последний раз сообщил, что его поднимают
             public float combatUntil;
             public bool attackAlt;
             public string remoteItem = "";
@@ -2678,6 +2718,7 @@ namespace SodCoop
             public bool fxDead;
             public float fxDeadUntil;
             public float fxHitAt;
+            public int[] fxStandHash = new int[0];
             public Transform mapTracked;
         }
 
@@ -2773,6 +2814,7 @@ namespace SodCoop
             fxDead = r.fxDead;
             fxDeadUntil = r.fxDeadUntil;
             fxHitAt = r.fxHitAt;
+            fxStandHash = r.fxStandHash;
             mapTracked = r.mapTracked;
         }
 
@@ -2850,6 +2892,7 @@ namespace SodCoop
             r.fxDead = fxDead;
             r.fxDeadUntil = fxDeadUntil;
             r.fxHitAt = fxHitAt;
+            r.fxStandHash = fxStandHash;
             r.mapTracked = mapTracked;
         }
 
@@ -2887,7 +2930,9 @@ namespace SodCoop
         const byte MsgRelay = 26;       // хост -> клиент: [pid отправителя][тип][данные] - сообщение другого клиента
         const byte MsgPlayerInfo = 27;  // хост -> клиент: [pid][внешний вид] - сведения о другом игроке
         const byte MsgPlayerLeft = 28;  // хост -> клиент: [pid] - игрок вышел
-        const byte MsgProfile = 29;     // профиль игрока: [1][json] клиент->хост сохранить; [2] клиент->хост запросить; [3][есть][json] хост->клиент; [4] хост->клиент: сохраняю игру, пришли профиль сейчас
+        const byte MsgDown = 30;        // игрок -> все: [состояние: 1 лежу, 0 подняли, 2 не дождался, 3 меня поднимают][сколько секунд осталось]
+        const byte MsgRevive = 31;      // игрок -> все: [кого][1 начал поднимать, 0 перестал, 2 поднял]
+        const byte MsgProfile = 29;    // профиль игрока: [1][json] клиент->хост сохранить; [2] клиент->хост запросить; [3][есть][json] хост->клиент; [4] хост->клиент: сохраняю игру, пришли профиль сейчас
         const byte MsgSound = 16;       // хост -> клиент: звук горожанина в бою
         const byte MsgPuppetHurt = 13;  // хост -> клиент: горожанин ударил двойника = ударил тебя
 
@@ -3200,6 +3245,7 @@ namespace SodCoop
                     GUI.Label(new Rect(20f, y, 1400f, 30f), t.Key, hudStyle); y += 28f;
                 }
                 GUI.matrix = old;
+                DrawDownHud();
             }
             catch (Exception) { }
         }
@@ -3230,6 +3276,7 @@ namespace SodCoop
         internal static void Shutdown()
         {
             try { ProfileOnShutdown(); } catch (Exception) { }
+            try { DownedOnShutdown(); } catch (Exception) { }
             lostAt = -1f; everConnected = false; weaponSent = null;
             try { Lan.StopAdvertise(); } catch (Exception) { }
             try { if (manager != null) manager.Stop(); } catch (Exception) { }
@@ -3837,6 +3884,7 @@ namespace SodCoop
                 try { NpcTick(dt); } catch (Exception e) { if (!npcErrLogged) { npcErrLogged = true; Plugin.L.LogWarning($"[NPC] {e.Message}"); } }
                 try { ProfileTick(dt); } catch (Exception e) { if (!profErrLogged) { profErrLogged = true; Plugin.L.LogWarning($"[PROFILE] {e.Message}"); } }
                 try { KoTick(p, dt); } catch (Exception e) { if (!koErrLogged) { koErrLogged = true; Plugin.L.LogWarning($"[KO] {e.Message}"); } }
+                try { DownTick(p, dt); } catch (Exception e) { if (!downErrLogged) { downErrLogged = true; Plugin.L.LogWarning($"[DOWN] {e.Message}"); } }
 
                 // Синхронизация предметов мира (которые несёт игрок)
                 if (Plugin.CfgObjSync.Value)
@@ -8570,6 +8618,7 @@ namespace SodCoop
 
         // ---------- Анимация удара / падения / смерти аватара ----------
         static bool fxDead; static float fxDeadUntil, fxHitAt; static int fxLog;
+        static int[] fxStandHash = new int[0];   // состояние каждого слоя, когда аватар обычно стоит/ходит: в них возвращаемся, когда игрока подняли
 
         internal static void SendBodyFx(byte kind, Vector3 dir)
         {
@@ -8615,7 +8664,14 @@ namespace SodCoop
                 {
                     fxDead = false;
                     an.SetBool("isDead", false);
-                    an.SetTrigger("ragdollTransitionFrom");
+                    an.ResetTrigger("hit");
+                    // не через ragdollTransitionFrom: это долгий подъём горожанина, и он спорит с UpdatePose - аватар лежит и дёргается.
+                    // Сразу в обычную стойку, дальше ходьбой управляют параметры, как до падения
+                    // все слои: isDead уводит в позу лежащего каждый слой, а боевой слой с весом 0 иначе всплывает лежачим при ударе
+                    bool any = false;
+                    for (int i = 0; i < fxStandHash.Length && i < an.layerCount; i++) if (fxStandHash[i] != 0) { an.CrossFade(fxStandHash[i], 0.25f, i); any = true; }
+                    if (!any) an.SetTrigger("ragdollTransitionFrom");
+                    poseCur = ""; poseKick = 0f;
                 }
                 if (fxLog++ < 24) Plugin.Dbg($"[FX] получил: {(kind == 1 ? $"второго игрока ударили (x={hx:F2}, y={hy:F2})" : kind == 2 ? "второй игрок упал" : kind == 3 ? "второй игрок встаёт" : "второй игрок умер")}");
             }
@@ -8630,6 +8686,17 @@ namespace SodCoop
                 try { if (avatarAnim != null) avatarAnim.SetBool("isDead", false); } catch (Exception) { }
             }
             if (fxDead) return;
+            // запоминаем, в каком состоянии аватар просто стоит или идёт (без особой позы и без перехода)
+            if (poseCur == "" && avatarAnim != null && Time.realtimeSinceStartup - fxHitAt > 1.5f)
+            {
+                try
+                {
+                    int lc = avatarAnim.layerCount;
+                    if (fxStandHash.Length != lc) fxStandHash = new int[lc];
+                    for (int i = 0; i < lc; i++) if (!avatarAnim.IsInTransition(i)) fxStandHash[i] = avatarAnim.GetCurrentAnimatorStateInfo(i).fullPathHash;
+                }
+                catch (Exception) { }
+            }
             LogStatesOnce();
             string want = "";
             bool crouchAnim = false, leanAnim = false, sitAnim = false;
@@ -9645,6 +9712,235 @@ namespace SodCoop
             }
         }
 
+        // ---------- Лежит и ждёт помощи ----------
+        // Вместо KO при нуле здоровья игрок лежит Downed.Seconds: двигаться и драться не может, удары только сокращают время.
+        // Товарищ рядом держит ReviveKey ReviveHoldSeconds - игрок встаёт; пока его поднимают, время ожидания стоит.
+        // Не подняли - обычный KO игры (больница, KoTick)
+        static readonly string[] DownedActions = { "Get In", "Get Up", "Enter", "Sleep..." };
+        static bool downed, allowKo, downErrLogged;
+        static float downUntil, downFreezeAt, downSentAt, reviveProgress, reviveSentAt;
+        static Vector3 downDir;
+        static int reviveTarget = -1;
+        static RP nearDowned;
+        static readonly System.Collections.Generic.Dictionary<int, float> revivers = new System.Collections.Generic.Dictionary<int, float>();
+        static System.Reflection.MethodInfo keyHeldMethod;
+        static KeyCode reviveKey = KeyCode.None; static string reviveKeyName = "";
+        static GUIStyle downStyle, downShadow;
+
+        static KeyCode ReviveKey()
+        {
+            string s = Plugin.CfgReviveKey.Value ?? "H";
+            if (s != reviveKeyName) { reviveKeyName = s; KeyCode k; reviveKey = Enum.TryParse<KeyCode>(s, true, out k) ? k : KeyCode.H; }
+            return reviveKey;
+        }
+
+        static bool KeyHeld(KeyCode k)
+        {
+            if (keyHeldMethod == null)
+            {
+                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    try { var t = asm.GetType("UnityEngine.Input"); if (t == null) continue; keyHeldMethod = t.GetMethod("GetKey", new[] { typeof(KeyCode) }); if (keyHeldMethod != null) break; }
+                    catch (Exception) { }
+                }
+                if (keyHeldMethod == null) return false;
+            }
+            return (bool)keyHeldMethod.Invoke(null, new object[] { k });
+        }
+
+        static bool OthersHere() { return manager != null && manager.ConnectedPeersCount > 0 && players.Count > 0; }
+
+        // из префикса TriggerPlayerKO: true - KO игры не запускаем, игрок лежит
+        internal static bool TryGoDown(Vector3 dir)
+        {
+            if (allowKo) return false;
+            if (downed) return true;   // уже лежит: повторные KO глотаем
+            if (!Plugin.CfgDowned.Value || !OthersHere()) return false;
+            var p = Player.Instance;
+            if (p == null || p.playerKOInProgress) return false;
+            downed = true; downDir = dir; revivers.Clear();
+            float now = Time.realtimeSinceStartup;
+            downUntil = now + Mathf.Max(1f, Plugin.CfgDownedSeconds.Value); downSentAt = 0f; downFreezeAt = 0f;
+            try { float max = p.maximumHealth; if (p.currentHealth < max * 0.05f) p.SetHealth(max * 0.05f); } catch (Exception) { }   // не ноль, чтобы игра не звала KO снова
+            DownFreeze(p, true);
+            SendBodyFx(2, Vector3.zero);
+            SendDown(1);
+            Toast($"You are down! Wait for help ({Plugin.CfgDownedSeconds.Value:F0} s).");
+            Plugin.L.LogInfo($"[DOWN] я лежу, жду помощи {Plugin.CfgDownedSeconds.Value:F0} с");
+            return true;
+        }
+
+        // из префикса RecieveDamage: лежачий урон не получает, но время ожидания сокращается
+        internal static bool DownedHit(float amount)
+        {
+            if (!downed || amount <= 0f) return false;
+            downUntil -= Mathf.Max(0f, Plugin.CfgDownedHitPenalty.Value);
+            return true;
+        }
+
+        static void DownFreeze(Player p, bool on)
+        {
+            try { p.EnablePlayerMovement(!on, true); } catch (Exception e) { if (!downErrLogged) { downErrLogged = true; Plugin.L.LogWarning("[DOWN] движение: " + e.Message); } }
+            foreach (var a in DownedActions) { try { p.SetActionDisable(a, on); } catch (Exception) { } }
+            if (on) { try { var fp = FirstPersonItemController.Instance; if (fp != null) fp.ForceHolster(); } catch (Exception) { } }
+        }
+
+        static void SendDown(byte state)
+        {
+            if (manager == null) return;
+            var w = new NetDataWriter(); w.Put(MsgDown); w.Put(state); w.Put(Mathf.Max(0f, downUntil - Time.realtimeSinceStartup));
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+        }
+
+        static void SendRevive(int target, byte state)
+        {
+            if (manager == null) return;
+            var w = new NetDataWriter(); w.Put(MsgRevive); w.Put((byte)target); w.Put(state);
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+        }
+
+        // время вышло: обычный KO игры
+        static void BleedOut(Player p, string why)
+        {
+            downed = false; revivers.Clear();
+            DownFreeze(p, false);
+            SendDown(2);
+            Plugin.L.LogInfo("[DOWN] " + why + ": KO как обычно");
+            allowKo = true;
+            try { p.TriggerPlayerKO(downDir, 0f, false); }
+            catch (Exception e) { Plugin.L.LogWarning("[DOWN] TriggerPlayerKO: " + e.Message); }
+            finally { allowKo = false; }
+        }
+
+        static void GetUp(Player p, int byPid)
+        {
+            downed = false; revivers.Clear();
+            DownFreeze(p, false);
+            try { float max = p.maximumHealth; p.SetHealth(Mathf.Clamp01(Plugin.CfgReviveHealth.Value) * max); } catch (Exception) { }
+            SendBodyFx(3, Vector3.zero);
+            SendDown(0);
+            Toast($"Player {byPid} revived you.");
+            Plugin.L.LogInfo($"[DOWN] меня поднял игрок {byPid}");
+        }
+
+        static void DownTick(Player p, float dt)
+        {
+            float now = Time.realtimeSinceStartup;
+            if (downed)
+            {
+                if (!OthersHere()) { BleedOut(p, "помочь некому (все вышли)"); return; }
+                bool helping = false;
+                foreach (var kv in revivers) if (now - kv.Value < 0.7f) helping = true;
+                if (helping) downUntil += dt;
+                if (now >= downFreezeAt) { downFreezeAt = now + 1f; try { p.EnablePlayerMovement(false, true); } catch (Exception) { } }
+                if (now >= downSentAt) { downSentAt = now + 1f; SendDown(helping ? (byte)3 : (byte)1); }
+                if (now >= downUntil) BleedOut(p, "помощь не пришла");
+                reviveTarget = -1; nearDowned = null;
+                return;
+            }
+            // я рядом с лежащим товарищем
+            RP best = null;
+            if (!p.playerKOInProgress)
+            {
+                float bd = Plugin.CfgReviveDistance.Value;
+                var my = p.transform.position;
+                Transform cam = null;
+                try { var c = Camera.main; if (c != null) cam = c.transform; } catch (Exception) { }
+                foreach (var o in players)
+                {
+                    if (!o.downed) continue;
+                    // только если смотрю на лежащего: тело у пола, поэтому целимся чуть выше ног
+                    if (cam != null && Vector3.Angle(cam.forward, o.targetPos + Vector3.up * 0.4f - cam.position) > 30f) continue;
+                    if (Mathf.Abs(my.y - o.targetPos.y) > 2f) continue;   // targetPos - ноги товарища, моя позиция выше: сравниваем по горизонтали в пределах этажа
+                    float d = Vector2.Distance(new Vector2(my.x, my.z), new Vector2(o.targetPos.x, o.targetPos.z));
+                    if (d <= bd) { bd = d; best = o; }
+                }
+            }
+            nearDowned = best;
+            bool held = false;
+            try { held = best != null && KeyHeld(ReviveKey()); } catch (Exception) { }
+            if (!held)
+            {
+                if (reviveTarget >= 0) SendRevive(reviveTarget, 0);
+                reviveTarget = -1; reviveProgress = 0f;
+                return;
+            }
+            if (reviveTarget != best.pid) { if (reviveTarget >= 0) SendRevive(reviveTarget, 0); reviveTarget = best.pid; reviveProgress = 0f; reviveSentAt = 0f; }
+            reviveProgress += dt;
+            if (now >= reviveSentAt) { reviveSentAt = now + 0.3f; SendRevive(best.pid, 1); }
+            if (reviveProgress >= Mathf.Max(0.2f, Plugin.CfgReviveHoldSeconds.Value))
+            {
+                SendRevive(best.pid, 2);
+                best.downed = false;
+                Plugin.L.LogInfo($"[DOWN] поднял игрока {best.pid}");
+                reviveTarget = -1; reviveProgress = 0f;
+            }
+        }
+
+        static void OnDownMsg(RP rp, NetDataReader r)
+        {
+            byte st = r.GetByte(); float secs = r.GetFloat();
+            bool was = rp.downed;
+            rp.downed = st == 1 || st == 3;
+            rp.downUntil = Time.realtimeSinceStartup + secs;
+            rp.reviveAt = st == 3 ? Time.realtimeSinceStartup : 0f;
+            if (rp.downed && !was) { Toast($"Player {rp.pid} is down! Hold {ReviveKey()} next to him to revive."); Plugin.L.LogInfo($"[DOWN] игрок {rp.pid} лежит"); }
+            if (!rp.downed && was)
+            {
+                Toast(st == 0 ? $"Player {rp.pid} is back on his feet." : $"Player {rp.pid} was not revived in time.");
+                Plugin.L.LogInfo($"[DOWN] игрок {rp.pid}: " + (st == 0 ? "поднят" : "не дождался, KO"));
+            }
+        }
+
+        static void OnReviveMsg(RP rp, NetDataReader r)
+        {
+            int target = r.GetByte(); byte st = r.GetByte();
+            if (target != MyPid || !downed) return;
+            if (st == 1) revivers[rp.pid] = Time.realtimeSinceStartup;
+            else if (st == 0) revivers.Remove(rp.pid);
+            else if (st == 2) { var p = Player.Instance; if (p != null) GetUp(p, rp.pid); }
+        }
+
+        static void DownedOnShutdown()
+        {
+            if (!downed) return;
+            downed = false; revivers.Clear();
+            try { var p = Player.Instance; if (p != null) DownFreeze(p, false); } catch (Exception) { }
+        }
+
+        // подсказки на экране: я лежу / товарищ лежит / держи клавишу
+        static void DrawDownHud()
+        {
+            float now = Time.realtimeSinceStartup;
+            string text = null;
+            if (downed)
+            {
+                bool helping = false; foreach (var kv in revivers) if (now - kv.Value < 0.7f) helping = true;
+                text = helping ? "You are being revived..." : $"You are down! Help arrives or hospital in {Mathf.Max(0f, downUntil - now):F0} s";
+                var oc = GUI.color; GUI.color = new Color(0.5f, 0f, 0f, 0.35f);
+                GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), Texture2D.whiteTexture);
+                GUI.color = oc;
+            }
+            else if (nearDowned != null)
+            {
+                float hold = Mathf.Max(0.2f, Plugin.CfgReviveHoldSeconds.Value);
+                text = reviveTarget == nearDowned.pid ? $"Reviving player {nearDowned.pid}... {Mathf.Min(1f, reviveProgress / hold) * 100f:F0}%"
+                                                      : $"Hold {ReviveKey()} to revive player {nearDowned.pid} ({Mathf.Max(0f, nearDowned.downUntil - now):F0} s left)";
+            }
+            if (text == null) return;
+            if (downStyle == null)
+            {
+                downStyle = new GUIStyle(GUI.skin.label) { fontSize = 26, alignment = TextAnchor.MiddleCenter }; downStyle.normal.textColor = new Color(1f, 0.85f, 0.4f, 1f);
+                downShadow = new GUIStyle(downStyle); downShadow.normal.textColor = new Color(0f, 0f, 0f, 0.9f);
+            }
+            float sc = Screen.height / 1080f;
+            var old = GUI.matrix; GUI.matrix = Matrix4x4.Scale(new Vector3(sc, sc, 1f));
+            float w = Screen.width / sc;
+            GUI.Label(new Rect(2f, 702f, w, 40f), text, downShadow);
+            GUI.Label(new Rect(0f, 700f, w, 40f), text, downStyle);
+            GUI.matrix = old;
+        }
+
         static int MaxPlayersNow() { return Mathf.Clamp(Plugin.CfgMaxPlayers.Value, 2, 4); }
 
         // убрать игрока: аватар, двойник, иконка на карте
@@ -9688,12 +9984,12 @@ namespace SodCoop
 
         static bool IsRelayed(byte t)
         {
-            return t == MsgPos || t == MsgAction || t == MsgItem || t == MsgHeld || t == MsgObj || t == MsgItemEv || t == MsgDoor || t == MsgBodyFx || t == MsgShot || t == MsgWeapon || t == MsgSound;
+            return t == MsgPos || t == MsgAction || t == MsgItem || t == MsgHeld || t == MsgObj || t == MsgItemEv || t == MsgDoor || t == MsgBodyFx || t == MsgShot || t == MsgWeapon || t == MsgSound || t == MsgDown || t == MsgRevive;
         }
 
         static bool NeedsCtx(byte t)
         {
-            return t == MsgPos || t == MsgAction || t == MsgItem || t == MsgHeld || t == MsgBodyFx || t == MsgShot || t == MsgWeapon || t == MsgSound || t == MsgNpcHit;
+            return t == MsgPos || t == MsgAction || t == MsgItem || t == MsgHeld || t == MsgBodyFx || t == MsgShot || t == MsgWeapon || t == MsgSound || t == MsgNpcHit || t == MsgDown || t == MsgRevive;
         }
 
         static void RelayFromPlayer(RP from, byte type, byte[] rest, DeliveryMethod method)
@@ -9902,6 +10198,14 @@ namespace SodCoop
             else if (type == MsgBodyFx)
             {
                 OnBodyFx(reader);
+            }
+            else if (type == MsgDown)
+            {
+                if (rp != null) OnDownMsg(rp, reader);
+            }
+            else if (type == MsgRevive)
+            {
+                if (rp != null) OnReviveMsg(rp, reader);
             }
             else if (type == MsgSound)
             {
