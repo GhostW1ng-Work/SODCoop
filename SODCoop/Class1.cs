@@ -348,7 +348,7 @@ namespace SodCoop
             Harmony.CreateAndPatchAll(typeof(PlayerPatch));
             Harmony.CreateAndPatchAll(typeof(MeleePatch));
             Harmony.CreateAndPatchAll(typeof(BlockPatch));
-            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch) })
+            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch), typeof(ProfileEventPatch) })
             {
                 try { Harmony.CreateAndPatchAll(t); }
                 catch (Exception e) { L.LogWarning($"[PATCH] {t.Name}: {e.Message}"); }
@@ -718,6 +718,34 @@ namespace SodCoop
         public static bool Prefix(float __0)
         {
             return !Net.DownedHit(__0);
+        }
+    }
+
+    // Важное для профиля событие у клиента (деньги, предметы, ключи, коды, диски, квартира): профиль уходит хосту через полсекунды,
+    // а не при очередной отправке раз в 10 с - если клиент вылетит, последнее изменение не потеряется
+    [HarmonyPatch]
+    public static class ProfileEventPatch
+    {
+        static readonly (System.Type, string[])[] targets = {
+            (typeof(GameplayController), new[] { "AddMoney", "SetMoney", "SetLockpicks", "AddLockpicks", "AddPasscode", "SetPlayerKnowsPassword" }),
+            (typeof(Player), new[] { "AddToKeyring", "RemoveFromKeyring" }),
+            (typeof(UpgradesController), new[] { "InstallSyncDisk", "UninstallSyncDisk", "UpgradeSyncDisk" }),
+            (typeof(PlayerApartmentController), new[] { "BuyNewResidence" }),
+            (typeof(FirstPersonItemController), new[] { "PickUpItem", "EmptySlot", "OnConsumableFinished" }),
+        };
+
+        public static System.Collections.Generic.IEnumerable<System.Reflection.MethodBase> TargetMethods()
+        {
+            var flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.DeclaredOnly;
+            foreach (var (t, names) in targets)
+                foreach (var m in t.GetMethods(flags))
+                    if (System.Array.IndexOf(names, m.Name) >= 0) yield return m;
+        }
+
+        [HarmonyPostfix]
+        public static void Postfix(System.Reflection.MethodBase __originalMethod)
+        {
+            try { Net.ProfileSoon(__originalMethod.Name); } catch (Exception) { }
         }
     }
 
@@ -9812,10 +9840,25 @@ namespace SodCoop
             var pd = CaptureProfile();
             if (pd == null) return;
             string js = JsonSerializer.Serialize(pd, ProfJson);
+            bool urgent = profUrgent; profUrgent = false;
             if (!force && js == profLastSent) return;
             profLastSent = js;
             var w = new NetDataWriter(); w.Put(MsgProfile); w.Put((byte)1); w.Put(js);
+            w.Put(urgent || force);   // в конце: хост запишет файл профилей сразу, а не через 10 с
             serverPeer.Send(w, DeliveryMethod.ReliableOrdered);
+            if (urgent) Plugin.Dbg("[PROFILE] профиль отправлен сразу после: " + profUrgentWhy);
+        }
+
+        static bool profUrgent;
+        static string profUrgentWhy = "";
+
+        // клиент: важное событие - отправить профиль через 0.5 с (игра успеет применить изменение; несколько событий подряд уйдут одним пакетом)
+        internal static void ProfileSoon(string why)
+        {
+            if (manager == null || IsHost || profState != 2 || profileApplying || profRestoring || applyingRemote) return;
+            float t = Time.realtimeSinceStartup + 0.5f;
+            if (profSendAt > t) profSendAt = t;
+            profUrgent = true; profUrgentWhy = why;
         }
 
         // 25 секунд следим, не вернула ли игра старые значения (из сохранения хоста) после нашего применения
@@ -9996,8 +10039,11 @@ namespace SodCoop
             if (op == 1)
             {
                 ProfileData pd = null;
-                try { pd = JsonSerializer.Deserialize<ProfileData>(r.GetString(), ProfJson); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] профиль игрока " + rp.pid + " не разобран: " + e.Message); }
+                string js = r.GetString();
+                bool urgent = r.AvailableBytes > 0 && r.GetBool();
+                try { pd = JsonSerializer.Deserialize<ProfileData>(js, ProfJson); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] профиль игрока " + rp.pid + " не разобран: " + e.Message); }
                 if (pd == null || !pd.valid) return;
+                if (urgent) profWriteAt = Mathf.Min(profWriteAt, Time.realtimeSinceStartup + 1f);   // важное изменение - на диск в течение секунды
                 ProfileData old; profiles.TryGetValue(id, out old);
                 pd.id = id; pd.saved = DateTime.UtcNow.ToString("u");
                 pd.apts = old != null ? old.apts : new System.Collections.Generic.List<ProfApt>();
