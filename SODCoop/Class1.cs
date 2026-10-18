@@ -42,6 +42,7 @@ namespace SodCoop
         internal static ConfigEntry<float> CfgHospitalSeconds;
         internal static ConfigEntry<bool> CfgKoInstantGetUp;
         internal static ConfigEntry<bool> CfgDowned;
+        internal static ConfigEntry<float> CfgTripFall, CfgTripGetUp;
         internal static ConfigEntry<float> CfgDownedSeconds, CfgReviveHoldSeconds, CfgReviveDistance, CfgReviveHealth, CfgDownedHitPenalty;
         internal static ConfigEntry<string> CfgReviveKey;
         internal static ConfigEntry<float> CfgAvatarYawOffset;
@@ -151,6 +152,10 @@ namespace SodCoop
                 "How long (real seconds) a knocked out player lies in hospital when NoTimeSkip is on");
             CfgKoInstantGetUp = Config.Bind("Hospital", "InstantGetUp", true,
                 "After the pay/don't pay choice in hospital the player gets up at once instead of a second fade and progress bar (when NoTimeSkip is on)");
+            CfgTripFall = Config.Bind("Avatar", "TripFallSeconds", 0.5f,
+                "When a player slips/trips: how long the avatar's fall animation runs before it lies down (citizens: animation event TripKO)");
+            CfgTripGetUp = Config.Bind("Avatar", "TripGetUpSeconds", 1.5f,
+                "When a player slips/trips: after how many seconds the avatar plays the get-up animation");
             CfgDowned = Config.Bind("Downed", "Enabled", true,
                 "In multiplayer a player who runs out of health first lies on the ground and can be revived by another player. If nobody revives him in time, he is knocked out as usual (hospital)");
             CfgDownedSeconds = Config.Bind("Downed", "Seconds", 10f,
@@ -348,7 +353,7 @@ namespace SodCoop
             Harmony.CreateAndPatchAll(typeof(PlayerPatch));
             Harmony.CreateAndPatchAll(typeof(MeleePatch));
             Harmony.CreateAndPatchAll(typeof(BlockPatch));
-            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch), typeof(ProfileEventPatch) })
+            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SelfTripFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch), typeof(ProfileEventPatch) })
             {
                 try { Harmony.CreateAndPatchAll(t); }
                 catch (Exception e) { L.LogWarning($"[PATCH] {t.Name}: {e.Message}"); }
@@ -967,6 +972,14 @@ namespace SodCoop
     {
         [HarmonyPostfix]
         public static void Postfix() { Net.SendBodyFx(3, Vector3.zero); }
+    }
+
+    // Поскользнулся / споткнулся (пьяный и т.п.): аватар у других падает так же, как горожане
+    [HarmonyPatch(typeof(Player), "Trip")]
+    public static class SelfTripFxPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix() { Net.SendBodyFx(6, Vector3.zero); }
     }
 
     [HarmonyPatch(typeof(Player), "KillPlayer")]
@@ -2856,6 +2869,7 @@ namespace SodCoop
             public float fxDeadUntil;
             public float fxHitAt;
             public int[] fxStandHash = new int[0];
+            public float fxTripFallAt, fxTripUpAt, fxTripUntil;
             public Transform mapTracked;
         }
 
@@ -2957,6 +2971,7 @@ namespace SodCoop
             fxDeadUntil = r.fxDeadUntil;
             fxHitAt = r.fxHitAt;
             fxStandHash = r.fxStandHash;
+            fxTripFallAt = r.fxTripFallAt; fxTripUpAt = r.fxTripUpAt; fxTripUntil = r.fxTripUntil;
             mapTracked = r.mapTracked;
         }
 
@@ -3040,6 +3055,7 @@ namespace SodCoop
             r.fxDeadUntil = fxDeadUntil;
             r.fxHitAt = fxHitAt;
             r.fxStandHash = fxStandHash;
+            r.fxTripFallAt = fxTripFallAt; r.fxTripUpAt = fxTripUpAt; r.fxTripUntil = fxTripUntil;
             r.mapTracked = mapTracked;
         }
 
@@ -9102,7 +9118,8 @@ namespace SodCoop
 
         // ---------- Анимация удара / падения / смерти аватара ----------
         static bool fxDead; static float fxDeadUntil, fxHitAt; static int fxLog;
-        static int[] fxStandHash = new int[0];   // состояние каждого слоя, когда аватар обычно стоит/ходит: в них возвращаемся, когда игрока подняли
+        static int[] fxStandHash = new int[0];
+        static float fxTripFallAt, fxTripUpAt, fxTripUntil;   // падение аватара: когда снять "trip", когда вставать, до какого момента не трогать позу   // состояние каждого слоя, когда аватар обычно стоит/ходит: в них возвращаемся, когда игрока подняли
 
         internal static void SendBodyFx(byte kind, Vector3 dir)
         {
@@ -9119,7 +9136,7 @@ namespace SodCoop
                 }
                 var w = new NetDataWriter(); w.Put(MsgBodyFx); w.Put(kind); w.Put(hx); w.Put(hy);
                 manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
-                if (fxLog++ < 12) Plugin.Dbg($"[FX] отправил: {(kind == 1 ? "меня ударили" : kind == 2 ? "я упал" : kind == 3 ? "я встал" : "я умер")}");
+                if (fxLog++ < 12) Plugin.Dbg($"[FX] отправил: {(kind == 1 ? "меня ударили" : kind == 6 ? "я поскользнулся" : kind == 2 ? "я упал" : kind == 3 ? "я встал" : "я умер")}");
             }
             catch (Exception) { }
         }
@@ -9143,6 +9160,17 @@ namespace SodCoop
                     fxDead = true; fxDeadUntil = now + (kind == 4 ? 3600f : 180f);
                     an.ResetTrigger("hit");
                     an.SetBool("isDead", true);
+                }
+                else if (kind == 6)
+                {
+                    // как CitizenAnimationController.TriggerTrip у горожан; снимает флаг у них событие анимации TripKO, которого у аватара нет
+                    if (fxDead) return;
+                    an.ResetTrigger("hit");
+                    an.SetBool("trip", true);
+                    fxTripFallAt = now + Mathf.Max(0.1f, Plugin.CfgTripFall.Value);
+                    fxTripUpAt = now + Mathf.Max(0.2f, Plugin.CfgTripGetUp.Value);
+                    fxTripUntil = fxTripUpAt + 2.5f;
+                    poseCur = ""; poseKick = 0f;
                 }
                 else if (kind == 3)
                 {
@@ -9170,6 +9198,25 @@ namespace SodCoop
                 try { if (avatarAnim != null) avatarAnim.SetBool("isDead", false); } catch (Exception) { }
             }
             if (fxDead) return;
+            {
+                float tnow = Time.realtimeSinceStartup;
+                if (fxTripFallAt > 0f && tnow >= fxTripFallAt) { fxTripFallAt = 0f; try { avatarAnim.SetBool("trip", false); } catch (Exception) { } }
+                if (fxTripUpAt > 0f && tnow >= fxTripUpAt)
+                {
+                    // встаём как после подъёма товарищем: все слои сразу в обычную стойку (GetUpFromRagdoll долгий и только на одном слое,
+                    // а "trip" уводит в лежачую позу каждый слой)
+                    fxTripUpAt = 0f; fxTripUntil = tnow + 0.3f;
+                    try
+                    {
+                        avatarAnim.SetBool("trip", false);
+                        bool any = false;
+                        for (int i = 0; i < fxStandHash.Length && i < avatarAnim.layerCount; i++) if (fxStandHash[i] != 0) { avatarAnim.CrossFade(fxStandHash[i], 0.3f, i); any = true; }
+                        if (!any) { int gl = StateLayer("GetUpFromRagdoll"); if (gl >= 0) avatarAnim.CrossFade(Animator.StringToHash("GetUpFromRagdoll"), 0.2f, gl); }
+                    }
+                    catch (Exception) { }
+                }
+                if (tnow < fxTripUntil) return;   // падает и встаёт: позы не навязываем
+            }
             // запоминаем, в каком состоянии аватар просто стоит или идёт (без особой позы и без перехода)
             if (poseCur == "" && avatarAnim != null && Time.realtimeSinceStartup - fxHitAt > 1.5f)
             {
