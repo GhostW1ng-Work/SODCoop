@@ -42,6 +42,8 @@ namespace SodCoop
         internal static ConfigEntry<float> CfgHospitalSeconds;
         internal static ConfigEntry<bool> CfgKoInstantGetUp;
         internal static ConfigEntry<bool> CfgDowned;
+        internal static ConfigEntry<bool> CfgJobSync;
+        internal static ConfigEntry<string> CfgShareEvidenceKey;
         internal static ConfigEntry<float> CfgTripFall, CfgTripGetUp;
         internal static ConfigEntry<float> CfgDownedSeconds, CfgReviveHoldSeconds, CfgReviveDistance, CfgReviveHealth, CfgDownedHitPenalty;
         internal static ConfigEntry<string> CfgReviveKey;
@@ -156,6 +158,10 @@ namespace SodCoop
                 "When a player slips/trips: how long the avatar's fall animation runs before it lies down (citizens: animation event TripKO)");
             CfgTripGetUp = Config.Bind("Avatar", "TripGetUpSeconds", 1.5f,
                 "When a player slips/trips: after how many seconds the avatar plays the get-up animation");
+            CfgJobSync = Config.Bind("Jobs", "Sync", true,
+                "Job board: only the host creates jobs and sends them (with their items) to the clients; a job taken by one player is taken by all (each gets his own case), and everybody gets the reward when it is handed in");
+            CfgShareEvidenceKey = Config.Bind("Jobs", "ShareEvidenceHotkey", "",
+                "Optional key that shares the item selected on your case board (empty = off; use the right-click menu item 'Share with players' instead)");
             CfgDowned = Config.Bind("Downed", "Enabled", true,
                 "In multiplayer a player who runs out of health first lies on the ground and can be revived by another player. If nobody revives him in time, he is knocked out as usual (hospital)");
             CfgDownedSeconds = Config.Bind("Downed", "Seconds", 10f,
@@ -353,7 +359,7 @@ namespace SodCoop
             Harmony.CreateAndPatchAll(typeof(PlayerPatch));
             Harmony.CreateAndPatchAll(typeof(MeleePatch));
             Harmony.CreateAndPatchAll(typeof(BlockPatch));
-            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SelfTripFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch), typeof(ProfileEventPatch), typeof(KnockPatch), typeof(BargePatch) })
+            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SelfTripFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch), typeof(ProfileEventPatch), typeof(KnockPatch), typeof(BargePatch), typeof(JobCreationPatch), typeof(JobAcceptPatch), typeof(CaseResolvePatch), typeof(PinnedMenuPatch), typeof(ShareCommandPatch), typeof(PhoneCallLogPatch), typeof(PhoneCallLogPatch2), typeof(JobInfoPatch), typeof(ObjectiveCompletePatch), typeof(ObjectiveAddPatch) })
             {
                 try { Harmony.CreateAndPatchAll(t); }
                 catch (Exception e) { L.LogWarning($"[PATCH] {t.Name}: {e.Message}"); }
@@ -774,6 +780,192 @@ namespace SodCoop
         public static void Prefix(NewDoor __instance, Actor __0)
         {
             try { Net.OnLocalKnock(__instance, __0, -1, 0f); } catch (Exception e) { Plugin.L.LogWarning("[KNOCK] " + e.Message); }
+        }
+    }
+
+    // Задания придумывает только хост: у клиента создание заданий и проверка «умерших» заказчиков выключены. Объявление тоже вешает
+    // только хост: SaveStateController.LoadJob у задания в состоянии generated сам вызывает PostJob, и у клиента бумажка висела
+    // на случайной доске, не там, где у хоста
+    [HarmonyPatch]
+    public static class JobCreationPatch
+    {
+        public static System.Collections.Generic.IEnumerable<System.Reflection.MethodBase> TargetMethods()
+        {
+            yield return AccessTools.Method(typeof(SideJobController), "JobCreationCheck");
+            yield return AccessTools.Method(typeof(SideJobController), "DeadPeopleJobCheck");
+            yield return typeof(SideJob).GetMethod("PostJob", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.DeclaredOnly);
+            var mp = typeof(SideJobMissingPerson).GetMethod("PostJob", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.DeclaredOnly);
+            if (mp != null) yield return mp;
+        }
+
+        [HarmonyPrefix]
+        public static bool Prefix(System.Reflection.MethodBase __originalMethod)
+        {
+            if (!Net.BlockLocalJobCreation()) return true;
+            // JobCreationCheck не только создаёт задания, но и прокручивает все задания (SideJob.GameWorldLoop -> этапы, цели,
+            // номер телефона). Создание у клиента выключено, а свои взятые задания он должен прокручивать сам
+            if (__originalMethod.Name == "JobCreationCheck") { try { Net.ClientJobWorldLoop(); } catch (Exception e) { Plugin.L.LogWarning("[JOB] " + e.Message); } }
+            return false;
+        }
+    }
+
+    // Игрок взял задание -> берут все (у каждого своё дело на доске улик). AcceptJob переопределён в подклассах - патчим все
+    [HarmonyPatch]
+    public static class JobAcceptPatch
+    {
+        public static System.Collections.Generic.IEnumerable<System.Reflection.MethodBase> TargetMethods()
+        {
+            foreach (var t in new[] { typeof(SideJob), typeof(SideJobAffair), typeof(SideJobSabotage), typeof(SideJobStolenItem), typeof(SideJobMissingPerson), typeof(SideJobRevenge), typeof(SideJobStealBriefcase) })
+            {
+                var m = t.GetMethod("AcceptJob", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.DeclaredOnly);
+                if (m != null) yield return m;
+            }
+        }
+
+        static int depth;
+
+        [HarmonyPrefix]
+        public static bool Prefix(SideJob __instance, out bool __state)
+        {
+            __state = false;
+            if (depth == 0 && __instance != null && __instance.accepted)
+            {
+                Plugin.L.LogInfo($"[JOB] задание {__instance.jobID} уже взято - второй раз не беру");
+                return false;
+            }
+            depth++; __state = true;
+            return true;
+        }
+
+        [HarmonyPostfix]
+        public static void Postfix(SideJob __instance, bool __state)
+        {
+            if (!__state) return;
+            depth--;
+            if (depth > 0) return;
+            try { Net.OnJobAccepted(__instance); } catch (Exception e) { Plugin.L.LogWarning("[JOB] " + e.Message); }
+        }
+    }
+
+    // Улика на доске: пункт «Поделиться с игроками» в меню по правому клику
+    [HarmonyPatch]
+    public static class PinnedMenuPatch
+    {
+        public static System.Collections.Generic.IEnumerable<System.Reflection.MethodBase> TargetMethods()
+        {
+            yield return AccessTools.Method(typeof(PinnedItemController), "Setup");
+            yield return AccessTools.Method(typeof(PinnedItemController), "UpdateContextMenuOptions");
+        }
+
+        [HarmonyPostfix]
+        public static void Postfix(PinnedItemController __instance)
+        {
+            try { Net.AddShareMenuItem(__instance); } catch (Exception) { }
+        }
+    }
+
+    // Нажатие пункта меню: ContextButtonController.OnLeftClick сам (не через ContextMenuController.OnCommand) вызывает у объекта меню
+    // метод с именем команды (MonoBehaviour.Invoke) - свою команду ловим здесь
+    [HarmonyPatch(typeof(ContextButtonController), "OnLeftClick")]
+    public static class ShareCommandPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(ContextButtonController __instance)
+        {
+            try { return !Net.HandleShareCommand(__instance != null ? __instance.cmc : null, __instance); } catch (Exception e) { Plugin.L.LogWarning("[JOB] " + e.Message); return true; }
+        }
+    }
+
+    // Диагностика звонков: кто, куда, известен ли номер как номер задания (у клиентов номера заданий не отвечали)
+    [HarmonyPatch]
+    public static class PhoneCallLogPatch
+    {
+        public static System.Reflection.MethodBase TargetMethod()
+        {
+            return AccessTools.Method(typeof(TelephoneController), "CreateNewCall", new[] { typeof(int), typeof(int), typeof(Human), typeof(Human), typeof(TelephoneController.CallSource), typeof(float), typeof(bool) });
+        }
+
+        [HarmonyPostfix]
+        public static void Postfix(int __0, int __1, Human __2, Human __3, TelephoneController.CallSource __4, TelephoneController.PhoneCall __result)
+        {
+            try { Net.LogPhoneCall(__0, __1, __2, __3, __4, __result); } catch (Exception) { }
+        }
+    }
+
+    // набор номера с клавиатуры телефона (KeypadController) идёт через перегрузку с Telephone
+    [HarmonyPatch]
+    public static class PhoneCallLogPatch2
+    {
+        public static System.Reflection.MethodBase TargetMethod()
+        {
+            return AccessTools.Method(typeof(TelephoneController), "CreateNewCall", new[] { typeof(Telephone), typeof(Telephone), typeof(Human), typeof(Human), typeof(TelephoneController.CallSource), typeof(float), typeof(bool) });
+        }
+
+        [HarmonyPostfix]
+        public static void Postfix(Telephone __0, Telephone __1, Human __2, Human __3, TelephoneController.CallSource __4, TelephoneController.PhoneCall __result)
+        {
+            try { Net.LogPhoneCall(__0 != null ? __0.number : -1, __1 != null ? __1.number : -1, __2, __3, __4, __result); } catch (Exception) { }
+        }
+    }
+
+    // Цель задания выполнена (Objective.Complete) -> у остальных игроков та же цель тоже выполнена, задание у всех идёт дальше
+    [HarmonyPatch(typeof(Objective), "Complete")]
+    public static class ObjectiveCompletePatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(Objective __instance, out bool __state) { __state = __instance != null && __instance.isComplete; }
+
+        [HarmonyPostfix]
+        public static void Postfix(Objective __instance, bool __state)
+        {
+            try { if (!__state) Net.OnObjectiveCompleted(__instance); } catch (Exception e) { Plugin.L.LogWarning("[JOB] цель: " + e.Message); }
+        }
+    }
+
+    // Цель добавлена в дело задания (Case.AddObjective) -> у остальных игроков добавляется такая же. Игра сама не ставит дубль
+    // (ignoreDuplicates = false), поэтому, если у кого-то эта цель уже есть или появится позже, второй не будет
+    [HarmonyPatch]
+    public static class ObjectiveAddPatch
+    {
+        public static System.Reflection.MethodBase TargetMethod()
+        {
+            foreach (var m in typeof(Case).GetMethods())
+                if (m.Name == "AddObjective") { var ps = m.GetParameters(); if (ps.Length == 15 && ps[1].ParameterType == typeof(Objective.ObjectiveTrigger)) return m; }
+            return null;
+        }
+
+        [HarmonyPostfix]
+        public static void Postfix(Case __instance, object[] __args)
+        {
+            try { Net.OnObjectiveAdded(__instance, __args); } catch (Exception e) { Plugin.L.LogWarning("[JOB] новая цель: " + e.Message); }
+        }
+    }
+
+    // Игрок выслушал заказчика по телефону: SideJob.OnAcquireJobInfo выдаёт адрес, предмет, заказчика (подклассы вызывают базовый)
+    [HarmonyPatch(typeof(SideJob), "OnAcquireJobInfo", new[] { typeof(string) })]
+    public static class JobInfoPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(SideJob __instance, out bool __state) { __state = __instance != null && __instance.knowHandInLocation; }
+
+        [HarmonyPostfix]
+        public static void Postfix(SideJob __instance, string __0, bool __state)
+        {
+            try { if (!__state && __instance != null && __instance.knowHandInLocation) Net.OnJobInfoAcquired(__instance, __0); } catch (Exception e) { Plugin.L.LogWarning("[JOB] " + e.Message); }
+        }
+    }
+
+    // Задание сдано (Case.Resolve начисляет "case reward") -> награду получают все
+    [HarmonyPatch(typeof(Case), "Resolve")]
+    public static class CaseResolvePatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(out double __state) { __state = Net.MoneyNow(); }
+
+        [HarmonyPostfix]
+        public static void Postfix(Case __instance, double __state)
+        {
+            try { Net.OnCaseResolved(__instance, __state); } catch (Exception e) { Plugin.L.LogWarning("[JOB] " + e.Message); }
         }
     }
 
@@ -3116,6 +3308,7 @@ namespace SodCoop
         const byte MsgRelay = 26;       // хост -> клиент: [pid отправителя][тип][данные] - сообщение другого клиента
         const byte MsgPlayerInfo = 27;  // хост -> клиент: [pid][внешний вид] - сведения о другом игроке
         const byte MsgPlayerLeft = 28;  // хост -> клиент: [pid] - игрок вышел
+        const byte MsgJob = 34;         // задания: [1][номер][json] хост->клиент задание с предметами; [2][номер] убрано; [3][номер] взял; [4][номер][награда] сдал; [5] улика; [6][n][номера] живые задания; [7][номер][текст] выслушал заказчика; [9][номер][цель] цель выполнена; [10][номер][цель...] новая цель
         const byte MsgKnock = 33;       // игрок -> все: [дверь][ударов, -1 = выбиваю плечом][настойчивость] - я стучу в дверь
         const byte MsgElevator = 32;    // лифты: [1][лифт][этаж][вверх] вызов (все); [2][полный][n]{[лифт][y][этаж]} хост -> клиент: где стоят лифты
         const byte MsgDown = 30;        // игрок -> все: [состояние: 1 лежу, 0 подняли, 2 не дождался, 3 меня поднимают][сколько секунд осталось]
@@ -4164,6 +4357,7 @@ namespace SodCoop
                 try { KoTick(p, dt); } catch (Exception e) { if (!koErrLogged) { koErrLogged = true; Plugin.L.LogWarning($"[KO] {e.Message}"); } }
                 try { DownTick(p, dt); } catch (Exception e) { if (!downErrLogged) { downErrLogged = true; Plugin.L.LogWarning($"[DOWN] {e.Message}"); } }
                 try { ElevatorTick(); } catch (Exception e) { if (!elevErrLogged) { elevErrLogged = true; Plugin.L.LogWarning($"[LIFT] {e.Message}"); } }
+                try { JobTick(); } catch (Exception e) { if (!jobErrLogged) { jobErrLogged = true; Plugin.L.LogWarning($"[JOB] {e}"); } }
 
                 // Синхронизация предметов мира (которые несёт игрок)
                 if (Plugin.CfgObjSync.Value)
@@ -10524,6 +10718,767 @@ namespace SodCoop
             GUI.matrix = old;
         }
 
+        // ---------- Объявления о работе (побочные задания) ----------
+        // Задания придумывает только хост (у клиентов SideJobController.JobCreationCheck выключен). Хост пересылает задание вместе с его
+        // предметами в формате сейва игры: пустой StateSaveData с заданием в списке своего типа и предметами в interactables, через
+        // JsonUtility (им же пишется сейв). Клиент загружает так же, как SaveStateController.LoadSaveState: предметы - MainSetupStart/OnLoad,
+        // задание - LoadJob. Взятое кем-то задание берут все (у каждого своё дело на доске улик), награду за сданное получают все.
+        // Улику с доски можно отправить другим игрокам: пункт «Share with players» в меню по правому клику (или клавиша Jobs.ShareEvidenceHotkey).
+        // Этапы задания у каждого свои (клиент крутит свои взятые задания сам), а выполненные и новые цели, сведения заказчика и награда - общие
+        static bool applyingJob, jobErrLogged;
+        static float jobPollAt, jobShareKeyAt;
+        static readonly System.Collections.Generic.Dictionary<int, string> jobSentSig = new System.Collections.Generic.Dictionary<int, string>();
+        static readonly System.Collections.Generic.Dictionary<int, float> jobSeenAt = new System.Collections.Generic.Dictionary<int, float>();
+        static readonly System.Collections.Generic.HashSet<int> jobAcceptSent = new System.Collections.Generic.HashSet<int>();
+        static KeyCode shareKey = KeyCode.None; static string shareKeyName = "";
+
+        internal static bool BlockLocalJobCreation()
+        {
+            return Plugin.CfgJobSync.Value && manager != null && RtMode == NetMode.Client;
+        }
+
+        static bool jobLoopLogged;
+        static float clientLoopAt;
+
+        // клиент: то, что JobCreationCheck делает со взятыми заданиями (без создания новых и без конца по сроку - это решает хост)
+        internal static void ClientJobWorldLoop()
+        {
+            var ctl = SideJobController.Instance;
+            if (ctl == null || ctl.allJobsDictionary == null) return;
+            var list = new System.Collections.Generic.List<SideJob>();
+            foreach (var kv in ctl.allJobsDictionary) if (kv.Value != null && kv.Value.accepted && kv.Value.state != SideJob.JobState.ended) list.Add(kv.Value);
+            foreach (var j in list)
+            {
+                try { j.GameWorldLoop(); }
+                catch (Exception e) { Plugin.L.LogWarning($"[JOB] задание {j.jobID}: {e.Message}"); }
+            }
+            if (!jobLoopLogged && list.Count > 0) { jobLoopLogged = true; Plugin.L.LogInfo($"[JOB] прокручиваю свои взятые задания: {list.Count}"); }
+        }
+
+        static SideJob JobById(int id)
+        {
+            try { var c = SideJobController.Instance; SideJob j; if (c != null && c.allJobsDictionary != null && c.allJobsDictionary.TryGetValue(id, out j)) return j; } catch (Exception) { }
+            return null;
+        }
+
+        static readonly System.Collections.Generic.Dictionary<int, int> jobPhoneCount = new System.Collections.Generic.Dictionary<int, int>();
+
+        static string JobSig(SideJob j)
+        {
+            int ph; jobPhoneCount.TryGetValue(j.jobID, out ph);
+            return (int)j.state + "|" + j.postID + "|" + j.phase + "|" + j.failed + "|" + j.knowHandInLocation + "|" + ph;
+        }
+
+        // номер телефона задание регистрирует позже, чем вешает объявление (в ObjectiveStateLoop) - считаем, чтобы переслать
+        static void CountJobPhones()
+        {
+            jobPhoneCount.Clear();
+            try
+            {
+                var tc = TelephoneController.Instance;
+                if (tc == null || tc.fakeTelephoneDictionary == null) return;
+                foreach (var kv in tc.fakeTelephoneDictionary)
+                {
+                    if (kv.Value == null || kv.Value.job <= 0) continue;
+                    int n; jobPhoneCount.TryGetValue(kv.Value.job, out n); jobPhoneCount[kv.Value.job] = n + 1;
+                }
+            }
+            catch (Exception) { }
+        }
+
+        // ----- хост: следим за заданиями и рассылаем новые и изменившиеся -----
+        static void JobHostTick()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (now < jobPollAt) return;
+            jobPollAt = now + 2f;
+            var ctl = SideJobController.Instance;
+            if (ctl == null || ctl.allJobsDictionary == null) return;
+            var alive = new System.Collections.Generic.HashSet<int>();
+            CountJobPhones();
+            foreach (var kv in ctl.allJobsDictionary)
+            {
+                var j = kv.Value; if (j == null) continue;
+                alive.Add(j.jobID);
+                float seen;
+                if (!jobSeenAt.TryGetValue(j.jobID, out seen)) { jobSeenAt[j.jobID] = now; continue; }   // новое: даём игре разложить предметы
+                if (now - seen < 1.5f) continue;
+                string sig = JobSig(j), old;
+                if (jobSentSig.TryGetValue(j.jobID, out old) && old == sig) continue;
+                if (SendJob(j, null)) jobSentSig[j.jobID] = sig;
+            }
+            foreach (var id in new System.Collections.Generic.List<int>(jobSentSig.Keys))
+            {
+                if (alive.Contains(id)) continue;
+                jobSentSig.Remove(id); jobSeenAt.Remove(id);
+                var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)2); w.Put(id);
+                manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+                Plugin.L.LogInfo($"[JOB] задание {id} убрано у хоста, сообщаю клиентам");
+            }
+        }
+
+        // предметы задания: у них в pv записан номер задания (Interactable.PassedVarType.jobID), плюс объявление на доске (postID)
+        static System.Collections.Generic.List<Interactable> JobItems(SideJob j)
+        {
+            var res = new System.Collections.Generic.List<Interactable>();
+            var ids = new System.Collections.Generic.HashSet<int>();
+            try
+            {
+                var list = CityData.Instance.interactableDirectory;
+                for (int i = 0; list != null && i < list.Count && res.Count < 60; i++)
+                {
+                    var it = list[i]; if (it == null) continue;
+                    try { if (it.inInventory != null) continue; } catch (Exception) { }   // у кого-то в кармане - не мировой предмет
+                    var pv = it.pv; if (pv == null) continue;
+                    for (int k = 0; k < pv.Count; k++)
+                    {
+                        var x = pv[k];
+                        if (x != null && x.varType == Interactable.PassedVarType.jobID && Mathf.RoundToInt(x.value) == j.jobID) { if (ids.Add(it.id)) res.Add(it); break; }
+                    }
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[JOB] предметы задания: " + e.Message); }
+            try { if (j.postID > 0 && !ids.Contains(j.postID)) { Interactable p; if (CityData.Instance.savableInteractableDictionary.TryGetValue(j.postID, out p) && p != null && p.inInventory == null) { ids.Add(p.id); res.Add(p); } } } catch (Exception) { }
+            return res;
+        }
+
+        static bool SendJob(SideJob j, NetPeer to)
+        {
+            try
+            {
+                var data = new StateSaveData();
+                data.basicJobs = new Il2CppSystem.Collections.Generic.List<SideJob>();
+                data.affairJobs = new Il2CppSystem.Collections.Generic.List<SideJobAffair>();
+                data.sabotageJobs = new Il2CppSystem.Collections.Generic.List<SideJobSabotage>();
+                data.stolenItemJobs = new Il2CppSystem.Collections.Generic.List<SideJobStolenItem>();
+                data.missingPersonJobs = new Il2CppSystem.Collections.Generic.List<SideJobMissingPerson>();
+                data.revengeJobs = new Il2CppSystem.Collections.Generic.List<SideJobRevenge>();
+                data.briefcaseJobs = new Il2CppSystem.Collections.Generic.List<SideJobStealBriefcase>();
+                data.interactables = new Il2CppSystem.Collections.Generic.List<Interactable>();
+                // JsonUtility не пишет подклассы в списке базового типа - как и сейв игры, кладём в список своего типа
+                var a = j.TryCast<SideJobAffair>(); var sb = j.TryCast<SideJobSabotage>(); var si = j.TryCast<SideJobStolenItem>();
+                var mp = j.TryCast<SideJobMissingPerson>(); var rv = j.TryCast<SideJobRevenge>(); var bc = j.TryCast<SideJobStealBriefcase>();
+                if (a != null) data.affairJobs.Add(a);
+                else if (sb != null) data.sabotageJobs.Add(sb);
+                else if (si != null) data.stolenItemJobs.Add(si);
+                else if (mp != null) data.missingPersonJobs.Add(mp);
+                else if (rv != null) data.revengeJobs.Add(rv);
+                else if (bc != null) data.briefcaseJobs.Add(bc);
+                else data.basicJobs.Add(j);
+                var items = JobItems(j);
+                foreach (var it in items) data.interactables.Add(it);
+                int phones = AddFakeNumbers(data, j.jobID);
+                string json = JsonUtility.ToJson(data);
+                var bytes = System.Text.Encoding.UTF8.GetBytes(json);
+                var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)1); w.Put(j.jobID); w.PutBytesWithLength(bytes);
+                if (to != null) to.Send(w, DeliveryMethod.ReliableOrdered); else manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+                Plugin.L.LogInfo($"[JOB] задание {j.jobID} ({(j.preset != null ? j.preset.name : "?")}, {j.state}) отправлено: предметов {items.Count}, номеров телефона {phones}, {bytes.Length} байт");
+                return true;
+            }
+            catch (Exception e) { if (!jobErrLogged) { jobErrLogged = true; Plugin.L.LogWarning("[JOB] отправка задания: " + e); } return false; }
+        }
+
+        // номера телефонов заданий (у игры отдельно от задания: TelephoneController.fakeTelephoneDictionary, в сейве - fakeTelephone).
+        // job < 0 - все номера, иначе только этого задания
+        static int AddFakeNumbers(StateSaveData data, int job)
+        {
+            int n = 0;
+            try
+            {
+                var tc = TelephoneController.Instance;
+                if (tc == null || tc.fakeTelephoneDictionary == null) return 0;
+                if (data.fakeTelephone == null) data.fakeTelephone = new Il2CppSystem.Collections.Generic.List<StateSaveData.FakeTelephone>();
+                foreach (var kv in tc.fakeTelephoneDictionary)
+                {
+                    var src = kv.Value;
+                    if (src == null || (job >= 0 && src.job != job)) continue;
+                    var ft = new StateSaveData.FakeTelephone(); ft.number = kv.Key; ft.source = src;
+                    data.fakeTelephone.Add(ft); n++;
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[JOB] номера телефонов: " + e.Message); }
+            return n;
+        }
+
+        internal static void LogPhoneCall(int from, int to, Human caller, Human receiver, TelephoneController.CallSource src, TelephoneController.PhoneCall call)
+        {
+            if (manager == null) return;
+            bool fromMe = caller != null && caller.isPlayer;
+            if (!fromMe && (receiver == null || !receiver.isPlayer)) return;   // только звонки игрока и игроку
+            bool fake = false; TelephoneController.CallSource fs = null;
+            try { var tc = TelephoneController.Instance; fake = tc != null && tc.fakeTelephoneDictionary != null && tc.fakeTelephoneDictionary.TryGetValue(to, out fs); } catch (Exception) { }
+            Plugin.L.LogInfo($"[PHONE] {(fromMe ? "я звоню" : "мне звонят")}: {from} -> {to}, кому: {(receiver != null ? receiver.humanID + " " + receiver.citizenName : "никому")}, " +
+                $"источник: {(src != null ? src.callType + " задание " + src.job + " диалог '" + src.dialog + "'" : "нет")}, номер задания у меня: {(fake ? "да (задание " + fs.job + ")" : "нет")}, звонок создан: {call != null}");
+        }
+
+        // хост -> новый клиент: все задания и список живых номеров (что у клиента лишнее из старого сейва - закончить)
+        static void SendJobSnapshot(NetPeer peer)
+        {
+            if (!Plugin.CfgJobSync.Value) return;
+            var ctl = SideJobController.Instance;
+            if (ctl == null || ctl.allJobsDictionary == null) return;
+            var ids = new System.Collections.Generic.List<int>();
+            CountJobPhones();
+            foreach (var kv in ctl.allJobsDictionary)
+            {
+                var j = kv.Value; if (j == null) continue;
+                ids.Add(j.jobID);
+                if (SendJob(j, peer)) { jobSentSig[j.jobID] = JobSig(j); if (!jobSeenAt.ContainsKey(j.jobID)) jobSeenAt[j.jobID] = Time.realtimeSinceStartup - 10f; }
+            }
+            try
+            {
+                var pd = new StateSaveData();
+                int n = AddFakeNumbers(pd, -1);
+                if (n > 0)
+                {
+                    var b = System.Text.Encoding.UTF8.GetBytes(JsonUtility.ToJson(pd));
+                    var wp = new NetDataWriter(); wp.Put(MsgJob); wp.Put((byte)1); wp.Put(0); wp.PutBytesWithLength(b);
+                    peer.Send(wp, DeliveryMethod.ReliableOrdered);
+                    Plugin.L.LogInfo($"[JOB] номера телефонов заданий отправлены: {n}");
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[JOB] номера телефонов: " + e.Message); }
+            var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)6); w.Put(ids.Count);
+            foreach (var id in ids) w.Put(id);
+            peer.Send(w, DeliveryMethod.ReliableOrdered);
+        }
+
+        // ----- клиент: загрузка задания, как SaveStateController.LoadSaveState -----
+        static void ImportJob(int jobId, byte[] bytes)
+        {
+            // FromJsonOverwrite в interop вызывает Il2CppSystem.Object.GetType(), которого нет в этой версии mscorlib (MissingMethodException)
+            var obj = JsonUtility.FromJson(System.Text.Encoding.UTF8.GetString(bytes), Il2CppInterop.Runtime.Il2CppType.Of<StateSaveData>());
+            var data = obj != null ? obj.TryCast<StateSaveData>() : null;
+            if (data == null) { Plugin.L.LogWarning($"[JOB] задание {jobId}: не разобрано"); return; }
+            int newItems = 0, updItems = 0;
+            if (data.interactables != null)
+            {
+                var dict = CityData.Instance.savableInteractableDictionary;
+                // Interactable.OnLoad ищет мебель-родителя (fp) в CityConstructor.loadingFurnitureReference, а эта таблица есть только
+                // во время загрузки сейва - иначе NullReferenceException. На время загрузки подкладываем свою
+                var cc = CityConstructor.Instance;
+                Il2CppSystem.Collections.Generic.Dictionary<int, FurnitureLocation> oldRef = null;
+                bool swapped = false;
+                try { if (cc != null) { oldRef = cc.loadingFurnitureReference; cc.loadingFurnitureReference = FurnitureRef(data.interactables); swapped = true; } }
+                catch (Exception e) { Plugin.L.LogWarning("[JOB] таблица мебели: " + e.Message); }
+                try {
+                foreach (var it in data.interactables)
+                {
+                    if (it == null) continue;
+                    try
+                    {
+                        Interactable ex;
+                        if (dict != null && dict.TryGetValue(it.id, out ex) && ex != null)
+                        {
+                            // id предметов, созданных во время игры, у клиента и хоста могут совпасть: чужой предмет не трогаем
+                            if (PresetNameOf(ex) != (it.p ?? "")) { Plugin.L.LogWarning($"[JOB] предмет {it.id} задания {jobId}: у меня под этим номером '{PresetNameOf(ex)}', у хоста '{it.p}' - пропускаю"); continue; }
+                            ex.CopyState(it); updItems++;   // уже есть - только состояние
+                        }
+                        else { it.wasLoadedFromSave = true; it.MainSetupStart(); it.OnLoad(); newItems++; }
+                    }
+                    catch (Exception e) { Plugin.L.LogWarning($"[JOB] предмет {it.id} задания {jobId}: {e.Message}"); }
+                }
+                }
+                finally { if (swapped) try { cc.loadingFurnitureReference = oldRef; } catch (Exception) { } }
+            }
+            if (data.fakeTelephone != null)
+            {
+                int added = 0;
+                var tc = TelephoneController.Instance;
+                foreach (var ft in data.fakeTelephone)
+                {
+                    if (ft == null || tc == null) continue;
+                    try { if (tc.fakeTelephoneDictionary == null || !tc.fakeTelephoneDictionary.ContainsKey(ft.number)) { tc.AddFakeNumber(ft.number, ft.source); added++; } }
+                    catch (Exception e) { Plugin.L.LogWarning($"[JOB] номер {ft.number}: {e.Message}"); }
+                }
+                if (added > 0) Plugin.L.LogInfo($"[JOB] номеров телефона добавлено: {added}" + (jobId > 0 ? $" (задание {jobId})" : ""));
+            }
+            var jobs = new System.Collections.Generic.List<SideJob>();
+            if (data.basicJobs != null) foreach (var x in data.basicJobs) jobs.Add(x);
+            if (data.affairJobs != null) foreach (var x in data.affairJobs) jobs.Add(x);
+            if (data.sabotageJobs != null) foreach (var x in data.sabotageJobs) jobs.Add(x);
+            if (data.stolenItemJobs != null) foreach (var x in data.stolenItemJobs) jobs.Add(x);
+            if (data.missingPersonJobs != null) foreach (var x in data.missingPersonJobs) jobs.Add(x);
+            if (data.revengeJobs != null) foreach (var x in data.revengeJobs) jobs.Add(x);
+            if (data.briefcaseJobs != null) foreach (var x in data.briefcaseJobs) jobs.Add(x);
+            foreach (var nj in jobs)
+            {
+                if (nj == null) continue;
+                var cur = JobById(nj.jobID);
+                if (cur != null) { UpdateJob(cur, nj); continue; }
+                // дело у хоста своё (caseID - номер его дела): у клиента задание грузим не взятым, а взять - своим делом
+                bool wasAccepted = nj.accepted;
+                nj.accepted = false; nj.caseID = -1;
+                // «заказчик уже выслушан» у хоста: у меня улики (адрес, предмет, заказчик) ещё не выданы - выдаём после взятия
+                bool knew = nj.knowHandInLocation; string infoMsg = nj.jobInfoDialogMsg;
+                nj.knowHandInLocation = false;
+                if (wasAccepted) { nj.phase = 0; nj.phaseChange = -1; }   // свой этап - с начала, как у только что взятого
+                SaveStateController.Instance.LoadJob(nj);
+                // где игра регистрирует загруженное задание, по коду не видно наверняка - если его нет в словаре, добавляем сами
+                try { var ctl = SideJobController.Instance; if (ctl != null && ctl.allJobsDictionary != null && !ctl.allJobsDictionary.ContainsKey(nj.jobID)) ctl.allJobsDictionary.Add(nj.jobID, nj); } catch (Exception) { }
+                Plugin.L.LogInfo($"[JOB] задание {nj.jobID} получено от хоста ({nj.state}): новых предметов {newItems}, обновлено {updItems}");
+                if (wasAccepted && nj.state != SideJob.JobState.ended) AcceptJobHere(nj, "его взяли до моего подключения");
+                if (knew) AcquireJobInfoHere(nj, infoMsg, "его выслушали до моего подключения");
+            }
+        }
+
+        // мебель по номеру (FurnitureLocation.id) для Interactable.OnLoad: строим один раз, перестраиваем, если нужного номера нет
+        static Il2CppSystem.Collections.Generic.Dictionary<int, FurnitureLocation> furnRef;
+
+        static Il2CppSystem.Collections.Generic.Dictionary<int, FurnitureLocation> FurnitureRef(Il2CppSystem.Collections.Generic.List<Interactable> items)
+        {
+            bool need = furnRef == null;
+            if (!need) foreach (var it in items) if (it != null && it.fp > -1 && !furnRef.ContainsKey(it.fp)) { need = true; break; }
+            if (!need) return furnRef;
+            var d = new Il2CppSystem.Collections.Generic.Dictionary<int, FurnitureLocation>();
+            var rooms = CityData.Instance.roomDirectory;
+            for (int i = 0; rooms != null && i < rooms.Count; i++)
+            {
+                var r = rooms[i]; if (r == null || r.individualFurniture == null) continue;
+                foreach (var f in r.individualFurniture) if (f != null && !d.ContainsKey(f.id)) d.Add(f.id, f);
+            }
+            furnRef = d;
+            Plugin.L.LogInfo($"[JOB] таблица мебели для загрузки предметов: {d.Count}");
+            return d;
+        }
+
+        internal static void OnObjectiveAdded(Case c, object[] a)
+        {
+            if (applyingJob || c == null || RtMode == NetMode.Off || !Plugin.CfgJobSync.Value || manager == null || manager.ConnectedPeersCount == 0) return;
+            int jobId = c.jobReference;
+            if (jobId <= 0) return;
+            var t = a[1] as Objective.ObjectiveTrigger;
+            var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)10); w.Put(jobId);
+            w.Put((string)a[0] ?? "");
+            w.Put(t != null);
+            if (t != null)
+            {
+                w.Put((int)t.triggerType); w.Put(t.forceProgressAmount); w.Put(t.progressAdd); w.Put(t.name ?? ""); w.Put(t.hightlightAction ?? ""); w.Put(t.orTrigger);
+                w.Put(t.roomID); w.Put(t.interactableID); w.Put(t.evidenceID ?? ""); w.Put(t.nodeCoord.x); w.Put(t.nodeCoord.y); w.Put(t.nodeCoord.z);
+                w.Put(t.doorID); w.Put(t.addressID); w.Put(t.streetID); w.Put(t.jobID); w.Put(t.position.x); w.Put(t.position.y); w.Put(t.position.z);
+            }
+            var pp = (Vector3)a[3];
+            w.Put((bool)a[2]); w.Put(pp.x); w.Put(pp.y); w.Put(pp.z); w.Put(Convert.ToInt32(a[4])); w.Put(Convert.ToInt32(a[5])); w.Put((float)a[6]);
+            w.Put((bool)a[7]); w.Put((string)a[8] ?? ""); w.Put((bool)a[9]); w.Put((bool)a[10]); w.Put((bool)a[12]); w.Put((bool)a[14]);
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+            Plugin.L.LogInfo($"[JOB] задание {jobId}: новая цель '{a[0]}', сообщаю другим");
+        }
+
+        static void AddObjectiveHere(RP rp, NetDataReader r)
+        {
+            int jobId = r.GetInt(); string entry = r.GetString();
+            int pid = rp != null ? rp.pid : 0;
+            var j = JobById(jobId);
+            Objective.ObjectiveTrigger t = null;
+            if (r.GetBool())
+            {
+                var type = (Objective.ObjectiveTriggerType)r.GetInt(); bool force = r.GetBool(); float add = r.GetFloat(); string name = r.GetString(); string hl = r.GetString(); bool or = r.GetBool();
+                int room = r.GetInt(), inter = r.GetInt(); string ev = r.GetString(); var node = new Vector3Int(r.GetInt(), r.GetInt(), r.GetInt());
+                int door = r.GetInt(), addr = r.GetInt(), street = r.GetInt(), tj = r.GetInt(); var pos = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat());
+                t = new Objective.ObjectiveTrigger(type, name, force, add, null, null, null, null, null, null, j, hl, or, pos);
+                t.roomID = room; t.interactableID = inter; t.evidenceID = ev; t.nodeCoord = node; t.doorID = door; t.addressID = addr; t.streetID = street; t.jobID = tj;
+            }
+            bool usePointer = r.GetBool(); var pp = new Vector3(r.GetFloat(), r.GetFloat(), r.GetFloat());
+            var icon = (InterfaceControls.Icon)r.GetInt(); var act = (Objective.OnCompleteAction)r.GetInt(); float delay = r.GetFloat();
+            bool removePrev = r.GetBool(); string chapter = r.GetString(); bool silent = r.GetBool(); bool crouch = r.GetBool(); bool bottom = r.GetBool(); bool parsing = r.GetBool();
+            var c = j != null ? j.thisCase : null;
+            if (c == null) { Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{entry}' от игрока {pid} - у меня задание не взято"); return; }
+            applyingJob = true;
+            try
+            {
+                if (t != null) t.SetupNonSerialized();
+                c.AddObjective(entry, t, usePointer, pp, icon, act, delay, removePrev, chapter, silent, crouch, j, bottom, false, parsing);
+                Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{entry}' от игрока {pid} передана игре (дубль игра не поставит)");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[JOB] цель '{entry}' задания {jobId}: {e.Message}"); }
+            finally { applyingJob = false; }
+        }
+
+        internal static void OnObjectiveCompleted(Objective o)
+        {
+            if (applyingJob || o == null || RtMode == NetMode.Off || !Plugin.CfgJobSync.Value) return;
+            var c = o.thisCase;
+            int jobId = c != null ? c.jobReference : 0;
+            if (jobId <= 0 || string.IsNullOrEmpty(o.name)) return;
+            Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{o.name}' выполнена у меня, сообщаю другим");
+            if (manager == null || manager.ConnectedPeersCount == 0) return;
+            var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)9); w.Put(jobId); w.Put(o.name);
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+        }
+
+        static void CompleteObjectiveHere(int jobId, string name, int pid)
+        {
+            var j = JobById(jobId);
+            var c = j != null ? j.thisCase : null;
+            if (c == null) { Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{name}' игрока {pid} - у меня задание не взято"); return; }
+            var found = new System.Collections.Generic.List<Objective>();
+            foreach (var lst in new[] { c.currentActiveObjectives, c.inactiveCurrentObjectives })
+                if (lst != null) foreach (var o in lst) if (o != null && !o.isComplete && !o.isCancelled && o.name == name) found.Add(o);
+            if (found.Count == 0) { Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{name}' игрока {pid} - у меня такой открытой цели нет"); return; }
+            applyingJob = true;
+            try { foreach (var o in found) o.Complete(); }
+            catch (Exception e) { Plugin.L.LogWarning($"[JOB] цель {jobId}: {e.Message}"); }
+            finally { applyingJob = false; }
+            Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{name}' выполнена (её выполнил игрок {pid})");
+        }
+
+        // ----- выслушал заказчика (любой игрок -> все): у всех появляются адрес, предмет, заказчик -----
+        internal static void OnJobInfoAcquired(SideJob j, string msg)
+        {
+            Plugin.L.LogInfo($"[JOB] задание {j.jobID}: заказчик выслушан" + (applyingJob ? " (от другого игрока)" : ", сообщаю другим"));
+            if (applyingJob || manager == null || manager.ConnectedPeersCount == 0 || !Plugin.CfgJobSync.Value) return;
+            var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)7); w.Put(j.jobID); w.Put(msg ?? "");
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+        }
+
+        // Чужие сведения о задании - не сразу: цель «позвони» у звонящего закрывается ещё во время разговора, другой игрок от этого
+        // получает сведения и шлёт их обратно, и они приходили звонящему раньше конца его разговора. Тогда игра у него считала сведения
+        // уже полученными, и задание не получало сигнал (AcquireInfo), по которому ставит цели «расследуй по адресу» и т.д.
+        // Ждём, пока не кончится свой звонок, и даём сведения, только если своих так и не появилось
+        static readonly System.Collections.Generic.Dictionary<int, (string msg, int pid, float at)> pendingJobInfo = new System.Collections.Generic.Dictionary<int, (string, int, float)>();
+
+        static void QueueJobInfo(int jobId, string msg, int pid)
+        {
+            if (!pendingJobInfo.ContainsKey(jobId)) Plugin.L.LogInfo($"[JOB] задание {jobId}: сведения от игрока {pid} - дам, если сам не выслушаю заказчика");
+            pendingJobInfo[jobId] = (msg, pid, Time.realtimeSinceStartup + 10f);
+        }
+
+        static bool PlayerOnPhone()
+        {
+            try
+            {
+                var tc = TelephoneController.Instance;
+                if (tc != null && tc.activeCalls != null)
+                    foreach (var c in tc.activeCalls) if (c != null && ((c.callerNS != null && c.callerNS.isPlayer) || (c.recevierNS != null && c.recevierNS.isPlayer))) return true;
+            }
+            catch (Exception) { }
+            return false;
+        }
+
+        static void PendingJobInfoTick()
+        {
+            if (pendingJobInfo.Count == 0) return;
+            float now = Time.realtimeSinceStartup;
+            foreach (var id in new System.Collections.Generic.List<int>(pendingJobInfo.Keys))
+            {
+                var p = pendingJobInfo[id];
+                if (now < p.at) continue;
+                var j = JobById(id);
+                if (j == null || j.knowHandInLocation) { pendingJobInfo.Remove(id); continue; }   // выслушал сам - его сведения
+                if (PlayerOnPhone()) { pendingJobInfo[id] = (p.msg, p.pid, now + 3f); continue; }
+                if (!IsHost && j.accepted)
+                {
+                    // сначала даём своему заданию обработать конец разговора
+                    try { j.GameWorldLoop(); } catch (Exception) { }
+                    if (j.knowHandInLocation) { pendingJobInfo.Remove(id); Plugin.L.LogInfo($"[JOB] задание {id}: заказчика выслушал сам, чужие сведения не нужны"); continue; }
+                }
+                pendingJobInfo.Remove(id);
+                AcquireJobInfoHere(j, p.msg, p.pid > 0 ? "player " + p.pid + " called the client" : "хост выслушал заказчика");
+                if (j.knowHandInLocation) Toast($"Player {p.pid} called the client: the job details are on your case board.");
+            }
+        }
+
+        static void AcquireJobInfoHere(SideJob j, string msg, string why)
+        {
+            if (j == null || j.knowHandInLocation) return;
+            if (!j.accepted || j.thisCase == null) { Plugin.L.LogWarning($"[JOB] задание {j.jobID}: заказчика выслушали ({why}), но у меня оно не взято"); return; }
+            applyingJob = true;
+            try { j.OnAcquireJobInfo(msg ?? ""); Plugin.L.LogInfo($"[JOB] задание {j.jobID}: улики заказчика выданы ({why})"); }
+            catch (Exception e) { Plugin.L.LogWarning($"[JOB] улики заказчика {j.jobID}: {e}"); }
+            finally { applyingJob = false; }
+        }
+
+        static void UpdateJob(SideJob cur, SideJob nj)
+        {
+            if (nj.postID != cur.postID)
+            {
+                RemoveOwnPost(cur, nj.postID);
+                cur.postID = nj.postID;
+                try { Interactable p; if (nj.postID > 0 && CityData.Instance.savableInteractableDictionary.TryGetValue(nj.postID, out p)) cur.post = p; } catch (Exception) { }
+            }
+            // этап задания (phase) у каждого игрока свой: ObjectiveStateLoop по нему ставит цели («позвони заказчику» и т.д.) и
+            // регистрирует номер. Если копировать этап хоста, клиент перепрыгивал свои цели, и его звонок заданию не засчитывался
+            if (nj.knowHandInLocation && !cur.knowHandInLocation) QueueJobInfo(cur.jobID, nj.jobInfoDialogMsg, 0);
+            if (nj.state != cur.state)
+            {
+                applyingJob = true;
+                try
+                {
+                    if (nj.state == SideJob.JobState.ended) cur.End();
+                    else cur.SetJobState(nj.state, true);
+                }
+                catch (Exception e) { Plugin.L.LogWarning($"[JOB] состояние задания {cur.jobID}: {e.Message}"); }
+                finally { applyingJob = false; }
+                Plugin.L.LogInfo($"[JOB] задание {cur.jobID}: {nj.state}");
+            }
+        }
+
+        static void AcceptJobHere(SideJob j, string why)
+        {
+            if (j == null || j.accepted) return;
+            applyingJob = true;
+            try { j.AcceptJob(); Toast("Job taken (" + why + "): it is on your case board."); Plugin.L.LogInfo($"[JOB] задание {j.jobID} взято у меня: {why}"); }
+            catch (Exception e) { Plugin.L.LogWarning($"[JOB] взять задание {j.jobID}: {e.Message}"); }
+            finally { applyingJob = false; }
+            RemoveJobPostHere(j);
+        }
+
+        // своё объявление клиента (повешено игрой при загрузке сейва до подключения, не там, где у хоста) - убираем
+        static void RemoveOwnPost(SideJob cur, int hostPostId)
+        {
+            try
+            {
+                int id = cur.postID;
+                if (id <= 0 || id == hostPostId) return;
+                var ctl = SideJobController.Instance;
+                if (ctl != null && ctl.allJobsDictionary != null)
+                    foreach (var kv in ctl.allJobsDictionary) if (kv.Value != null && kv.Value.jobID != cur.jobID && kv.Value.postID == id) return;   // номер занят чужим объявлением
+                Interactable post = null;
+                CityData.Instance.savableInteractableDictionary.TryGetValue(id, out post);
+                if (post == null || post.inInventory != null) return;
+                applyingRemote = true;
+                try { post.SafeDelete(false); } finally { applyingRemote = false; }
+                if (cur.post != null && cur.post.Pointer == post.Pointer) cur.post = null;
+                Plugin.L.LogInfo($"[JOB] задание {cur.jobID}: моё объявление {id} убрано (у хоста {(hostPostId > 0 ? hostPostId.ToString() : "не вывешено")})");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[JOB] своё объявление {cur.jobID}: {e.Message}"); }
+        }
+
+        // объявление (бумажка на доске) - предмет мира: взявший забрал свою копию, а у остальных она висела и задание брали ещё раз
+        static void RemoveJobPostHere(SideJob j)
+        {
+            try
+            {
+                Interactable post = j.post;
+                if (post == null && j.postID > 0) CityData.Instance.savableInteractableDictionary.TryGetValue(j.postID, out post);
+                if (post == null || post.inInventory != null) return;
+                applyingRemote = true;
+                try { post.SafeDelete(false); } finally { applyingRemote = false; }
+                Plugin.L.LogInfo($"[JOB] объявление задания {j.jobID} убрано с доски (его взял другой игрок)");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[JOB] убрать объявление {j.jobID}: {e.Message}"); }
+        }
+
+        // ----- взятие задания и награда (любой игрок -> все) -----
+        internal static void OnJobAccepted(SideJob j)
+        {
+            if (applyingJob || j == null || manager == null || manager.ConnectedPeersCount == 0 || !Plugin.CfgJobSync.Value) return;
+            if (!jobAcceptSent.Add(j.jobID)) return;   // AcceptJob подкласса вызывает базовый - шлём один раз
+            var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)3); w.Put(j.jobID);
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+            Plugin.L.LogInfo($"[JOB] я взял задание {j.jobID}, сообщаю другим");
+        }
+
+        internal static void OnCaseResolved(Case c, double moneyBefore)
+        {
+            if (applyingJob || c == null || manager == null || manager.ConnectedPeersCount == 0 || !Plugin.CfgJobSync.Value) return;
+            int jobId = c.jobReference;
+            if (jobId <= 0) return;
+            int got = (int)Math.Round(GcGet("money") - moneyBefore);
+            // если игра начисляет не внутри Resolve, а позже - разница 0: тогда остальным базовая награда задания
+            if (got <= 0) { var jj = JobById(jobId); if (jj != null && jj.reward > 0) got = jj.reward; }
+            var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)4); w.Put(jobId); w.Put(Math.Max(0, got));
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+            Plugin.L.LogInfo($"[JOB] я сдал задание {jobId}, награда {got} - всем игрокам");
+        }
+
+        static void OnJobMsg(RP rp, NetDataReader r)
+        {
+            byte op = r.GetByte();
+            if (!Plugin.CfgJobSync.Value) return;
+            if (op == 1 && !IsHost)
+            {
+                int id = r.GetInt(); var bytes = r.GetBytesWithLength();
+                try { ImportJob(id, bytes); } catch (Exception e) { Plugin.L.LogWarning($"[JOB] загрузка задания {id}: {e}"); }
+            }
+            else if (op == 2 && !IsHost)
+            {
+                int id = r.GetInt(); var j = JobById(id);
+                if (j != null && j.state != SideJob.JobState.ended)
+                {
+                    applyingJob = true;
+                    try { j.End(); } catch (Exception e) { Plugin.L.LogWarning($"[JOB] закончить задание {id}: {e.Message}"); }
+                    finally { applyingJob = false; }
+                }
+            }
+            else if (op == 3)
+            {
+                int id = r.GetInt(); var j = JobById(id);
+                if (j == null) { Plugin.L.LogWarning($"[JOB] задание {id} (взял игрок {(rp != null ? rp.pid : -1)}) у меня не найдено"); return; }
+                jobAcceptSent.Add(id);
+                AcceptJobHere(j, "player " + (rp != null ? rp.pid : 0) + " took it");
+            }
+            else if (op == 4)
+            {
+                int id = r.GetInt(), money = r.GetInt();
+                var j = JobById(id);
+                bool mine = j != null && j.accepted;
+                if (mine && money > 0)
+                {
+                    applyingJob = true;
+                    try { GameplayController.Instance.AddMoney(money, true, "case reward"); } catch (Exception e) { Plugin.L.LogWarning("[JOB] награда: " + e.Message); }
+                    finally { applyingJob = false; }
+                }
+                if (j != null && j.state != SideJob.JobState.ended)
+                {
+                    applyingJob = true;
+                    try { j.End(); } catch (Exception e) { Plugin.L.LogWarning($"[JOB] закончить задание {id}: {e.Message}"); }
+                    finally { applyingJob = false; }
+                }
+                Toast($"Player {(rp != null ? rp.pid : 0)} completed the job" + (mine && money > 0 ? $": you get {money} too." : "."));
+                Plugin.L.LogInfo($"[JOB] задание {id} сдано игроком {(rp != null ? rp.pid : 0)}, награда {money}, мне начислено: {mine && money > 0}");
+            }
+            else if (op == 5)
+            {
+                OnEvidenceShared(rp, r);
+            }
+            else if (op == 10)
+            {
+                AddObjectiveHere(rp, r);
+            }
+            else if (op == 9)
+            {
+                int id = r.GetInt(); string name = r.GetString();
+                CompleteObjectiveHere(id, name, rp != null ? rp.pid : 0);
+            }
+            else if (op == 7)
+            {
+                int id = r.GetInt(); string msg = r.GetString();
+                var j = JobById(id);
+                if (j == null) { Plugin.L.LogWarning($"[JOB] задание {id} (заказчика выслушал игрок {(rp != null ? rp.pid : -1)}) у меня не найдено"); return; }
+                if (j.knowHandInLocation) return;
+                QueueJobInfo(j.jobID, msg, rp != null ? rp.pid : 0);
+            }
+            else if (op == 6 && !IsHost)
+            {
+                int n = r.GetInt(); var alive = new System.Collections.Generic.HashSet<int>();
+                for (int i = 0; i < n; i++) alive.Add(r.GetInt());
+                var ctl = SideJobController.Instance; if (ctl == null || ctl.allJobsDictionary == null) return;
+                var gone = new System.Collections.Generic.List<SideJob>();
+                foreach (var kv in ctl.allJobsDictionary) if (kv.Value != null && !alive.Contains(kv.Value.jobID) && kv.Value.state != SideJob.JobState.ended) gone.Add(kv.Value);
+                foreach (var j in gone)
+                {
+                    applyingJob = true;
+                    try { j.End(); } catch (Exception) { }
+                    finally { applyingJob = false; }
+                }
+                Plugin.L.LogInfo($"[JOB] заданий у хоста: {n}; закончено у меня лишних (из старого сейва): {gone.Count}");
+            }
+        }
+
+        // ----- улики: поделиться выбранной уликой с доски -----
+        static KeyCode ShareKey()
+        {
+            string s = Plugin.CfgShareEvidenceKey.Value ?? "F6";
+            if (s != shareKeyName) { shareKeyName = s; KeyCode k; shareKey = Enum.TryParse<KeyCode>(s, true, out k) ? k : KeyCode.F6; }
+            return shareKey;
+        }
+
+        static void EvidenceShareTick()
+        {
+            if (manager == null || manager.ConnectedPeersCount == 0 || !Plugin.CfgJobSync.Value) return;
+            if (string.IsNullOrWhiteSpace(Plugin.CfgShareEvidenceKey.Value)) return;
+            bool down = false;
+            try { down = KeyDown(ShareKey()); } catch (Exception) { }
+            if (!down || Time.realtimeSinceStartup < jobShareKeyAt) return;
+            jobShareKeyAt = Time.realtimeSinceStartup + 0.5f;
+            var cp0 = CasePanelController.Instance;
+            SharePinned(cp0 != null ? cp0.selectedPinned : null);
+        }
+
+        const string ShareCmd = "SodCoopShare";
+
+        internal static void AddShareMenuItem(PinnedItemController pin)
+        {
+            if (pin == null || !Plugin.CfgJobSync.Value || RtMode == NetMode.Off) return;
+            var cm = pin.contextMenu;
+            if (cm == null) return;
+            if (cm.menuButtons == null) cm.menuButtons = new Il2CppSystem.Collections.Generic.List<ContextMenuController.ContextMenuButtonSetup>();
+            foreach (var b in cm.menuButtons) if (b != null && b.commandString == ShareCmd) return;
+            var s = new ContextMenuController.ContextMenuButtonSetup();
+            s.commandString = ShareCmd; s.useText = true; s.overrideText = "Share with players";
+            cm.menuButtons.Add(s);
+        }
+
+        internal static bool HandleShareCommand(ContextMenuController cm, ContextButtonController button)
+        {
+            var st = button != null ? button.setup : null;
+            if (st == null || st.commandString != ShareCmd) return false;
+            PinnedItemController pin = null;
+            try { pin = cm != null && cm.commandObject != null ? cm.commandObject.TryCast<PinnedItemController>() : null; } catch (Exception) { }
+            if (pin == null) { try { var cp = CasePanelController.Instance; if (cp != null) pin = cp.selectedPinned; } catch (Exception) { } }
+            Plugin.L.LogInfo($"[JOB] нажато «Share with players»: улика {(pin != null && pin.caseElement != null ? pin.caseElement.id : "не найдена")}");
+            SharePinned(pin);
+            try { if (cm != null) cm.ForceClose(); } catch (Exception) { }
+            return true;
+        }
+
+        static void SharePinned(PinnedItemController sel)
+        {
+            if (manager == null || manager.ConnectedPeersCount == 0) { Toast("No other players to share with."); return; }
+            var cp = CasePanelController.Instance;
+            var el = sel != null ? sel.caseElement : null;
+            if (el == null || string.IsNullOrEmpty(el.id)) { Toast("Select an item on your case board to share it."); return; }
+            int jobRef = 0;
+            try { var ac = cp.activeCase; if (ac != null) jobRef = ac.jobReference; } catch (Exception) { }
+            var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)5); w.Put(el.id); w.Put(jobRef);
+            int nk = el.dk != null ? el.dk.Count : 0;
+            w.Put(nk);
+            for (int i = 0; i < nk; i++) w.Put((int)el.dk[i]);
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+            string nm = el.n ?? el.id;
+            Toast("Shared with the other players: " + nm);
+            Plugin.L.LogInfo($"[JOB] улика '{el.id}' отправлена другим игрокам (дело задания {jobRef})");
+        }
+
+        static void OnEvidenceShared(RP rp, NetDataReader r)
+        {
+            string evId = r.GetString(); int jobRef = r.GetInt(); int nk = r.GetInt();
+            var keys = new Il2CppSystem.Collections.Generic.List<Evidence.DataKey>();
+            for (int i = 0; i < nk; i++) keys.Add((Evidence.DataKey)r.GetInt());
+            int pid = rp != null ? rp.pid : 0;
+            Evidence ev = null;
+            bool found = false;
+            try { found = Toolbox.Instance.TryGetEvidence(evId, out ev) && ev != null; } catch (Exception) { }
+            if (!found) { Toast($"Player {pid} shared evidence you do not have yet."); Plugin.L.LogWarning($"[JOB] улика '{evId}' от игрока {pid} у меня не найдена"); return; }
+            var cp = CasePanelController.Instance;
+            if (cp == null) return;
+            Case target = null;
+            try
+            {
+                if (jobRef > 0 && cp.activeCases != null) foreach (var c in cp.activeCases) if (c != null && c.jobReference == jobRef) { target = c; break; }
+                if (target == null) target = cp.activeCase;
+                if (target == null) target = cp.CreateNewCase(Case.CaseType.custom, Case.CaseStatus.closable, true, "From player " + pid);
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[JOB] дело для улики: " + e.Message); }
+            if (target == null) return;
+            try
+            {
+                if (keys.Count == 0) keys.Add(Evidence.DataKey.name);
+                cp.PinToCasePanel(target, ev, keys, true, Vector2.zero, false);
+                Toast($"Player {pid} shared evidence: it is pinned to your case '{target.name}'.");
+                Plugin.L.LogInfo($"[JOB] улика '{evId}' от игрока {pid} закреплена в деле '{target.name}'");
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[JOB] закрепить улику: " + e.Message); }
+        }
+
+        static void JobTick()
+        {
+            if (!Plugin.CfgJobSync.Value || manager == null || manager.ConnectedPeersCount == 0) return;
+            if (IsHost) JobHostTick();
+            else if (Time.realtimeSinceStartup >= clientLoopAt)
+            {
+                // у хоста задания крутит игра, у клиента - только редкий JobCreationCheck: после разговора задание ждало его
+                // слишком долго (цели «расследуй по адресу» не появлялись). Крутим свои взятые задания чаще
+                clientLoopAt = Time.realtimeSinceStartup + 2f;
+                try { ClientJobWorldLoop(); } catch (Exception e) { Plugin.L.LogWarning("[JOB] " + e.Message); }
+            }
+            EvidenceShareTick();
+            PendingJobInfoTick();
+        }
+
+        internal static double MoneyNow() { return GcGet("money"); }
+
         // ---------- Стук в дверь ----------
         // NewDoor.OnKnock -> GameplayController.KnockOnDoor: корутина со звуками стука и сообщение жильцам. Стучащий (actor) - источник
         // звука и тот, на кого реагируют жильцы; у получателя это двойник игрока (у хоста жильцы откроют/ответят клиенту)
@@ -10747,7 +11702,7 @@ namespace SodCoop
 
         static bool IsRelayed(byte t)
         {
-            return t == MsgPos || t == MsgAction || t == MsgItem || t == MsgHeld || t == MsgObj || t == MsgItemEv || t == MsgDoor || t == MsgBodyFx || t == MsgShot || t == MsgWeapon || t == MsgSound || t == MsgDown || t == MsgRevive || t == MsgElevator || t == MsgKnock;
+            return t == MsgPos || t == MsgAction || t == MsgItem || t == MsgHeld || t == MsgObj || t == MsgItemEv || t == MsgDoor || t == MsgBodyFx || t == MsgShot || t == MsgWeapon || t == MsgSound || t == MsgDown || t == MsgRevive || t == MsgElevator || t == MsgKnock || t == MsgJob;
         }
 
         static bool NeedsCtx(byte t)
@@ -10839,6 +11794,7 @@ namespace SodCoop
                 {
                     SendDoorSnapshot(peer); SendRoomSnapshot(peer); SendWindowSnapshot(peer); SendTime(); SendSoldSnapshot(peer); SendFurnSnapshot(peer);
                     try { SendElevatorState(peer, true); } catch (Exception e) { Plugin.L.LogWarning("[LIFT] снимок: " + e.Message); }
+                    try { SendJobSnapshot(peer); } catch (Exception e) { Plugin.L.LogWarning("[JOB] снимок: " + e.Message); }
                     foreach (var o in players)
                     {
                         if (o == me || o.peer == null) continue;
@@ -10962,6 +11918,10 @@ namespace SodCoop
             else if (type == MsgBodyFx)
             {
                 OnBodyFx(reader);
+            }
+            else if (type == MsgJob)
+            {
+                OnJobMsg(rp, reader);
             }
             else if (type == MsgKnock)
             {
