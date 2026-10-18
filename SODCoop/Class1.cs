@@ -353,7 +353,7 @@ namespace SodCoop
             Harmony.CreateAndPatchAll(typeof(PlayerPatch));
             Harmony.CreateAndPatchAll(typeof(MeleePatch));
             Harmony.CreateAndPatchAll(typeof(BlockPatch));
-            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SelfTripFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch), typeof(ProfileEventPatch) })
+            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SelfTripFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch), typeof(ProfileEventPatch), typeof(KnockPatch), typeof(BargePatch) })
             {
                 try { Harmony.CreateAndPatchAll(t); }
                 catch (Exception e) { L.LogWarning($"[PATCH] {t.Name}: {e.Message}"); }
@@ -751,6 +751,29 @@ namespace SodCoop
         public static void Postfix(System.Reflection.MethodBase __originalMethod)
         {
             try { Net.ProfileSoon(__originalMethod.Name); } catch (Exception) { }
+        }
+    }
+
+    // Игрок стучит в дверь -> другие слышат стук (а у хоста жильцы реагируют, как на стук горожанина).
+    // Стук игрока идёт ActionController.KnockOnDoor -> GameplayController.KnockOnDoor напрямую, мимо NewDoor.OnKnock
+    [HarmonyPatch(typeof(GameplayController), "KnockOnDoor")]
+    public static class KnockPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(NewDoor __0, Actor __1, int __2, float __3)
+        {
+            try { Net.OnLocalKnock(__0, __1, __2, __3); } catch (Exception e) { Plugin.L.LogWarning("[KNOCK] " + e.Message); }
+        }
+    }
+
+    // Игрок выбивает дверь плечом -> другие слышат удар (сама дверь открывается/выбивается обычной синхронизацией дверей)
+    [HarmonyPatch(typeof(NewDoor), "Barge")]
+    public static class BargePatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(NewDoor __instance, Actor __0)
+        {
+            try { Net.OnLocalKnock(__instance, __0, -1, 0f); } catch (Exception e) { Plugin.L.LogWarning("[KNOCK] " + e.Message); }
         }
     }
 
@@ -3093,6 +3116,7 @@ namespace SodCoop
         const byte MsgRelay = 26;       // хост -> клиент: [pid отправителя][тип][данные] - сообщение другого клиента
         const byte MsgPlayerInfo = 27;  // хост -> клиент: [pid][внешний вид] - сведения о другом игроке
         const byte MsgPlayerLeft = 28;  // хост -> клиент: [pid] - игрок вышел
+        const byte MsgKnock = 33;       // игрок -> все: [дверь][ударов, -1 = выбиваю плечом][настойчивость] - я стучу в дверь
         const byte MsgElevator = 32;    // лифты: [1][лифт][этаж][вверх] вызов (все); [2][полный][n]{[лифт][y][этаж]} хост -> клиент: где стоят лифты
         const byte MsgDown = 30;        // игрок -> все: [состояние: 1 лежу, 0 подняли, 2 не дождался, 3 меня поднимают][сколько секунд осталось]
         const byte MsgRevive = 31;      // игрок -> все: [кого][1 начал поднимать, 0 перестал, 2 поднял]
@@ -10500,6 +10524,62 @@ namespace SodCoop
             GUI.matrix = old;
         }
 
+        // ---------- Стук в дверь ----------
+        // NewDoor.OnKnock -> GameplayController.KnockOnDoor: корутина со звуками стука и сообщение жильцам. Стучащий (actor) - источник
+        // звука и тот, на кого реагируют жильцы; у получателя это двойник игрока (у хоста жильцы откроют/ответят клиенту)
+        static bool applyingKnock;
+
+        internal static void OnLocalKnock(NewDoor door, Actor who, int knocks, float urgency)
+        {
+            if (applyingKnock || manager == null || manager.ConnectedPeersCount == 0 || door == null || who == null) return;
+            var me = Player.Instance;
+            if (me == null || who.Pointer != me.Pointer) return;   // стучит не мой игрок (горожанин или повтор чужого стука)
+            int key = DoorKey(door);
+            if (key < 0) return;
+            var w = new NetDataWriter(); w.Put(MsgKnock); w.Put(key); w.Put(knocks); w.Put(urgency);
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+            Plugin.L.LogInfo(knocks < 0 ? $"[KNOCK] выбиваю дверь {key}, сообщаю другим" : $"[KNOCK] стучу в дверь {key} ({knocks} раз), сообщаю другим");
+        }
+
+        // вызывается в контексте игрока-отправителя (Enter): его двойник - стучащий
+        static void OnKnockMsg(RP rp, NetDataReader r)
+        {
+            int key = r.GetInt(), knocks = r.GetInt(); float urgency = r.GetFloat();
+            var door = DoorByKey(key);
+            if (door == null) { Plugin.L.LogWarning($"[KNOCK] дверь {key} не найдена"); return; }
+            Actor who = null;
+            try
+            {
+                if (IsHost) who = puppet;
+                else { Citizen c; if (puppetId >= 0 && npcById != null && npcById.TryGetValue(puppetId, out c)) who = c; }
+            }
+            catch (Exception) { }
+            if (who == null) who = Player.Instance;   // двойник неизвестен - звук всё равно пусть будет
+            if (who == null) return;
+            if (knocks < 0)
+            {
+                // удар плечом: только звук, как в NewDoor.Barge (сам Barge двигает камеру игрока, штрафует, открывает дверь - повторять нельзя)
+                var ev = door.preset != null ? door.preset.doorBargeContact : null;
+                var wall = door.wall;
+                if (ev != null && wall != null)
+                {
+                    applyingRemote = true;
+                    try { AudioController.Instance.PlayWorldOneShot(ev, who, wall.node, wall.position); }
+                    catch (Exception e) { Plugin.L.LogWarning("[KNOCK] звук удара: " + e.Message); }
+                    finally { applyingRemote = false; }
+                }
+                Plugin.L.LogInfo($"[KNOCK] игрок {rp.pid} выбивает дверь {key}");
+                return;
+            }
+            var gc = GameplayController.Instance;
+            if (gc == null) return;
+            applyingKnock = true;
+            try { gc.KnockOnDoor(door, who, knocks, urgency); }
+            catch (Exception e) { Plugin.L.LogWarning("[KNOCK] " + e.Message); }
+            finally { applyingKnock = false; }
+            Plugin.L.LogInfo($"[KNOCK] игрок {rp.pid} стучит в дверь {key} ({knocks} раз)");
+        }
+
         // ---------- Лифты ----------
         // Синхронизируем вызовы, а не положение кабины: тогда у каждого игрока лифт едет своей логикой игры (ElevatorUpdate),
         // сам открывает двери и везёт пассажира. Вызовы горожан бывают только у хоста (у клиента ИИ остановлен) - их он тоже рассылает.
@@ -10667,12 +10747,12 @@ namespace SodCoop
 
         static bool IsRelayed(byte t)
         {
-            return t == MsgPos || t == MsgAction || t == MsgItem || t == MsgHeld || t == MsgObj || t == MsgItemEv || t == MsgDoor || t == MsgBodyFx || t == MsgShot || t == MsgWeapon || t == MsgSound || t == MsgDown || t == MsgRevive || t == MsgElevator;
+            return t == MsgPos || t == MsgAction || t == MsgItem || t == MsgHeld || t == MsgObj || t == MsgItemEv || t == MsgDoor || t == MsgBodyFx || t == MsgShot || t == MsgWeapon || t == MsgSound || t == MsgDown || t == MsgRevive || t == MsgElevator || t == MsgKnock;
         }
 
         static bool NeedsCtx(byte t)
         {
-            return t == MsgPos || t == MsgAction || t == MsgItem || t == MsgHeld || t == MsgBodyFx || t == MsgShot || t == MsgWeapon || t == MsgSound || t == MsgNpcHit || t == MsgDown || t == MsgRevive;
+            return t == MsgKnock || t == MsgPos || t == MsgAction || t == MsgItem || t == MsgHeld || t == MsgBodyFx || t == MsgShot || t == MsgWeapon || t == MsgSound || t == MsgNpcHit || t == MsgDown || t == MsgRevive;
         }
 
         static void RelayFromPlayer(RP from, byte type, byte[] rest, DeliveryMethod method)
@@ -10882,6 +10962,10 @@ namespace SodCoop
             else if (type == MsgBodyFx)
             {
                 OnBodyFx(reader);
+            }
+            else if (type == MsgKnock)
+            {
+                if (rp != null) OnKnockMsg(rp, reader);
             }
             else if (type == MsgElevator)
             {
