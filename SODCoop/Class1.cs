@@ -38,6 +38,9 @@ namespace SodCoop
         internal static ConfigEntry<bool> CfgProfiles, CfgNewPlayerClean;
         internal static ConfigEntry<float> CfgProfileInterval;
         internal static ConfigEntry<int> CfgNewPlayerMoney;
+        internal static ConfigEntry<bool> CfgKoNoTimeSkip;
+        internal static ConfigEntry<float> CfgHospitalSeconds;
+        internal static ConfigEntry<bool> CfgKoInstantGetUp;
         internal static ConfigEntry<float> CfgAvatarYawOffset;
         internal static ConfigEntry<float> CfgMaxSpeed;
         internal static ConfigEntry<int> CfgArmsState;
@@ -138,6 +141,12 @@ namespace SodCoop
                 "A player who joins for the first time starts with an empty inventory and no bad statuses instead of a copy of the host's items");
             CfgNewPlayerMoney = Config.Bind("Profiles", "NewPlayerMoney", 500,
                 "Money of a player who joins for the first time (-1 = keep what the host's save gives)");
+            CfgKoNoTimeSkip = Config.Bind("Hospital", "NoTimeSkip", true,
+                "In multiplayer the game does not fast-forward time while a player is knocked out or in hospital (time is shared by all players). The player heals in real time instead");
+            CfgHospitalSeconds = Config.Bind("Hospital", "HospitalSeconds", 60f,
+                "How long (real seconds) a knocked out player lies in hospital when NoTimeSkip is on");
+            CfgKoInstantGetUp = Config.Bind("Hospital", "InstantGetUp", true,
+                "After the pay/don't pay choice in hospital the player gets up at once instead of a second fade and progress bar (when NoTimeSkip is on)");
             CfgAvatarScale = Config.Bind("Avatar", "Scale", 0.92f,
                 "Size of the other player's avatar relative to the model (1 = as is). Lower it if the avatar looks taller than NPCs; edit while the game runs");
             CfgAvatarYawOffset = Config.Bind("Avatar", "YawOffset", 0f,
@@ -313,7 +322,7 @@ namespace SodCoop
             Harmony.CreateAndPatchAll(typeof(PlayerPatch));
             Harmony.CreateAndPatchAll(typeof(MeleePatch));
             Harmony.CreateAndPatchAll(typeof(BlockPatch));
-            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch) })
+            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch) })
             {
                 try { Harmony.CreateAndPatchAll(t); }
                 catch (Exception e) { L.LogWarning($"[PATCH] {t.Name}: {e.Message}"); }
@@ -647,6 +656,17 @@ namespace SodCoop
         public static bool Prefix()
         {
             return !Net.ClientFollowsHostWeather();
+        }
+    }
+
+    // Без сознания / в больнице игра ускоряет время (veryFast). В мультиплеере время общее: состояние оставляем, а множитель возвращаем к x1
+    [HarmonyPatch(typeof(SessionData), "SetTimeSpeed")]
+    public static class KoTimeSpeedPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(SessionData.TimeSpeed __0)
+        {
+            Net.AfterTimeSpeed(__0);
         }
     }
 
@@ -3797,6 +3817,7 @@ namespace SodCoop
 
                 try { NpcTick(dt); } catch (Exception e) { if (!npcErrLogged) { npcErrLogged = true; Plugin.L.LogWarning($"[NPC] {e.Message}"); } }
                 try { ProfileTick(dt); } catch (Exception e) { if (!profErrLogged) { profErrLogged = true; Plugin.L.LogWarning($"[PROFILE] {e.Message}"); } }
+                try { KoTick(p, dt); } catch (Exception e) { if (!koErrLogged) { koErrLogged = true; Plugin.L.LogWarning($"[KO] {e.Message}"); } }
 
                 // Синхронизация предметов мира (которые несёт игрок)
                 if (Plugin.CfgObjSync.Value)
@@ -7501,7 +7522,7 @@ namespace SodCoop
                 if (sd == null) return;
                 var w = new NetDataWriter();
                 w.Put(MsgDoor); w.Put((byte)13);
-                w.Put(sd.gameTime); w.Put(sd.leapYearCycle); w.Put((byte)(int)sd.currentTimeSpeed);
+                w.Put(sd.gameTime); w.Put(sd.leapYearCycle); w.Put((byte)(int)SharedTimeSpeed(sd));
                 w.Put(sd.desiredRain); w.Put(sd.desiredWind); w.Put(sd.desiredSnow); w.Put(sd.desiredLightning); w.Put(sd.desiredFog);
                 SendDoor(w);
             }
@@ -7521,7 +7542,11 @@ namespace SodCoop
                     timeLogged = true; lastTimeLog = Time.unscaledTime;
                     Plugin.L.LogInfo($"[TIME] хост gameTime={gt:F4} у меня={mine:F4} скорость={spd}/{(int)sd.currentTimeSpeed} дождь={rain:F2} ветер={wind:F2} снег={snow:F2} молнии={lit:F2} туман={fog:F2}");
                 }
-                if (spd != (int)sd.currentTimeSpeed) sd.SetTimeSpeed((SessionData.TimeSpeed)spd);
+                if (spd != (int)sd.currentTimeSpeed && !LocalKo())   // пока мы без сознания, скорость в игре своя (veryFast с множителем x1)
+                {
+                    applyingTimeSpeed = true;
+                    try { sd.SetTimeSpeed((SessionData.TimeSpeed)spd); } finally { applyingTimeSpeed = false; }
+                }
                 if (Mathf.Abs(mine - gt) > 0.03f) sd.SetGameTime(gt, leap);
                 if (Mathf.Abs(sd.desiredRain - rain) > 0.02f || Mathf.Abs(sd.desiredWind - wind) > 0.02f || Mathf.Abs(sd.desiredSnow - snow) > 0.02f
                     || Mathf.Abs(sd.desiredLightning - lit) > 0.02f || Mathf.Abs(sd.desiredFog - fog) > 0.02f)
@@ -9221,6 +9246,123 @@ namespace SodCoop
                 System.Threading.Thread.Sleep(60);   // дать сети успеть отправить пакет до остановки
             }
             profState = 0; profLastSent = ""; helloOkFlag = false; profReqAt = 0f; pendingItems = null; pendingIt = null; profRestoring = false; profTarget = null;
+        }
+
+        // ---------- Без сознания и больница: без перемотки общего времени ----------
+        // Игра при нуле здоровья: TriggerPlayerKO -> штраф -> телепорт в больницу -> SetTimeSpeed(veryFast), KOTimePassed растёт до KOTime (игровые часы),
+        // потом игра сама ставит normal и снимает KO. Если запретить veryFast, KO не заканчивается никогда (проверено), поэтому veryFast пускаем,
+        // но настоящий множитель времени держим 1, а другим игрокам сообщаем прежнюю скорость. KOTimePassed двигаем сами: лечение идёт HospitalSeconds
+        static bool applyingTimeSpeed, koActive, koRecovery, koErrLogged;
+        static float koStartAt, koLogAt, koLogGt;
+        static int koClamped;
+        static SessionData.TimeSpeed koPrevSpeed = SessionData.TimeSpeed.normal;
+
+        internal static bool LocalKo()
+        {
+            if (manager == null || !Plugin.CfgKoNoTimeSkip.Value) return false;
+            try { var p = Player.Instance; return p != null && p.playerKOInProgress; } catch (Exception) { return false; }
+        }
+
+        // скорость, которую видят другие игроки: пока мы без сознания, это скорость до KO
+        static SessionData.TimeSpeed SharedTimeSpeed(SessionData sd)
+        {
+            return koActive && LocalKo() ? koPrevSpeed : sd.currentTimeSpeed;
+        }
+
+        // после SetTimeSpeed от игры во время KO: состояние veryFast остаётся, а время идёт как обычно
+        internal static void AfterTimeSpeed(SessionData.TimeSpeed spd)
+        {
+            if (applyingTimeSpeed || !LocalKo()) return;
+            ClampKoTime("SetTimeSpeed(" + spd + ")");
+        }
+
+        static void ClampKoTime(string why)
+        {
+            var sd = SessionData.Instance;
+            if (sd == null) return;
+            bool did = false;
+            if (sd.currentTimeMultiplier > 1.01f) { sd.currentTimeMultiplier = 1f; did = true; }
+            if (Time.timeScale > 1.01f) { Time.timeScale = 1f; did = true; }
+            if (did && ++koClamped <= 3) Plugin.L.LogInfo($"[KO] {why}: игра ускорила время, держу x1 (скорость в игре {sd.currentTimeSpeed}, для других {koPrevSpeed})");
+        }
+
+        // полоска на экране во время KO: действие взаимодействия "ko" с порогом KOTime
+        static string KoBar()
+        {
+            try
+            {
+                var ic = InteractionController.Instance;
+                if (ic == null) return "?";
+                return $"{ic.interactionActionName}:{(ic.activeInteractionAction ? "идёт" : "нет")} {ic.interactionActionAmount:F3}/{ic.interactionActionThreshold:F3}";
+            }
+            catch (Exception) { return "?"; }
+        }
+
+        static void KoTick(Player p, float dt)
+        {
+            if (!Plugin.CfgKoNoTimeSkip.Value || p == null) return;
+            bool ko = p.playerKOInProgress, rec = p.KORecovery;
+            float now = Time.realtimeSinceStartup;
+            var sd = SessionData.Instance;
+            if (!ko)
+            {
+                if (koActive)
+                {
+                    koActive = false;
+                    if (sd != null && sd.currentTimeSpeed != koPrevSpeed)
+                    {
+                        applyingTimeSpeed = true;
+                        try { sd.SetTimeSpeed(koPrevSpeed); } finally { applyingTimeSpeed = false; }
+                    }
+                    Plugin.L.LogInfo($"[KO] игрок пришёл в себя, фаза длилась {now - koStartAt:F0} с, здоровье {p.currentHealth:F2}/{p.maximumHealth:F2}, скорость {(sd != null ? "" + sd.currentTimeSpeed : "?")}");
+                }
+                return;
+            }
+            if (!koActive || rec != koRecovery)
+            {
+                if (!koActive && sd != null) koPrevSpeed = sd.currentTimeSpeed == SessionData.TimeSpeed.veryFast ? SessionData.TimeSpeed.normal : sd.currentTimeSpeed;
+                koActive = true; koRecovery = rec; koStartAt = now; koLogAt = now; koClamped = 0; koLogGt = sd != null ? sd.gameTime : 0f;
+                Plugin.L.LogInfo(rec ? $"[KO] игрок встаёт после больницы (KOTime={p.KOTime:F2})" : $"[KO] игрок без сознания, лечится без перемотки времени (KOTime={p.KOTime:F2})");
+            }
+            ClampKoTime("кадр");
+            float total = rec ? 5f : Plugin.CfgHospitalSeconds.Value;
+            float el = now - koStartAt;
+            if (now >= koLogAt && sd != null)
+            {
+                koLogAt = now + 5f;
+                Plugin.L.LogInfo($"[KO] {(rec ? "подъём" : "больница")} {el:F0}/{total + 3f:F0} с: KOTimePassed={p.KOTimePassed:F3} KOTime={p.KOTime:F3} hp={p.currentHealth:F2}/{p.maximumHealth:F2} скорость={sd.currentTimeSpeed} x{sd.currentTimeMultiplier:F2} timeScale={Time.timeScale:F2} время +{(sd.gameTime - koLogGt) * 60f:F1} игр. мин | затемнение={p.playerKOFadeOut} полоска={KoBar()}");
+                koLogGt = sd.gameTime;
+            }
+            // здоровье во время KO у клиента уходило выше максимума
+            float max = p.maximumHealth;
+            if (max > 0f && p.currentHealth > max) p.SetHealth(max);
+            // Подъём после выбора в больнице (TriggerPlayerRecovery): игра заново включает KO с KOTime=0.5, затемнением и полоской.
+            // Саму фазу не пропускаем (она возвращает игроку действия), а делаем мгновенной: KOTimePassed сразу у порога,
+            // затемнение (InterfaceController.fade плавно идёт к desiredFade) - сразу в цель
+            if (rec && Plugin.CfgKoInstantGetUp.Value)
+            {
+                float kt = p.KOTime;
+                if (kt > 0f && p.KOTimePassed < kt - 0.0005f) p.KOTimePassed = kt - 0.0005f;
+                var ic = InterfaceController.Instance;
+                if (ic != null && ic.fade != ic.desiredFade) ic.fade = ic.desiredFade;
+                return;
+            }
+            if (el < 3f) return;   // сначала игра доигрывает падение, берёт штраф и переносит в больницу
+            float koTime = p.KOTime;
+            if (total < 1f || koTime <= 0f) return;
+            // Player.Update (GameAssembly, разобрано через Cpp2IL): каждый кадр KO игра прибавляет к KOTimePassed прошедшее игровое время,
+            // и только если порог KOTime перейдён внутри этого кадра, ставит normal и вызывает InterfaceController.Fade(0) - убирает затемнение.
+            // Если KOTimePassed >= KOTime уже в начале кадра, игра лишь ждёт fade <= 0, а Fade(0) никто не вызывает: экран тёмный навсегда.
+            // Поэтому доводим только до чуть меньше порога, последний шаг делает сама игра
+            float passed = p.KOTimePassed;
+            float goal = koTime - 0.0005f;
+            if (passed < goal) { passed = Mathf.Min(goal, passed + koTime * dt / total); p.KOTimePassed = passed; }
+            if (!rec)
+            {
+                // здоровье растёт с половины до максимума
+                float target = max * Mathf.Lerp(0.5f, 1f, Mathf.Clamp01(passed / koTime));
+                if (p.currentHealth < target) p.SetHealth(Mathf.Min(target, max));
+            }
         }
 
         static int MaxPlayersNow() { return Mathf.Clamp(Plugin.CfgMaxPlayers.Value, 2, 4); }
