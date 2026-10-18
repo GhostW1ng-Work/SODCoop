@@ -50,6 +50,7 @@ namespace SodCoop
         internal static ConfigEntry<int> CfgIdleState;
         internal static ConfigEntry<float> CfgCrouchDrop;
         internal static ConfigEntry<float> CfgCrouchHip;
+        internal static ConfigEntry<float> CfgCrouchBendHip, CfgCrouchBendKnee, CfgCrouchLean;
         internal static ConfigEntry<float> CfgCrouchKnee;
         internal static ConfigEntry<float> CfgCrouchTorso;
         internal static ConfigEntry<string> CfgCrouchAxis;
@@ -182,7 +183,13 @@ namespace SodCoop
             CfgCrouchDrop = Config.Bind("Avatar", "CrouchDrop", 0.35f,
                 "How many meters the avatar body is lowered while crouched");
             CfgCrouchHip = Config.Bind("Avatar", "CrouchHipAngle", 60f,
-                "Upper-leg (hip) bend in degrees while crouched. Negative = other direction");
+                "Not used any more (old bone crouch on a fixed bone axis twisted the legs). See CrouchBendHip");
+            CfgCrouchBendHip = Config.Bind("Avatar", "CrouchBendHip", 75f,
+                "Crouch: how far (degrees) the thighs swing forward. Bends are around the avatar's own left-right axis, so they work for any model");
+            CfgCrouchBendKnee = Config.Bind("Avatar", "CrouchBendKnee", 115f,
+                "Crouch: how far (degrees) the knees bend (the shins swing back). The feet stay flat and on the floor automatically");
+            CfgCrouchLean = Config.Bind("Avatar", "CrouchLean", 25f,
+                "Crouch: forward lean of the body in degrees");
             CfgCrouchKnee = Config.Bind("Avatar", "CrouchKneeAngle", -100f,
                 "Lower-leg (knee) bend in degrees while crouched. Usually the opposite sign of the hip angle");
             CfgCrouchTorso = Config.Bind("Avatar", "CrouchTorsoAngle", 15f,
@@ -210,9 +217,9 @@ namespace SodCoop
             CfgHeldRot = Config.Bind("HeldItems", "Rotation", "0,0,0",
                 "Local rotation x,y,z in degrees");
             CfgCrouchIdleState = Config.Bind("Poses", "CrouchClip", "",
-                "Animator state (clip name) played while the other player is crouched and standing still. Empty = bone-based crouch. The log lists names that work: [ANIM] состояния");
+                "Animator state forced while the other player is crouched and standing still (the citizen controller may fight it and twitch). Empty = crouch made by bending the leg bones");
             CfgCrouchWalkState = Config.Bind("Poses", "CrouchWalkClip", "",
-                "State played while crouched AND moving. Empty = use CrouchIdleState");
+                "State forced while crouched AND moving. Empty = walking with bent legs (bones)");
             CfgLeanLeftState = Config.Bind("Poses", "LeanLeftState", "",
                 "State played while leaning (Q). Empty = just tilt the body");
             CfgLeanRightState = Config.Bind("Poses", "LeanRightState", "",
@@ -239,7 +246,7 @@ namespace SodCoop
             CfgSitIdleValue = Config.Bind("Poses", "SitIdleAnimationState", 1,
                 "IdleAnimationState while sitting (the game's own parameter: 1 sitting, 10 sitAgainstWall, 11 leanAgainstWall, 14 cowering). -1 = off");
             CfgCrouchIdleValue = Config.Bind("Poses", "CrouchAnimState", -1,
-                "IdleAnimationState while crouched AND standing still (21 = stackingObjectsCrouching). -1 = bone-based crouch only. While moving, the bone crouch is used");
+                "IdleAnimationState while crouched AND standing still - a pose the citizen controller holds by itself (21 stackingObjectsCrouching, 15 checkPulse, 14 cowering). -1 = off, bent leg bones");
             CfgSitDrop = Config.Bind("Poses", "SitDropMeters", 0.35f,
                 "Lower the sitting avatar by this many meters (adjust if he floats above / sinks into the chair)");
             CfgThrowState = Config.Bind("Poses", "ThrowTrigger", "throw",
@@ -2749,6 +2756,7 @@ namespace SodCoop
             public Transform boneLL;
             public Transform boneLR;
             public Transform boneTorso;
+            public float crouchFootBase = float.NaN;
             public float remoteLean;
             public float leanSmooth;
             public bool remoteBlocking;
@@ -2848,6 +2856,7 @@ namespace SodCoop
             boneLL = r.boneLL;
             boneLR = r.boneLR;
             boneTorso = r.boneTorso;
+            crouchFootBase = r.crouchFootBase;
             remoteLean = r.remoteLean;
             leanSmooth = r.leanSmooth;
             remoteBlocking = r.remoteBlocking;
@@ -2929,6 +2938,7 @@ namespace SodCoop
             r.boneLL = boneLL;
             r.boneLR = boneLR;
             r.boneTorso = boneTorso;
+            r.crouchFootBase = crouchFootBase;
             r.remoteLean = remoteLean;
             r.leanSmooth = leanSmooth;
             r.remoteBlocking = remoteBlocking;
@@ -3345,6 +3355,7 @@ namespace SodCoop
         static Vector3 modelBasePos;
         static Quaternion modelBaseRot = Quaternion.identity;
         static Transform boneUL, boneUR, boneLL, boneLR, boneTorso;
+        static float crouchFootBase = float.NaN;   // высота ступней над корнем аватара стоя: в приседе опускаем модель, чтобы ступни остались на полу
         static float remoteLean, leanSmooth;
         static bool remoteBlocking;
         static bool remoteConsuming, remoteSitting, paramSit, paramCrouch, remoteCarryObj;
@@ -4169,9 +4180,10 @@ namespace SodCoop
                             avatarAnim.SetInteger("ArmsState", armsSt);
                             int idleVal = Plugin.CfgIdleState.Value;
                             paramSit = remoteSitting && Plugin.CfgSitIdleValue.Value >= 0;
-                            paramCrouch = !paramSit && remoteCrouched && Plugin.CfgCrouchIdleValue.Value >= 0 && animSpeed < 0.3f;
+                            int crouchVal = CrouchIdleValue();
+                            paramCrouch = !paramSit && remoteCrouched && crouchVal >= 0 && animSpeed < 0.3f;
                             if (paramSit) idleVal = Plugin.CfgSitIdleValue.Value;
-                            else if (paramCrouch) idleVal = Plugin.CfgCrouchIdleValue.Value;
+                            else if (paramCrouch) idleVal = crouchVal;
                             avatarAnim.SetInteger("IdleAnimationState", idleVal);
 
                             // Ручной подбор из конфига (Debug.Force*)
@@ -4209,22 +4221,13 @@ namespace SodCoop
                             // Корпус вниз (ноги уходят в пол) и наклон по Q/E
                             sitK = Mathf.MoveTowards(sitK, poseAnimSit ? 1f : 0f, dt * 4f);
                             avatarModel.localScale = AvatarBaseScale() * Mathf.Clamp(Plugin.CfgAvatarHeight.Value, 0.3f, 2f);
-                            avatarModel.localPosition = modelBasePos + new Vector3(0f, -(Plugin.CfgCrouchDrop.Value * crouchBoneK + Plugin.CfgDropWithAnim.Value * crouchAnimK + (seatSnapped ? 0f : Plugin.CfgSitDrop.Value) * sitK), 0f);
+                            avatarModel.localPosition = modelBasePos + new Vector3(0f, -(Plugin.CfgDropWithAnim.Value * crouchAnimK + (seatSnapped ? 0f : Plugin.CfgSitDrop.Value) * sitK), 0f);
                             leanSmooth = Mathf.Lerp(leanSmooth, remoteLean, 1f - Mathf.Exp(-10f * dt));
                             avatarModel.localRotation = Quaternion.Euler(0f, 0f, -leanSmooth * (poseAnimLean ? Plugin.CfgTiltWithAnim.Value : Plugin.CfgLeanScale.Value)) * modelBaseRot;
                         }
                         UpdateHeld();
 
-                        if (crouchBoneK > 0.001f)
-                        {
-                            float hip = Plugin.CfgCrouchHip.Value * crouchBoneK;
-                            float knee = Plugin.CfgCrouchKnee.Value * crouchBoneK;
-                            if (boneUL != null) boneUL.localRotation = boneUL.localRotation * AxisRot(hip);
-                            if (boneUR != null) boneUR.localRotation = boneUR.localRotation * AxisRot(hip);
-                            if (boneLL != null) boneLL.localRotation = boneLL.localRotation * AxisRot(knee);
-                            if (boneLR != null) boneLR.localRotation = boneLR.localRotation * AxisRot(knee);
-                            if (boneTorso != null) boneTorso.localRotation = boneTorso.localRotation * AxisRot(Plugin.CfgCrouchTorso.Value * crouchBoneK);
-                        }
+                        CrouchBones(crouchBoneK);
                     }
                 }
                 Leave();
@@ -8936,6 +8939,63 @@ namespace SodCoop
             "CheckPulse","CheckPulseTransition","Arms_Consume1","Arms_Eating","Arms_EatingCutlery","Arms_BigBite","Arms_Smoking","Arms_SmokingPipe","RubbingEyes","Crying","TelephoneCall","PlayingViolin",
             "PlayingPiano","Arms_Reading","Arms_Typing","Arms_Resting","Arms_Idle","TheTwist","DanceWatusi" };
         static string poseCur = "";
+        static readonly System.Collections.Generic.HashSet<string> clipLogged = new System.Collections.Generic.HashSet<string>();
+
+        // Присед: по умолчанию сгиб костями (CrouchBones). Анимации горожан для приседа не подходят (Kneeling контроллер уводит,
+        // ходьбы в приседе нет) - их можно задать вручную в Poses.CrouchClip / CrouchWalkClip; "bones" = то же, что пусто
+        static string CrouchState(bool moving)
+        {
+            string v = ((moving ? Plugin.CfgCrouchWalkState.Value : Plugin.CfgCrouchIdleState.Value) ?? "").Trim();
+            if (v.Equals("bones", StringComparison.OrdinalIgnoreCase)) return "";
+            return v;
+        }
+
+        static int CrouchIdleValue() { return Plugin.CfgCrouchIdleValue.Value; }
+
+        static Transform FootOf(Transform lower)
+        {
+            if (lower == null) return null;
+            for (int i = 0; i < lower.childCount; i++) { var c = lower.GetChild(i); if (c != null && c.name.IndexOf("foot", StringComparison.OrdinalIgnoreCase) >= 0) return c; }
+            return lower.childCount > 0 ? lower.GetChild(0) : null;
+        }
+
+        static void BendAround(Transform t, float deg, Vector3 axis)
+        {
+            if (t != null && deg != 0f) t.rotation = Quaternion.AngleAxis(deg, axis) * t.rotation;
+        }
+
+        // Присед костями поверх анимации (стоя - поверх стойки, в движении - поверх ходьбы, получается шаг вприсядку).
+        // Все сгибы вокруг одной оси - «вправо» от аватара, в мировых координатах: так ноги гнутся строго вперёд-назад,
+        // как бы ни были направлены оси костей в модели (старый присед крутил кости по их локальной оси, и ноги выкручивались).
+        // Потом модель опускается ровно настолько, чтобы ступни остались на полу
+        static void CrouchBones(float k)
+        {
+            if (avatar == null || avatarModel == null) return;
+            Transform fl = FootOf(boneLL), fr = FootOf(boneLR);
+            float rootY = avatar.transform.position.y;
+            if (k <= 0.001f)
+            {
+                // стоя запоминаем, на какой высоте над корнем аватара ступни
+                if (fl != null && fr != null && !remoteSitting && !poseAnimSit)
+                {
+                    float b = Mathf.Min(fl.position.y, fr.position.y) - rootY;
+                    crouchFootBase = float.IsNaN(crouchFootBase) ? b : Mathf.Lerp(crouchFootBase, b, 0.05f);
+                }
+                return;
+            }
+            Vector3 right = avatar.transform.right;
+            float hip = Plugin.CfgCrouchBendHip.Value * k, knee = Plugin.CfgCrouchBendKnee.Value * k;
+            BendAround(boneUL, -hip, right); BendAround(boneUR, -hip, right);   // бедро вперёд
+            BendAround(boneLL, knee, right); BendAround(boneLR, knee, right);   // голень назад
+            BendAround(fl, hip - knee, right); BendAround(fr, hip - knee, right); // стопа снова параллельно полу
+            BendAround(boneTorso, Plugin.CfgCrouchLean.Value * k, right);         // корпус вперёд
+            if (fl != null && fr != null && !float.IsNaN(crouchFootBase))
+            {
+                float drop = Mathf.Min(fl.position.y, fr.position.y) - rootY - crouchFootBase;
+                if (drop > 0f) avatarModel.position -= new Vector3(0f, drop, 0f);
+            }
+            else avatarModel.position -= new Vector3(0f, Plugin.CfgCrouchDrop.Value * k, 0f);
+        }
         static int poseLayer = -1, posePrevHash, posePrevLayer;
         static bool poseAnimCrouch, poseAnimLean, poseAnimSit, statesLogged;
         static float poseKick;
@@ -9087,8 +9147,8 @@ namespace SodCoop
             }
             else if (remoteCrouched)
             {
-                string c = Plugin.CfgCrouchIdleState.Value ?? "";
-                string cw = Plugin.CfgCrouchWalkState.Value ?? "";
+                string c = CrouchState(false);
+                string cw = CrouchState(true);
                 if (animSpeed > 0.3f && cw != "") c = cw;
                 if (c != "") { want = c; crouchAnim = true; }
             }
@@ -9118,6 +9178,16 @@ namespace SodCoop
             }
             else if (want != "" && Time.realtimeSinceStartup > poseKick)
             {
+                if (crouchAnim && clipLogged.Add(want))
+                {
+                    try
+                    {
+                        var ci = avatarAnim.GetCurrentAnimatorClipInfo(layer);
+                        for (int i = 0; ci != null && i < ci.Length; i++)
+                            if (ci[i].clip != null) Plugin.L.LogInfo($"[ANIM] присед '{want}': клип '{ci[i].clip.name}', длина {ci[i].clip.length:F2} с, зациклен={ci[i].clip.isLooping}");
+                    }
+                    catch (Exception) { }
+                }
                 // Если контроллер сам увёл аниматор из нашего состояния, возвращаем
                 try
                 {
@@ -9148,7 +9218,7 @@ namespace SodCoop
                 avatarAnim = null;
                 ClearHeld(); remoteHeldDirty = remoteHeld.Count > 0; poseCur = ""; poseAnimCrouch = poseAnimLean = poseAnimSit = false; remoteConsuming = remoteSitting = false; sitK = 0f;
                 avatarModel = null; fxDead = false;
-                boneUL = boneUR = boneLL = boneLR = boneTorso = null;
+                boneUL = boneUR = boneLL = boneLR = boneTorso = null; crouchFootBase = float.NaN;
                 remoteLean = leanSmooth = 0f;
                 remoteBlocking = false;
                 remoteCrouched = remoteRunning = remoteFists = false;
