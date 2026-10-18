@@ -33,7 +33,7 @@ namespace SodCoop
         internal static ConfigEntry<bool> CfgDumpCitizen;
         internal static ConfigEntry<bool> CfgUseCitizenModel;
         internal static ConfigEntry<float> CfgAvatarYOffset;
-        internal static ConfigEntry<float> CfgAvatarScale;
+        internal static ConfigEntry<float> CfgAvatarScale, CfgAvatarHeight;
         internal static ConfigEntry<int> CfgMaxPlayers;
         internal static ConfigEntry<bool> CfgProfiles, CfgNewPlayerClean;
         internal static ConfigEntry<float> CfgProfileInterval;
@@ -165,7 +165,9 @@ namespace SodCoop
             CfgDownedHitPenalty = Config.Bind("Downed", "HitPenaltySeconds", 2f,
                 "Each hit a downed player takes shortens his waiting time by this many seconds");
             CfgAvatarScale = Config.Bind("Avatar", "Scale", 0.92f,
-                "Size of the other player's avatar relative to the model (1 = as is). Lower it if the avatar looks taller than NPCs; edit while the game runs");
+                "Not used any more: the avatar now gets the real size of citizens of the same gender. Use HeightMultiplier");
+            CfgAvatarHeight = Config.Bind("Avatar", "HeightMultiplier", 1f,
+                "Height of the other player's avatar relative to an average citizen of the same gender (1 = same as citizens); edit while the game runs");
             CfgAvatarYawOffset = Config.Bind("Avatar", "YawOffset", 0f,
                 "Extra rotation of the avatar in degrees (if it faces the wrong way, try 180)");
 
@@ -2755,6 +2757,7 @@ namespace SodCoop
             public bool paramSit;
             public bool paramCrouch;
             public bool remoteCarryObj;
+            public int remoteSeatId = -1, puppetSeatId = -1;
             public float sitK;
             public float crouchBoneK;
             public float crouchAnimK;
@@ -2853,6 +2856,7 @@ namespace SodCoop
             paramSit = r.paramSit;
             paramCrouch = r.paramCrouch;
             remoteCarryObj = r.remoteCarryObj;
+            remoteSeatId = r.remoteSeatId; puppetSeatId = r.puppetSeatId;
             sitK = r.sitK;
             crouchBoneK = r.crouchBoneK;
             crouchAnimK = r.crouchAnimK;
@@ -2933,6 +2937,7 @@ namespace SodCoop
             r.paramSit = paramSit;
             r.paramCrouch = paramCrouch;
             r.remoteCarryObj = remoteCarryObj;
+            r.remoteSeatId = remoteSeatId; r.puppetSeatId = puppetSeatId;
             r.sitK = sitK;
             r.crouchBoneK = crouchBoneK;
             r.crouchAnimK = crouchAnimK;
@@ -3130,11 +3135,25 @@ namespace SodCoop
             {
                 if (it == null || enter == null || players.Count == 0) return false;
                 SyncCur();
+                {
+                    string tn0 = enter.name ?? "";
+                    if (tn0.IndexOf("exit", StringComparison.OrdinalIgnoreCase) < 0)
+                        for (int pi = 0; pi < players.Count; pi++)
+                        {
+                            var o = players[pi];
+                            if (o.remoteSitting && o.remoteSeatId >= 0 && o.remoteSeatId == it.id)
+                            {
+                                if (Time.realtimeSinceStartup - lastSeatLog > 1f) { lastSeatLog = Time.realtimeSinceStartup; Plugin.Dbg($"[SIT] на этом месте ('{tn0}') сидит игрок {o.pid} - посадка отменена"); }
+                                return true;
+                            }
+                        }
+                }
                 RP sitter = null; float bestD = float.MaxValue;
                 for (int pi = 0; pi < players.Count; pi++)
                 {
                     var o = players[pi];
                     if (!o.remoteSitting || o.avatar == null) continue;
+                    if (o.remoteSeatId >= 0) continue;   // у этого игрока место известно точно, проверено выше
                     Vector3 dd = it.wPos - o.avatar.transform.position; dd.y = 0f;
                     if (dd.sqrMagnitude < bestD) { bestD = dd.sqrMagnitude; sitter = o; }
                 }
@@ -3168,6 +3187,74 @@ namespace SodCoop
 
         static string lastSitLog = "";
         static bool sitLatched;
+        static Interactable sitSeat;   // на что я сел (кресло, стул, скамья)
+
+        // Рост аватара: средний мировой масштаб моделей горожан того же пола. Часть масштаба горожанина (рост, пол) задана на родителях
+        // модели, а у аватара родитель - новый объект с масштабом 1, поэтому копия модели выходила крупнее горожан
+        static Vector3 refScaleM, refScaleF, refScaleAll;
+        static float refScaleAt = -1000f;
+        static bool refScaleLogged;
+
+        static void RecalcCitizenScale()
+        {
+            Vector3 sm = Vector3.zero, sf = Vector3.zero, sa = Vector3.zero; int nm = 0, nf = 0, na = 0;
+            try
+            {
+                var list = CityData.Instance.citizenDirectory;
+                for (int i = 0; list != null && i < list.Count && na < 400; i++)
+                {
+                    var c = list[i];
+                    if (c == null || c.isPlayer || IsPuppetCit(c)) continue;
+                    var ac = c.animationController;
+                    var an = ac != null ? ac.mainAnimator : null;
+                    if (an == null) continue;
+                    var ls = an.transform.lossyScale;
+                    if (ls.y <= 0.0001f) continue;
+                    sa += ls; na++;
+                    int g = (int)c.gender;
+                    if (g == 0) { sm += ls; nm++; } else if (g == 1) { sf += ls; nf++; }
+                }
+            }
+            catch (Exception) { }
+            if (na == 0) return;
+            refScaleAll = sa / na; refScaleM = nm > 0 ? sm / nm : refScaleAll; refScaleF = nf > 0 ? sf / nf : refScaleAll;
+            string msg = $"[CHAR] средний масштаб моделей горожан: все {refScaleAll.y:F3} ({na}), мужчины {refScaleM.y:F3} ({nm}), женщины {refScaleF.y:F3} ({nf})";
+            if (!refScaleLogged) { refScaleLogged = true; Plugin.L.LogInfo(msg + " - такой рост получат аватары игроков"); } else Plugin.Dbg(msg);
+        }
+
+        static Vector3 AvatarBaseScale()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (now - refScaleAt > 60f) { refScaleAt = now; RecalcCitizenScale(); }
+            int g = remoteApp != null ? remoteApp.Gender : -1;
+            Vector3 r = g == 0 ? refScaleM : g == 1 ? refScaleF : refScaleAll;
+            if (r.y <= 0.0001f || avatarModel == null) return modelBaseScale;
+            Vector3 ps = avatarModel.parent != null ? avatarModel.parent.lossyScale : Vector3.one;
+            if (ps.x == 0f || ps.y == 0f || ps.z == 0f) return modelBaseScale;
+            return new Vector3(r.x / ps.x, r.y / ps.y, r.z / ps.z);
+        }
+
+        static int SeatIdNow()
+        {
+            try { return sitLatched && sitSeat != null ? sitSeat.id : -1; } catch (Exception) { return -1; }
+        }
+
+        // точка, где на этом сиденье сидит горожанин: позиция и направление взгляда
+        static bool SeatPose(int id, out Vector3 pos, out float yaw)
+        {
+            pos = Vector3.zero; yaw = 0f;
+            if (id < 0) return false;
+            var it = FindById(id);
+            var up = it != null ? it.usagePoint : null;
+            if (up == null) return false;
+            try { up.PositionUpdate(); } catch (Exception) { }
+            pos = up.useageWorldPosition;
+            if (pos == Vector3.zero) return false;
+            Vector3 look = up.worldLookAtPoint - pos; look.y = 0f;
+            if (look.sqrMagnitude < 0.0001f) return false;
+            yaw = Quaternion.LookRotation(look).eulerAngles.y;
+            return true;
+        }
         static Vector3 sitLastPos;
         // Игрок сидит: переход "...Enter" с именем из SitKeywords включает сидение, переход "...Exit" или ходьба выключают
         static bool SittingNow(Player p)
@@ -3189,14 +3276,14 @@ namespace SodCoop
                         string k = kw.Trim();
                         if (k.Length > 0 && tn.IndexOf(k, StringComparison.OrdinalIgnoreCase) >= 0) { match = true; break; }
                     }
-                    if (exit) sitLatched = false;
-                    else if (match) { sitLatched = true; sitLastPos = p.transform.position; }
+                    if (exit) { sitLatched = false; sitSeat = null; }
+                    else if (match) { sitLatched = true; sitLastPos = p.transform.position; sitSeat = p.transitionInteractable; }
                 }
                 if (sitLatched && !act)
                 {
                     // Переход закончился, а мы всё ещё сидим: сбрасываем, только если игрок ушёл от места
                     Vector3 d = p.transform.position - sitLastPos; d.y = 0f;
-                    if (d.sqrMagnitude > 1.5f) sitLatched = false;
+                    if (d.sqrMagnitude > 1.5f) { sitLatched = false; sitSeat = null; }
                 }
                 string sig = act + "|" + tn + "|" + inm + "|" + sitLatched;
                 if (sig != lastSitLog)
@@ -3261,6 +3348,9 @@ namespace SodCoop
         static float remoteLean, leanSmooth;
         static bool remoteBlocking;
         static bool remoteConsuming, remoteSitting, paramSit, paramCrouch, remoteCarryObj;
+        static int remoteSeatId = -1;   // на каком сиденье (Interactable.id) сидит другой игрок
+        static int puppetSeatId = -1;   // хост: сиденье, где двойник этого игрока записан пользователем (горожане туда не сядут)
+        static bool seatSnapped;        // аватар поставлен в точку сиденья, как сидит горожанин
         static float sitK;
         static float blockUntil;
         static float crouchBoneK, crouchAnimK;
@@ -3957,6 +4047,7 @@ namespace SodCoop
 
                         w.Put(fl);
                         w.Put(LeanRoll());
+                        w.Put(SeatIdNow());   // в конце: старые версии мода это поле не читают
                         manager.SendToAll(w, DeliveryMethod.Sequenced);
                         if (curItem != sentItem || Time.realtimeSinceStartup > itemSendAt)
                         {
@@ -3994,6 +4085,22 @@ namespace SodCoop
                         var tr = avatar.transform;
                         Vector3 tp = targetPos + new Vector3(0f, Plugin.CfgAvatarYOffset.Value, 0f);
                         Quaternion tq = Quaternion.Euler(0f, targetYaw + Plugin.CfgAvatarYawOffset.Value, 0f);
+                        // сидит: ставим туда же, где на этом сиденье сидит горожанин (если игрок не сел заметно в стороне, например на край дивана)
+                        seatSnapped = false;
+                        if (remoteSitting && remoteSeatId >= 0)
+                        {
+                            Vector3 sp; float sy;
+                            if (SeatPose(remoteSeatId, out sp, out sy))
+                            {
+                                Vector3 off = sp - targetPos; off.y = 0f;
+                                if (off.sqrMagnitude < 0.8f * 0.8f)
+                                {
+                                    tp = sp + new Vector3(0f, Plugin.CfgAvatarYOffset.Value, 0f);
+                                    tq = Quaternion.Euler(0f, sy + Plugin.CfgAvatarYawOffset.Value, 0f);
+                                    seatSnapped = true;
+                                }
+                            }
+                        }
 
                         Vector3 before = tr.position;
                         if (avatarSnap || (tr.position - tp).sqrMagnitude > 25f)
@@ -4101,8 +4208,8 @@ namespace SodCoop
                         {
                             // Корпус вниз (ноги уходят в пол) и наклон по Q/E
                             sitK = Mathf.MoveTowards(sitK, poseAnimSit ? 1f : 0f, dt * 4f);
-                            avatarModel.localScale = modelBaseScale * Mathf.Clamp(Plugin.CfgAvatarScale.Value, 0.3f, 2f);
-                            avatarModel.localPosition = modelBasePos + new Vector3(0f, -(Plugin.CfgCrouchDrop.Value * crouchBoneK + Plugin.CfgDropWithAnim.Value * crouchAnimK + Plugin.CfgSitDrop.Value * sitK), 0f);
+                            avatarModel.localScale = AvatarBaseScale() * Mathf.Clamp(Plugin.CfgAvatarHeight.Value, 0.3f, 2f);
+                            avatarModel.localPosition = modelBasePos + new Vector3(0f, -(Plugin.CfgCrouchDrop.Value * crouchBoneK + Plugin.CfgDropWithAnim.Value * crouchAnimK + (seatSnapped ? 0f : Plugin.CfgSitDrop.Value) * sitK), 0f);
                             leanSmooth = Mathf.Lerp(leanSmooth, remoteLean, 1f - Mathf.Exp(-10f * dt));
                             avatarModel.localRotation = Quaternion.Euler(0f, 0f, -leanSmooth * (poseAnimLean ? Plugin.CfgTiltWithAnim.Value : Plugin.CfgLeanScale.Value)) * modelBaseRot;
                         }
@@ -6154,6 +6261,7 @@ namespace SodCoop
         {
             var c = puppet; puppet = null; puppetId = -1;
             if (c == null) return;
+            PuppetSeat(c, puppetSeatId, false); puppetSeatId = -1;
             string where = "на месте";
             try
             {
@@ -6226,6 +6334,23 @@ namespace SodCoop
                 try { p.UpdateLightLevel(); } catch (Exception) { }
             }
             try { if (puppetCrouch != remoteCrouched) { puppetCrouch = remoteCrouched; p.SetCrouched(remoteCrouched, true); } } catch (Exception) { }
+            // сиденье игрока занято его двойником - горожане туда не сядут
+            int wantSeat = remoteSitting ? remoteSeatId : -1;
+            if (wantSeat != puppetSeatId) { PuppetSeat(p, puppetSeatId, false); PuppetSeat(p, wantSeat, true); puppetSeatId = wantSeat; }
+        }
+
+        static void PuppetSeat(Citizen c, int seatId, bool take)
+        {
+            if (c == null || seatId < 0) return;
+            try
+            {
+                var it = FindById(seatId);
+                var up = it != null ? it.usagePoint : null;
+                if (up == null) return;
+                if (take) { bool ok = up.TrySetUser(Interactable.UsePointSlot.defaultSlot, c, "SodCoop: player sits here"); Plugin.Dbg($"[SIT] место {seatId} отмечено занятым двойником {c.humanID}: {ok}"); }
+                else up.RemoveUserFromAllSlots(c);
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[SIT] отметить место: " + e.Message); }
         }
 
         // хост: раз в 3 с сообщает клиентам, какой горожанин чей двойник (номер игрока -> humanID)
@@ -10544,6 +10669,7 @@ namespace SodCoop
                 remoteSitting = (fl & 32) != 0;
                 remoteCarryObj = (fl & 64) != 0;
                 remoteLean = reader.GetFloat();
+                remoteSeatId = reader.AvailableBytes >= 4 ? reader.GetInt() : -1;
                 if (avatar == null) CreateAvatar();
             }
         }
