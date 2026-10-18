@@ -20,7 +20,7 @@ namespace SodCoop
 {
     public enum NetMode { Off, Host, Client }
 
-    [BepInPlugin("com.yourname.sodcoop", "SodCoop", "0.10.0")]
+    [BepInPlugin("com.yourname.sodcoop", "SodCoop", "0.11.3")]
     public class Plugin : BasePlugin
     {
         internal static ManualLogSource L;
@@ -35,6 +35,9 @@ namespace SodCoop
         internal static ConfigEntry<float> CfgAvatarYOffset;
         internal static ConfigEntry<float> CfgAvatarScale;
         internal static ConfigEntry<int> CfgMaxPlayers;
+        internal static ConfigEntry<bool> CfgProfiles, CfgNewPlayerClean;
+        internal static ConfigEntry<float> CfgProfileInterval;
+        internal static ConfigEntry<int> CfgNewPlayerMoney;
         internal static ConfigEntry<float> CfgAvatarYawOffset;
         internal static ConfigEntry<float> CfgMaxSpeed;
         internal static ConfigEntry<int> CfgArmsState;
@@ -127,6 +130,14 @@ namespace SodCoop
                 "Extra vertical offset of the avatar in meters (if it floats above or sinks into the floor)");
             CfgMaxPlayers = Config.Bind("Network", "MaxPlayers", 4,
                 "Maximum number of players on the server including the host (2..4). Host only");
+            CfgProfiles = Config.Bind("Profiles", "Enabled", true,
+                "The host keeps a profile of every joined player (money, social credit, health, status effects, inventory, bought apartments) and gives it back when he joins again");
+            CfgProfileInterval = Config.Bind("Profiles", "SaveInterval", 10f,
+                "How often (seconds) a client sends his profile to the host");
+            CfgNewPlayerClean = Config.Bind("Profiles", "NewPlayerCleanStart", true,
+                "A player who joins for the first time starts with an empty inventory and no bad statuses instead of a copy of the host's items");
+            CfgNewPlayerMoney = Config.Bind("Profiles", "NewPlayerMoney", 500,
+                "Money of a player who joins for the first time (-1 = keep what the host's save gives)");
             CfgAvatarScale = Config.Bind("Avatar", "Scale", 0.92f,
                 "Size of the other player's avatar relative to the model (1 = as is). Lower it if the avatar looks taller than NPCs; edit while the game runs");
             CfgAvatarYawOffset = Config.Bind("Avatar", "YawOffset", 0f,
@@ -2555,7 +2566,7 @@ namespace SodCoop
         // Enter(rp) загружает их из rp, Leave() сохраняет обратно. Так весь код аватара работает на любое число игроков.
         sealed class RP
         {
-            public int pid; public NetPeer peer; public string clientId = ""; public string label = "";
+            public int pid; public NetPeer peer; public string clientId = ""; public string profileId = ""; public string label = "";
             public float combatUntil;
             public bool attackAlt;
             public string remoteItem = "";
@@ -2837,6 +2848,7 @@ namespace SodCoop
         const byte MsgRelay = 26;       // хост -> клиент: [pid отправителя][тип][данные] - сообщение другого клиента
         const byte MsgPlayerInfo = 27;  // хост -> клиент: [pid][внешний вид] - сведения о другом игроке
         const byte MsgPlayerLeft = 28;  // хост -> клиент: [pid] - игрок вышел
+        const byte MsgProfile = 29;     // профиль игрока: [1][json] клиент->хост сохранить; [2] клиент->хост запросить; [3][есть][json] хост->клиент
         const byte MsgSound = 16;       // хост -> клиент: звук горожанина в бою
         const byte MsgPuppetHurt = 13;  // хост -> клиент: горожанин ударил двойника = ударил тебя
 
@@ -3178,6 +3190,7 @@ namespace SodCoop
 
         internal static void Shutdown()
         {
+            try { ProfileOnShutdown(); } catch (Exception) { }
             lostAt = -1f; everConnected = false; weaponSent = null;
             try { Lan.StopAdvertise(); } catch (Exception) { }
             try { if (manager != null) manager.Stop(); } catch (Exception) { }
@@ -3599,6 +3612,7 @@ namespace SodCoop
                             w.Put(Describe());
                             w.Put(MyAppearanceJson());
                             w.Put(MyClientId);
+                            w.Put(MyProfileId());
                         }
                         peer.Send(w, DeliveryMethod.ReliableOrdered);
                     }
@@ -3611,6 +3625,7 @@ namespace SodCoop
                     {
                         var gone = RpByPeer(peer);
                         if (gone != null) RemovePlayer(gone, "" + info.Reason);
+                        if (profDirty) ProfilesWrite();
                     }
                     if (!IsHost)
                     {
@@ -3649,6 +3664,7 @@ namespace SodCoop
                     manager.Start(RtPort);
                     Plugin.L.LogInfo($"[NET] Хост запущен, UDP-порт {RtPort}. {Describe()}");
                     Lan.StartAdvertise();
+                    try { ProfilesHostInit(); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] " + e.Message); }
                 }
                 else
                 {
@@ -3780,6 +3796,7 @@ namespace SodCoop
                 }
 
                 try { NpcTick(dt); } catch (Exception e) { if (!npcErrLogged) { npcErrLogged = true; Plugin.L.LogWarning($"[NPC] {e.Message}"); } }
+                try { ProfileTick(dt); } catch (Exception e) { if (!profErrLogged) { profErrLogged = true; Plugin.L.LogWarning($"[PROFILE] {e.Message}"); } }
 
                 // Синхронизация предметов мира (которые несёт игрок)
                 if (Plugin.CfgObjSync.Value)
@@ -4353,7 +4370,7 @@ namespace SodCoop
         {
             try
             {
-                if (manager == null || manager.ConnectedPeersCount == 0 || it == null) return;
+                if (profileApplying || profRestoring || manager == null || manager.ConnectedPeersCount == 0 || it == null) return;
                 var w = new NetDataWriter();
                 w.Put(MsgItemEv);
                 w.Put(kind);
@@ -4441,7 +4458,7 @@ namespace SodCoop
         {
             try
             {
-                if (applyingRemote || it == null || !Plugin.CfgObjSync.Value) return;
+                if (applyingRemote || profileApplying || profRestoring || it == null || !Plugin.CfgObjSync.Value) return;
                 if (!sharedLocal.Remove(it.id)) return;
                 if (manager == null || manager.ConnectedPeersCount == 0) return;
                 var w = new NetDataWriter();
@@ -5202,7 +5219,9 @@ namespace SodCoop
                 else if (kind == 14)
                 {
                     int sid = r.GetInt();
-                    ApplyApartmentSold(sid, true, GetRems(r));
+                    var srems = GetRems(r);
+                    ApplyApartmentSold(sid, true, srems);
+                    if (IsHost && doorSender != null) ProfileNoteApt(doorSender, sid, srems);
                 }
                 else if (kind == 16)
                 {
@@ -8667,6 +8686,543 @@ namespace SodCoop
             return 7;
         }
 
+        // ---------- Профили игроков: деньги, соцрейтинг, здоровье, статусы, инвентарь, квартиры ----------
+        public sealed class ProfItem { public string preset = ""; public int slot; }
+        public sealed class ProfApt { public int id; public System.Collections.Generic.List<int[]> rems = new System.Collections.Generic.List<int[]>(); }
+        public sealed class ProfileData
+        {
+            public string id = ""; public string saved = ""; public bool valid;
+            public int money; public int social;
+            public float hp = -1f, maxHp = -1f, nerve = -1f, maxNerve = -1f;
+            public System.Collections.Generic.Dictionary<string, float> stats = new System.Collections.Generic.Dictionary<string, float>();
+            public System.Collections.Generic.List<ProfItem> items = new System.Collections.Generic.List<ProfItem>();
+            public System.Collections.Generic.List<ProfApt> apts = new System.Collections.Generic.List<ProfApt>();
+        }
+
+        static bool profileApplying, helloOkFlag, profDirty, profErrLogged;
+        static int profState;   // клиент: 0 - ещё не запрашивал, 1 - ждёт ответа хоста, 2 - профиль применён, можно сохранять
+        static float profReadyAt, profReqAt, profSendAt, profWriteAt;
+        static string profLastSent = "", profFile = "", myProfileId;
+        static RP doorSender;
+        static readonly System.Collections.Generic.Dictionary<string, ProfileData> profiles = new System.Collections.Generic.Dictionary<string, ProfileData>();
+        static readonly JsonSerializerOptions ProfJson = new JsonSerializerOptions { IncludeFields = true };
+
+        static readonly string[] StatNames = { "nourishment", "hydration", "alertness", "energy", "hygiene", "heat", "drunk", "sick", "headache", "wet", "brokenLeg", "bruised", "blackEye", "blackedOut", "numb", "poisoned", "bleeding", "wellRested", "starchAddiction", "syncDiskInstall", "blinded" };
+        static readonly string[] BadStatNames = { "drunk", "sick", "headache", "wet", "brokenLeg", "bruised", "blackEye", "blackedOut", "numb", "poisoned", "bleeding", "starchAddiction", "syncDiskInstall", "blinded" };
+
+        static float GetStat(Player p, string n)
+        {
+            switch (n)
+            {
+                case "nourishment": return p.nourishment;
+                case "hydration": return p.hydration;
+                case "alertness": return p.alertness;
+                case "energy": return p.energy;
+                case "hygiene": return p.hygiene;
+                case "heat": return p.heat;
+                case "drunk": return p.drunk;
+                case "sick": return p.sick;
+                case "headache": return p.headache;
+                case "wet": return p.wet;
+                case "brokenLeg": return p.brokenLeg;
+                case "bruised": return p.bruised;
+                case "blackEye": return p.blackEye;
+                case "blackedOut": return p.blackedOut;
+                case "numb": return p.numb;
+                case "poisoned": return p.poisoned;
+                case "bleeding": return p.bleeding;
+                case "wellRested": return p.wellRested;
+                case "starchAddiction": return p.starchAddiction;
+                case "syncDiskInstall": return p.syncDiskInstall;
+                case "blinded": return p.blinded;
+            }
+            return 0f;
+        }
+
+        static void SetStat(Player p, string n, float v)
+        {
+            switch (n)
+            {
+                case "nourishment": p.nourishment = v; break;
+                case "hydration": p.hydration = v; break;
+                case "alertness": p.alertness = v; break;
+                case "energy": p.energy = v; break;
+                case "hygiene": p.hygiene = v; break;
+                case "heat": p.heat = v; break;
+                case "drunk": p.drunk = v; break;
+                case "sick": p.sick = v; break;
+                case "headache": p.headache = v; break;
+                case "wet": p.wet = v; break;
+                case "brokenLeg": p.brokenLeg = v; break;
+                case "bruised": p.bruised = v; break;
+                case "blackEye": p.blackEye = v; break;
+                case "blackedOut": p.blackedOut = v; break;
+                case "numb": p.numb = v; break;
+                case "poisoned": p.poisoned = v; break;
+                case "bleeding": p.bleeding = v; break;
+                case "wellRested": p.wellRested = v; break;
+                case "starchAddiction": p.starchAddiction = v; break;
+                case "syncDiskInstall": p.syncDiskInstall = v; break;
+                case "blinded": p.blinded = v; break;
+            }
+        }
+
+        // постоянный номер игрока (не меняется между запусками): по нему хост находит его профиль
+        static string MyProfileId()
+        {
+            if (myProfileId != null) return myProfileId;
+            try
+            {
+                string path = Path.Combine(BepInEx.Paths.ConfigPath, "SodCoop_playerid.txt");
+                string v = File.Exists(path) ? File.ReadAllText(path).Trim() : "";
+                if (v.Length < 8) { v = Guid.NewGuid().ToString("N"); File.WriteAllText(path, v); Plugin.L.LogInfo("[PROFILE] создан постоянный номер игрока: " + v); }
+                myProfileId = v;
+            }
+            catch (Exception e) { myProfileId = Guid.NewGuid().ToString("N"); Plugin.L.LogWarning("[PROFILE] не смог сохранить номер игрока: " + e.Message); }
+            return myProfileId;
+        }
+
+        const System.Reflection.BindingFlags GcFlags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance;
+
+        static object GcInst(out Type t)
+        {
+            t = FindType("GameplayController");
+            if (t == null) return null;
+            var ip = t.GetProperty("Instance", GcFlags);
+            return ip != null ? ip.GetValue(null, null) : null;
+        }
+
+        static double GcGet(string prop)
+        {
+            try
+            {
+                Type t; var inst = GcInst(out t);
+                if (inst == null) return 0;
+                var pr = t.GetProperty(prop, GcFlags);
+                if (pr == null) return 0;
+                return Convert.ToDouble(pr.GetValue(inst, null));
+            }
+            catch (Exception) { return 0; }
+        }
+
+        static bool GcSet(string prop, string method, double v)
+        {
+            try
+            {
+                Type t; var inst = GcInst(out t);
+                if (inst == null) return false;
+                if (method != null)
+                {
+                    foreach (var m in t.GetMethods(GcFlags))
+                    {
+                        if (m.Name != method) continue;
+                        var ps = m.GetParameters();
+                        if (ps.Length < 1) continue;
+                        var args = new object[ps.Length];
+                        for (int i = 0; i < ps.Length; i++)
+                        {
+                            var pt = ps[i].ParameterType;
+                            if (i == 0 && pt == typeof(int)) args[i] = (int)Math.Round(v);
+                            else if (i == 0 && pt == typeof(float)) args[i] = (float)v;
+                            else if (pt == typeof(bool)) args[i] = false;
+                            else if (pt == typeof(int)) args[i] = 0;
+                            else if (pt == typeof(float)) args[i] = 0f;
+                            else args[i] = null;
+                        }
+                        m.Invoke(inst, args);
+                        return true;
+                    }
+                }
+                var pr = t.GetProperty(prop, GcFlags);
+                if (pr != null && pr.CanWrite)
+                {
+                    if (pr.PropertyType == typeof(int)) pr.SetValue(inst, (int)Math.Round(v), null);
+                    else if (pr.PropertyType == typeof(float)) pr.SetValue(inst, (float)v, null);
+                    else return false;
+                    return true;
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[PROFILE] " + prop + ": " + (e.InnerException != null ? e.InnerException.Message : e.Message)); }
+            return false;
+        }
+
+        static ProfileData CaptureProfile()
+        {
+            var p = Player.Instance;
+            var fp = FirstPersonItemController.Instance;
+            if (p == null || fp == null) return null;
+            if (p.isDead) return null;
+            var pd = new ProfileData();
+            pd.valid = true; pd.id = MyProfileId();
+            pd.money = (int)Math.Round(GcGet("money"));
+            pd.social = (int)Math.Round(GcGet("socialCredit"));
+            pd.hp = p.currentHealth; pd.maxHp = p.maximumHealth; pd.nerve = p.currentNerve; pd.maxNerve = p.maxNerve;
+            foreach (var n in StatNames) pd.stats[n] = (float)Math.Round(GetStat(p, n), 3);
+            var slots = fp.slots;
+            if (slots != null)
+            {
+                for (int i = 0; i < slots.Count; i++)
+                {
+                    var sl = slots[i];
+                    if (sl == null || sl.isStatic != FirstPersonItemController.InventorySlot.StaticSlot.nonStatic) continue;
+                    Interactable it = null;
+                    try { it = sl.GetInteractable(); } catch (Exception) { }
+                    if (it == null) continue;
+                    string pn = PresetNameOf(it);
+                    if (pn == "") continue;
+                    var pi2 = new ProfItem(); pi2.preset = pn; pi2.slot = sl.index;
+                    pd.items.Add(pi2);
+                }
+            }
+            return pd;
+        }
+
+        static void ClearInventory()
+        {
+            var fp = FirstPersonItemController.Instance;
+            if (fp == null || fp.slots == null) return;
+            var list = new System.Collections.Generic.List<FirstPersonItemController.InventorySlot>();
+            for (int i = 0; i < fp.slots.Count; i++)
+            {
+                var sl = fp.slots[i];
+                if (sl != null && sl.isStatic == FirstPersonItemController.InventorySlot.StaticSlot.nonStatic) list.Add(sl);
+            }
+            int n = 0;
+            foreach (var sl in list)
+            {
+                try { if (sl.GetInteractable() == null) continue; fp.EmptySlot(sl, false, true, false, false); n++; }
+                catch (Exception e) { Plugin.L.LogWarning("[PROFILE] очистка слота: " + e.Message); }
+            }
+            Plugin.L.LogInfo($"[PROFILE] инвентарь очищен, предметов убрано: {n}");
+        }
+
+        static bool profRestoring;
+        static float profVerifyAt, profVerifyEnd, pendDeadline;
+        static bool pendClearDone;
+        static double prevMoney, prevSocial;
+        static ProfileData profTarget;
+        static System.Collections.Generic.List<ProfItem> pendingItems;
+        static Interactable pendingIt;
+        static int pendingTries, pendOk, pendBad;
+        static float pendingAt;
+
+        // предметы возвращаются по одному с паузами: игре нужно время, чтобы создать предмет в мире, прежде чем его можно подобрать
+        static void RestoreInventory(System.Collections.Generic.List<ProfItem> items)
+        {
+            pendingIt = null; pendOk = 0; pendBad = 0; pendClearDone = false;
+            pendingItems = new System.Collections.Generic.List<ProfItem>(items ?? new System.Collections.Generic.List<ProfItem>());
+            pendingItems.Sort((a2, b2) => a2.slot.CompareTo(b2.slot));
+            profRestoring = true; pendingAt = Time.realtimeSinceStartup + 0.5f; pendDeadline = Time.realtimeSinceStartup + 90f;
+            Plugin.L.LogInfo($"[PROFILE] жду инвентарь игры, чтобы вернуть предметы: {pendingItems.Count}");
+        }
+
+        static void FinishRestore()
+        {
+            Plugin.L.LogInfo($"[PROFILE] инвентарь восстановлен: {pendOk} из {pendOk + pendBad}" + (pendBad > 0 ? $", не удалось: {pendBad}" : ""));
+            pendingItems = null; pendingIt = null; profRestoring = false;
+        }
+
+        static void PendingItemsTick(float now)
+        {
+            if (pendingItems == null || now < pendingAt) return;
+            var fp = FirstPersonItemController.Instance; var pl = Player.Instance;
+            if (fp == null || pl == null) return;
+            try
+            {
+                int nsl = 0;
+                try { for (int i = 0; i < fp.slots.Count; i++) { var sl0 = fp.slots[i]; if (sl0 != null && sl0.isStatic == FirstPersonItemController.InventorySlot.StaticSlot.nonStatic) nsl++; } } catch (Exception) { }
+                if (nsl == 0)
+                {
+                    if (now > pendDeadline) { Plugin.L.LogWarning("[PROFILE] инвентарь игры так и не появился, предметы не возвращены"); pendingItems = null; pendingIt = null; profRestoring = false; }
+                    else pendingAt = now + 0.5f;
+                    return;
+                }
+                if (!pendClearDone) { pendClearDone = true; ClearInventory(); }
+                if (pendingIt == null)
+                {
+                    if (pendingItems.Count == 0) { FinishRestore(); return; }
+                    var pi2 = pendingItems[0];
+                    var pr = FindPreset(pi2.preset);
+                    if (pr == null) { Plugin.L.LogWarning($"[PROFILE] пресет предмета '{pi2.preset}' не найден"); pendingItems.RemoveAt(0); pendBad++; pendingAt = now + 0.05f; return; }
+                    pendingIt = InteractableCreator.Instance.CreateWorldInteractable(pr, null, null, null, pl.transform.position + Vector3.up, Vector3.zero, null, null, "");
+                    pendingTries = 0; pendingAt = now + 0.4f;
+                    if (pendingIt == null) { Plugin.L.LogWarning($"[PROFILE] не смог создать предмет '{pi2.preset}'"); pendingItems.RemoveAt(0); pendBad++; }
+                    return;
+                }
+                pendingTries++;
+                bool done = false;
+                try { done = fp.PickUpItem(pendingIt, false, false, false, false, false); } catch (Exception e) { if (pendingTries == 1) Plugin.L.LogWarning("[PROFILE] PickUpItem: " + e.Message); }
+                if (!done) { try { done = fp.PickUpItem(pendingIt, false, true, false, false, false); } catch (Exception) { } }
+                if (!done) { try { done = pendingIt.PickUpTarget(pl, false); } catch (Exception e) { if (pendingTries == 1) Plugin.L.LogWarning("[PROFILE] PickUpTarget: " + e.Message); } }
+                if (done)
+                {
+                    pendOk++; pendingItems.RemoveAt(0); pendingIt = null; pendingAt = now + 0.2f;
+                    return;
+                }
+                if (pendingTries == 1)
+                {
+                    int ns = 0, empty = 0;
+                    try { for (int i = 0; i < fp.slots.Count; i++) { var sl = fp.slots[i]; if (sl != null && sl.isStatic == FirstPersonItemController.InventorySlot.StaticSlot.nonStatic) { ns++; if (sl.GetInteractable() == null) empty++; } } } catch (Exception) { }
+                    bool spawned = false; try { spawned = pendingIt.spawnedObject != null; } catch (Exception) { }
+                    bool avail = false; try { avail = fp.IsSlotAvailable(); } catch (Exception) { }
+                    Plugin.L.LogWarning($"[PROFILE] подбор '{PresetNameOf(pendingIt)}' не прошёл: слотов {ns}, пустых {empty}, inventorySlots={fp.inventorySlots}, IsSlotAvailable={avail}, предмет в мире={spawned}");
+                }
+                if (pendingTries >= 6)
+                {
+                    Plugin.L.LogWarning($"[PROFILE] предмет '{PresetNameOf(pendingIt)}' так и не удалось положить в инвентарь");
+                    try { pendingIt.SafeDelete(false); } catch (Exception) { }
+                    pendingItems.RemoveAt(0); pendBad++; pendingIt = null; pendingAt = now + 0.2f;
+                }
+                else pendingAt = now + 0.5f;
+            }
+            catch (Exception e)
+            {
+                Plugin.L.LogWarning("[PROFILE] возврат предметов: " + e.Message);
+                pendingItems = null; pendingIt = null; profRestoring = false;
+            }
+        }
+
+        static void RestoreResidence(System.Collections.Generic.List<ProfApt> apts)
+        {
+            if (apts == null || apts.Count == 0) return;
+            var last = apts[apts.Count - 1];
+            var pl = Player.Instance;
+            NewAddress ad = null;
+            var dict = CityData.Instance.addressDictionary;
+            if (pl == null || dict == null || !dict.TryGetValue(last.id, out ad) || ad == null) { Plugin.L.LogWarning($"[PROFILE] квартира (адрес {last.id}) не найдена"); return; }
+            var rc = ad.residence;
+            if (rc == null) { Plugin.L.LogWarning($"[PROFILE] у адреса {last.id} нет жилья"); return; }
+            soldAddrs.Add(last.id);
+            if (AddrIdOf(pl.residence) == last.id) { Plugin.L.LogInfo($"[PROFILE] квартира (адрес {last.id}) уже за вами"); return; }
+            pl.SetResidence(rc, false);
+            try { pl.AddToKeyring(ad, false); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] ключи от квартиры: " + e.Message); }
+            Plugin.L.LogInfo($"[PROFILE] квартира возвращена игроку: адрес {last.id}, теперь жильё игрока = {AddrIdOf(pl.residence)}");
+        }
+
+        static void ApplyProfile(ProfileData pd)
+        {
+            prevMoney = GcGet("money"); prevSocial = GcGet("socialCredit");
+            profileApplying = true;
+            try
+            {
+                var p = Player.Instance;
+                try { GcSet("money", "SetMoney", pd.money); GcSet("socialCredit", "SetSocialCredit", pd.social); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] деньги/рейтинг: " + e.Message); }
+                if (p != null)
+                {
+                    try
+                    {
+                        if (pd.maxHp > 0f) p.SetMaxHealth(pd.maxHp, false);
+                        if (pd.hp > 0f) p.SetHealth(pd.hp);
+                        if (pd.maxNerve > 0f) p.SetMaxNerve(pd.maxNerve, false);
+                        if (pd.nerve >= 0f) p.SetNerve(pd.nerve);
+                    }
+                    catch (Exception e) { Plugin.L.LogWarning("[PROFILE] здоровье: " + e.Message); }
+                    try { foreach (var kv in pd.stats) SetStat(p, kv.Key, kv.Value); }
+                    catch (Exception e) { Plugin.L.LogWarning("[PROFILE] статусы: " + e.Message); }
+                }
+                try { RestoreInventory(pd.items); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] инвентарь: " + e.Message); }
+                try { RestoreResidence(pd.apts); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] квартира: " + e.Message); }
+            }
+            finally { profileApplying = false; }
+        }
+
+        // первый заход: не копия вещей хоста, а чистый старт
+        static void NewPlayerStart()
+        {
+            prevMoney = GcGet("money"); prevSocial = GcGet("socialCredit");
+            profileApplying = true;
+            try
+            {
+                var p = Player.Instance;
+                try { RestoreInventory(null); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] инвентарь: " + e.Message); }
+                if (Plugin.CfgNewPlayerMoney.Value >= 0) GcSet("money", "SetMoney", Plugin.CfgNewPlayerMoney.Value);
+                GcSet("socialCredit", "SetSocialCredit", 0);
+                if (p != null)
+                {
+                    try { p.ResetHealthToMaximum(); p.ResetNerveToMaximum(); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] здоровье: " + e.Message); }
+                    try { foreach (var n in BadStatNames) SetStat(p, n, 0f); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] статусы: " + e.Message); }
+                }
+            }
+            finally { profileApplying = false; }
+        }
+
+        // ----- клиент -----
+        static void SendProfile(bool force)
+        {
+            if (profState != 2 || profRestoring || profTarget != null || serverPeer == null || serverPeer.ConnectionState != ConnectionState.Connected) return;
+            var pd = CaptureProfile();
+            if (pd == null) return;
+            string js = JsonSerializer.Serialize(pd, ProfJson);
+            if (!force && js == profLastSent) return;
+            profLastSent = js;
+            var w = new NetDataWriter(); w.Put(MsgProfile); w.Put((byte)1); w.Put(js);
+            serverPeer.Send(w, DeliveryMethod.ReliableOrdered);
+        }
+
+        // 25 секунд следим, не вернула ли игра старые значения (из сохранения хоста) после нашего применения
+        static void VerifyProfile()
+        {
+            var t = profTarget;
+            if (t == null) return;
+            float now = Time.realtimeSinceStartup;
+            if (now >= profVerifyEnd) { profTarget = null; Plugin.L.LogInfo($"[PROFILE] проверка закончена: деньги {GcGet("money"):F0}, рейтинг {GcGet("socialCredit"):F0}"); return; }
+            profVerifyAt = now + 2f;
+            profileApplying = true;
+            try
+            {
+                double m = GcGet("money"), sc = GcGet("socialCredit");
+                if (t.money >= 0 && Math.Abs(m - t.money) >= 1 && Math.Abs(m - prevMoney) < 1) { Plugin.L.LogWarning($"[PROFILE] игра вернула деньги ({m:F0}), ставлю {t.money}"); GcSet("money", "SetMoney", t.money); }
+                if (Math.Abs(sc - t.social) >= 1 && Math.Abs(sc - prevSocial) < 1) { Plugin.L.LogWarning($"[PROFILE] игра вернула рейтинг ({sc:F0}), ставлю {t.social}"); GcSet("socialCredit", "SetSocialCredit", t.social); }
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[PROFILE] проверка: " + e.Message); }
+            finally { profileApplying = false; }
+        }
+
+        static void ProfileClientData(NetDataReader r)
+        {
+            bool found = r.GetBool(); string js = r.GetString();
+            if (profState == 2) return;
+            ProfileData pd = null;
+            try { if (found && js != "") pd = JsonSerializer.Deserialize<ProfileData>(js, ProfJson); }
+            catch (Exception e) { Plugin.L.LogWarning("[PROFILE] ответ хоста не разобран: " + e.Message); }
+            try
+            {
+                if (pd != null && pd.valid)
+                {
+                    ApplyProfile(pd);
+                    profTarget = pd; profVerifyAt = Time.realtimeSinceStartup + 2f; profVerifyEnd = Time.realtimeSinceStartup + 25f;
+                    try { var pp = Player.Instance; Plugin.L.LogInfo($"[PROFILE] после применения: деньги {GcGet("money"):F0} (в профиле {pd.money}), рейтинг {GcGet("socialCredit"):F0} (в профиле {pd.social}), здоровье {(pp != null ? pp.currentHealth : -1f):F2} (в профиле {pd.hp:F2}), нерв {(pp != null ? pp.currentNerve : -1f):F2} (в профиле {pd.nerve:F2})"); } catch (Exception) { }
+                    Plugin.L.LogInfo($"[PROFILE] профиль загружен: деньги {pd.money}, рейтинг {pd.social}, здоровье {pd.hp:F1}/{pd.maxHp:F1}, предметов {pd.items.Count}, квартир {pd.apts.Count}");
+                    Toast("Your saved profile was loaded.");
+                }
+                else
+                {
+                    if (Plugin.CfgNewPlayerClean.Value)
+                    {
+                        NewPlayerStart();
+                        var nt = new ProfileData(); nt.money = Plugin.CfgNewPlayerMoney.Value; nt.social = 0; nt.valid = true;
+                        profTarget = nt; profVerifyAt = Time.realtimeSinceStartup + 2f; profVerifyEnd = Time.realtimeSinceStartup + 25f;
+                    }
+                    if (pd != null && pd.apts.Count > 0) { profileApplying = true; try { RestoreResidence(pd.apts); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] квартира: " + e.Message); } finally { profileApplying = false; } }
+                    Plugin.L.LogInfo("[PROFILE] профиля ещё нет, это новый игрок" + (Plugin.CfgNewPlayerClean.Value ? ": чистый старт" : ""));
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[PROFILE] применить профиль: " + e.Message); }
+            profState = 2; profSendAt = Time.realtimeSinceStartup + 2f;
+        }
+
+        // ----- хост -----
+        static string ProfFilePath()
+        {
+            string seed = "";
+            try { seed = "" + CityData.Instance.seed; } catch (Exception) { }
+            var sb = new StringBuilder();
+            foreach (char ch in seed) if (char.IsLetterOrDigit(ch)) sb.Append(ch);
+            return Path.Combine(SaveDir(), "SodCoop_profiles_" + (sb.Length > 0 ? sb.ToString() : "city") + ".json");
+        }
+
+        static void ProfilesHostInit()
+        {
+            profiles.Clear(); profDirty = false; profFile = "";
+            if (!Plugin.CfgProfiles.Value) return;
+            profFile = ProfFilePath();
+            if (File.Exists(profFile))
+            {
+                try
+                {
+                    var d = JsonSerializer.Deserialize<System.Collections.Generic.Dictionary<string, ProfileData>>(File.ReadAllText(profFile), ProfJson);
+                    if (d != null) foreach (var kv in d) if (kv.Value != null) profiles[kv.Key] = kv.Value;
+                }
+                catch (Exception e) { Plugin.L.LogWarning("[PROFILE] не прочитал " + profFile + ": " + e.Message); }
+            }
+            int n = 0;
+            foreach (var kv in profiles)
+                foreach (var a in kv.Value.apts) { try { ApplyApartmentSold(a.id, false, a.rems); n++; } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] квартира " + a.id + ": " + e.Message); } }
+            Plugin.L.LogInfo($"[PROFILE] профилей игроков: {profiles.Count}, проданных квартир восстановлено: {n} ({profFile})");
+        }
+
+        static void ProfilesWrite()
+        {
+            if (profFile == "") return;
+            try { File.WriteAllText(profFile, JsonSerializer.Serialize(profiles, ProfJson)); profDirty = false; Plugin.Dbg("[PROFILE] файл профилей записан"); }
+            catch (Exception e) { Plugin.L.LogWarning("[PROFILE] не смог записать " + profFile + ": " + e.Message); }
+        }
+
+        static void ProfileNoteApt(RP rp, int id, System.Collections.Generic.List<int[]> rems)
+        {
+            if (!Plugin.CfgProfiles.Value || rp == null || string.IsNullOrEmpty(rp.profileId)) return;
+            ProfileData pd;
+            if (!profiles.TryGetValue(rp.profileId, out pd)) { pd = new ProfileData(); pd.id = rp.profileId; profiles[rp.profileId] = pd; }
+            pd.apts.RemoveAll(a => a.id == id);
+            var pa = new ProfApt(); pa.id = id; pa.rems = rems ?? new System.Collections.Generic.List<int[]>();
+            pd.apts.Add(pa);
+            profDirty = true;
+            Plugin.L.LogInfo($"[PROFILE] квартира (адрес {id}) записана игроку {rp.pid}");
+        }
+
+        static void ProfileHostMsg(RP rp, byte op, NetDataReader r)
+        {
+            if (!Plugin.CfgProfiles.Value || string.IsNullOrEmpty(rp.profileId)) return;
+            string id = rp.profileId;
+            if (op == 1)
+            {
+                ProfileData pd = null;
+                try { pd = JsonSerializer.Deserialize<ProfileData>(r.GetString(), ProfJson); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] профиль игрока " + rp.pid + " не разобран: " + e.Message); }
+                if (pd == null || !pd.valid) return;
+                ProfileData old; profiles.TryGetValue(id, out old);
+                pd.id = id; pd.saved = DateTime.UtcNow.ToString("u");
+                pd.apts = old != null ? old.apts : new System.Collections.Generic.List<ProfApt>();
+                profiles[id] = pd; profDirty = true;
+            }
+            else if (op == 2)
+            {
+                ProfileData pd; bool found = profiles.TryGetValue(id, out pd);
+                var w = new NetDataWriter(); w.Put(MsgProfile); w.Put((byte)3); w.Put(found); w.Put(found ? JsonSerializer.Serialize(pd, ProfJson) : "");
+                if (rp.peer != null) rp.peer.Send(w, DeliveryMethod.ReliableOrdered);
+                Plugin.L.LogInfo($"[PROFILE] игрок {rp.pid} запросил профиль: " + (found && pd.valid ? "найден" : "новый игрок") + (found && pd.apts.Count > 0 ? $", квартир {pd.apts.Count}" : ""));
+            }
+        }
+
+        static void ProfileTick(float dt)
+        {
+            if (!Plugin.CfgProfiles.Value || manager == null) return;
+            float now = Time.realtimeSinceStartup;
+            if (IsHost)
+            {
+                if (profDirty && now >= profWriteAt) { profWriteAt = now + 10f; ProfilesWrite(); }
+                return;
+            }
+            if (xferMode || !helloOkFlag || serverPeer == null || serverPeer.ConnectionState != ConnectionState.Connected) return;
+            if (Player.Instance == null || FirstPersonItemController.Instance == null) return;
+            PendingItemsTick(now);
+            if (profState < 2)
+            {
+                // ждём, пока игра по-настоящему началась (иначе она ещё догружает состояние игрока и перезапишет наши значения)
+                if (now < profReadyAt || now < profReqAt) return;
+                bool started = false;
+                try { started = SessionData.Instance != null && SessionData.Instance.startedGame; } catch (Exception) { }
+                if (!started && now < profReadyAt + 26f) return;
+
+                profReqAt = now + 5f; profState = 1;
+                var w = new NetDataWriter(); w.Put(MsgProfile); w.Put((byte)2);
+                serverPeer.Send(w, DeliveryMethod.ReliableOrdered);
+                return;
+            }
+            if (profTarget != null && now >= profVerifyAt) VerifyProfile();
+            if (now >= profSendAt) { profSendAt = now + Mathf.Max(3f, Plugin.CfgProfileInterval.Value); SendProfile(false); }
+        }
+
+        static void ProfileOnShutdown()
+        {
+            if (IsHost) { if (profDirty) ProfilesWrite(); }
+            else if (profState == 2 && manager != null)
+            {
+                SendProfile(true);
+                System.Threading.Thread.Sleep(60);   // дать сети успеть отправить пакет до остановки
+            }
+            profState = 0; profLastSent = ""; helloOkFlag = false; profReqAt = 0f; pendingItems = null; pendingIt = null; profRestoring = false; profTarget = null;
+        }
+
         static int MaxPlayersNow() { return Mathf.Clamp(Plugin.CfgMaxPlayers.Value, 2, 4); }
 
         // убрать игрока: аватар, двойник, иконка на карте
@@ -8754,6 +9310,7 @@ namespace SodCoop
                 string theirs = reader.GetString();
                 string theirApp = reader.AvailableBytes > 0 ? reader.GetString() : "";
                 string cid = reader.AvailableBytes > 0 ? reader.GetString() : "";
+                string profId = reader.AvailableBytes > 0 ? reader.GetString() : "";
                 string mine = Describe();
                 bool ok = theirs == mine;
                 RP me = RpByPeer(peer);
@@ -8781,6 +9338,8 @@ namespace SodCoop
                     }
                     me = NewRp(FreePid()); me.peer = peer; me.clientId = cid;
                 }
+                me.profileId = profId;
+                if (profId != "") foreach (var o2 in players) if (o2 != me && o2.profileId == profId) { Plugin.L.LogWarning("[PROFILE] у двух игроков одинаковый постоянный номер (скопирована папка игры с SodCoop_playerid.txt?). Удалите этот файл у одной из копий"); break; }
                 Enter(me); SetRemoteAppearance(theirApp); Leave();
                 Toast(ok ? "Player " + me.pid + " joined the game." : "A player connected, but their world does not match yours.");
                 Plugin.L.LogInfo($"[NET] Handshake от клиента: ok={ok}, ему выдан номер {me.pid}");
@@ -8824,6 +9383,7 @@ namespace SodCoop
                     return;
                 }
                 MyPid = pid;
+                helloOkFlag = ok; if (ok && profState == 0) profReadyAt = Time.realtimeSinceStartup + 4f;
                 var hostRp = RpByPid(0) ?? NewRp(0);
                 Enter(hostRp); SetRemoteAppearance(hostApp); Leave();
                 Plugin.L.LogInfo($"[NET] Ответ хоста: ok={ok}, мой номер {pid}");
@@ -8831,6 +9391,12 @@ namespace SodCoop
                 Plugin.L.LogInfo($"[NET]   хост:   {hostInfo}");
                 Plugin.L.LogInfo($"[NET]   клиент: {Describe()}");
                 if (ok) SendFurnSnapshot(null);
+            }
+            else if (type == MsgProfile)
+            {
+                byte pop = reader.GetByte();
+                if (IsHost) { if (rp != null) ProfileHostMsg(rp, pop, reader); }
+                else if (pop == 3) ProfileClientData(reader);
             }
             else if (type == MsgPlayerInfo && !IsHost)
             {
@@ -8897,7 +9463,8 @@ namespace SodCoop
             }
             else if (type == MsgDoor)
             {
-                OnDoorMessage(reader);
+                doorSender = rp;
+                try { OnDoorMessage(reader); } finally { doorSender = null; }
             }
             else if (type == MsgNpcHit)
             {
