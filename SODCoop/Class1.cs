@@ -2159,12 +2159,61 @@ namespace SodCoop
             return r;
         }
 
+        // Автозагрузка сейва из главного меню - так же, как это делает само меню (разобрано в GameAssembly):
+        // SelectNewSave пишет RestartSafeController.saveStateFileInfo, LoadGame ставит loadSaveGame, а загрузку запускает
+        // OnMenuComponentSwitchComplete, когда меню переходит на экран loadingCity
+        static string autoPath = "", autoName = "";
+        static int autoStage;   // 0 - нет, 1 - ждём главное меню, 2 - загрузка запущена, проверяем
+        static float autoAt;
+
         internal static void LoadSave(string fileName)
         {
+            string path = string.IsNullOrEmpty(fileName) ? "" : Path.Combine(Net.SaveDir(), fileName);
+            if (path == "" || !File.Exists(path)) { ManualLoad(fileName); return; }
+            autoPath = path; autoName = Path.GetFileNameWithoutExtension(fileName);
+            autoStage = 1; autoAt = Time.realtimeSinceStartup + 0.5f;
+            Notice = "Loading '" + autoName + "'...";
+            Plugin.L.LogInfo("[MENU] автозагрузка: " + fileName);
+        }
+
+        static void ManualLoad(string fileName)
+        {
+            autoStage = 0;
             Notice = (fileName ?? "") == ""
                 ? "HOST: choose a save with Load Game and press Start. The server starts when the city has loaded."
                 : "Save received. Press Load Game, pick '" + Path.GetFileNameWithoutExtension(fileName) + "' and press Start. You connect automatically when the city has loaded.";
             Plugin.L.LogInfo("[MENU] ручная загрузка: " + (fileName ?? "(хост)"));
+        }
+
+        static void AutoLoadTick(float now)
+        {
+            if (autoStage == 0 || now < autoAt) return;
+            var mm = MainMenuController.Instance; var rs = RestartSafeController.Instance;
+            if (autoStage == 1)
+            {
+                if (mm == null || rs == null || !mm.mainMenuActive)
+                {
+                    if (now > autoAt + 30f) { Plugin.L.LogWarning("[MENU] автозагрузка: главное меню так и не открылось"); ManualLoad(Path.GetFileName(autoPath)); }
+                    return;
+                }
+                try
+                {
+                    rs.newGameLoadCity = false; rs.generateNew = false;
+                    rs.loadSaveGame = true;
+                    rs.saveStateFileInfo = new Il2CppSystem.IO.FileInfo(autoPath);
+                    mm.SetMenuComponent(MainMenuController.Component.loadingCity);
+                    autoStage = 2; autoAt = now + 20f;
+                    Plugin.L.LogInfo("[MENU] автозагрузка запущена: " + autoPath);
+                }
+                catch (Exception e) { Plugin.L.LogWarning("[MENU] автозагрузка не удалась: " + e.Message); ManualLoad(Path.GetFileName(autoPath)); }
+                return;
+            }
+            // через 20 с меню должно быть на экране загрузки или город уже загружен; иначе - как раньше, вручную
+            autoStage = 0;
+            bool started = false;
+            try { started = mm == null || !mm.mainMenuActive || (mm.currentComponent != null && mm.currentComponent.component == MainMenuController.Component.loadingCity); } catch (Exception) { }
+            if (started) { if (Notice.StartsWith("Loading '")) Notice = ""; }
+            else { Plugin.L.LogWarning("[MENU] автозагрузка: загрузка не началась"); ManualLoad(Path.GetFileName(autoPath)); }
         }
 
         internal static void NewGame()
@@ -2175,6 +2224,7 @@ namespace SodCoop
 
         internal static void Tick()
         {
+            try { AutoLoadTick(Time.realtimeSinceStartup); } catch (Exception e) { autoStage = 0; Plugin.L.LogWarning("[MENU] автозагрузка: " + e.Message); }
             if (Notice != lastNotice) { lastNotice = Notice; noticeAt = Time.realtimeSinceStartup; }
             if (Notice != "" && Time.realtimeSinceStartup - noticeAt > 120f) { Notice = ""; lastNotice = ""; }
         }
@@ -2288,7 +2338,7 @@ namespace SodCoop
             }
 
             float by = H - 70f;
-            if (GUI.Button(new Rect(40f, by, 200f, 50f), "HOST", btn)) { page = 1; msg = ""; hostSaves = MenuAuto.SaveNames(); hostSel = 0; }
+            if (GUI.Button(new Rect(40f, by, 200f, 50f), "HOST", btn)) { page = 1; msg = ""; hostSaves = MenuAuto.SaveNames(); hostSel = 0; hostTop = 0; }
             Server_Connect(new Rect(250f, by, 200f, 50f));
             if (GUI.Button(new Rect(460f, by, 200f, 50f), "DIRECT", btn)) { page = 2; msg = ""; }
             if (GUI.Button(new Rect(670f, by, 200f, 50f), "REFRESH", btn)) { Lan.Servers.Clear(); Lan.Scan(); }
@@ -2324,11 +2374,30 @@ namespace SodCoop
             fPort = GUI.TextField(new Rect(x, y, 200f, 40f), fPort ?? "", 5, field); y += 56f;
             GUI.Label(new Rect(x, y, 800f, 30f), "Max players: " + Mathf.Clamp(Plugin.CfgMaxPlayers.Value, 2, 4) + " (Network/MaxPlayers in the config, 2..4)", lab);
             y += 50f;
-            GUI.Label(new Rect(x, y, 1100f, 30f), "HOST returns to the main menu: load a save or start a new game yourself. The server starts when the city has loaded.", lab); y += 60f;
-            if (GUI.Button(new Rect(x, y, 300f, 50f), "HOST (LOAD GAME)", btn)) StartHost(false);
+            GUI.Label(new Rect(x, y, 1100f, 30f), "LOAD SAVE loads the selected save at once. NEW GAME: set up the new game yourself. The server starts when the city has loaded.", lab); y += 60f;
+            GUI.enabled = hostSaves.Count > 0;
+            if (GUI.Button(new Rect(x, y, 300f, 50f), "HOST: LOAD SAVE", btn)) StartHost(false);
+            GUI.enabled = true;
             if (GUI.Button(new Rect(x + 320f, y, 260f, 50f), "HOST NEW GAME", btn)) StartHost(true);
             if (GUI.Button(new Rect(x + 600f, y, 200f, 50f), "BACK", btn)) { page = 0; msg = ""; }
+
+            // сохранения справа: самое свежее сверху и выбрано
+            float lx = 720f, ly = 110f; const int per = 10;
+            GUI.Label(new Rect(lx, ly, 700f, 30f), hostSaves.Count > 0 ? "Save to load" : "No saves found", lab); ly += 36f;
+            hostTop = Mathf.Clamp(hostTop, 0, Mathf.Max(0, hostSaves.Count - per));
+            for (int i = hostTop; i < hostSaves.Count && i < hostTop + per; i++)
+            {
+                if (GUI.Button(new Rect(lx, ly, 700f, 40f), (i == hostSel ? "> " : "   ") + Path.GetFileNameWithoutExtension(hostSaves[i]), rowBtn)) hostSel = i;
+                ly += 44f;
+            }
+            if (hostSaves.Count > per)
+            {
+                if (GUI.Button(new Rect(lx, ly, 120f, 40f), "UP", btn)) hostTop -= per;
+                if (GUI.Button(new Rect(lx + 130f, ly, 120f, 40f), "DOWN", btn)) hostTop += per;
+            }
         }
+
+        static int hostTop;
 
         static void StartHost(bool newGame)
         {
@@ -2337,7 +2406,8 @@ namespace SodCoop
             if (!Port(fPort, out p)) { msg = "Port must be a number from 1024 to 65535."; return; }
             Net.ApplyHost(fName.Trim(), fPass ?? "", p);
             CloseMenu();
-            if (newGame) MenuAuto.NewGame(); else MenuAuto.LoadSave("");
+            if (newGame) MenuAuto.NewGame();
+            else MenuAuto.LoadSave(hostSel >= 0 && hostSel < hostSaves.Count ? hostSaves[hostSel] : "");
             msg = "";
         }
 
