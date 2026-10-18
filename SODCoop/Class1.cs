@@ -2805,6 +2805,7 @@ namespace SodCoop
             public bool paramCrouch;
             public bool remoteCarryObj;
             public int remoteSeatId = -1, puppetSeatId = -1;
+            public float remoteDrunk;
             public float sitK;
             public float crouchBoneK;
             public float crouchAnimK;
@@ -2905,6 +2906,7 @@ namespace SodCoop
             paramCrouch = r.paramCrouch;
             remoteCarryObj = r.remoteCarryObj;
             remoteSeatId = r.remoteSeatId; puppetSeatId = r.puppetSeatId;
+            remoteDrunk = r.remoteDrunk;
             sitK = r.sitK;
             crouchBoneK = r.crouchBoneK;
             crouchAnimK = r.crouchAnimK;
@@ -2987,6 +2989,7 @@ namespace SodCoop
             r.paramCrouch = paramCrouch;
             r.remoteCarryObj = remoteCarryObj;
             r.remoteSeatId = remoteSeatId; r.puppetSeatId = puppetSeatId;
+            r.remoteDrunk = remoteDrunk;
             r.sitK = sitK;
             r.crouchBoneK = crouchBoneK;
             r.crouchAnimK = crouchAnimK;
@@ -3400,6 +3403,7 @@ namespace SodCoop
         static bool remoteBlocking;
         static bool remoteConsuming, remoteSitting, paramSit, paramCrouch, remoteCarryObj;
         static int remoteSeatId = -1;   // на каком сиденье (Interactable.id) сидит другой игрок
+        static float remoteDrunk;       // насколько пьян другой игрок (0..1): параметр "drunk" аниматора горожан включает пьяную походку
         static int puppetSeatId = -1;   // хост: сиденье, где двойник этого игрока записан пользователем (горожане туда не сядут)
         static bool seatSnapped;        // аватар поставлен в точку сиденья, как сидит горожанин
         static float sitK;
@@ -4099,6 +4103,8 @@ namespace SodCoop
                         w.Put(fl);
                         w.Put(LeanRoll());
                         w.Put(SeatIdNow());   // в конце: старые версии мода это поле не читают
+                        float drunkNow = 0f; try { drunkNow = Mathf.Clamp01(p.drunk); } catch (Exception) { }
+                        w.Put((byte)Mathf.RoundToInt(drunkNow * 255f));
                         manager.SendToAll(w, DeliveryMethod.Sequenced);
                         if (curItem != sentItem || Time.realtimeSinceStartup > itemSendAt)
                         {
@@ -4180,6 +4186,8 @@ namespace SodCoop
                             if (remoteRunning && animSpeed > 0.5f) ms = 1f;
                             if (ms < 0.03f) ms = 0f;
                             avatarAnim.SetFloat("moveSpeed", ms);
+                            // как CitizenAnimationController.UpdateMovementSpeed у горожан: пьяная походка и стойка по уровню опьянения
+                            avatarAnim.SetFloat("drunk", remoteDrunk);
                             bool combat = remoteFists || Time.realtimeSinceStartup < combatUntil;
                             int cao = Plugin.CfgCombatArms.Value;
                             int armsSt = Plugin.CfgArmsState.Value;
@@ -10924,6 +10932,7 @@ namespace SodCoop
                 remoteCarryObj = (fl & 64) != 0;
                 remoteLean = reader.GetFloat();
                 remoteSeatId = reader.AvailableBytes >= 4 ? reader.GetInt() : -1;
+                remoteDrunk = reader.AvailableBytes >= 1 ? reader.GetByte() / 255f : 0f;
                 if (avatar == null) CreateAvatar();
             }
         }
