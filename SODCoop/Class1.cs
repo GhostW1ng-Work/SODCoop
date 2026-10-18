@@ -348,7 +348,7 @@ namespace SodCoop
             Harmony.CreateAndPatchAll(typeof(PlayerPatch));
             Harmony.CreateAndPatchAll(typeof(MeleePatch));
             Harmony.CreateAndPatchAll(typeof(BlockPatch));
-            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch) })
+            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch) })
             {
                 try { Harmony.CreateAndPatchAll(t); }
                 catch (Exception e) { L.LogWarning($"[PATCH] {t.Name}: {e.Message}"); }
@@ -718,6 +718,17 @@ namespace SodCoop
         public static bool Prefix(float __0)
         {
             return !Net.DownedHit(__0);
+        }
+    }
+
+    // Вызов лифта (кнопка на этаже у игрока или горожанина, панель в кабине) -> другим игрокам
+    [HarmonyPatch(typeof(Elevator), "CallElevator")]
+    public static class ElevatorCallPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(Elevator __instance, int __0, bool __1)
+        {
+            try { Net.OnElevatorCall(__instance, __0, __1); } catch (Exception e) { Plugin.L.LogWarning("[LIFT] " + e.Message); }
         }
     }
 
@@ -3035,6 +3046,7 @@ namespace SodCoop
         const byte MsgRelay = 26;       // хост -> клиент: [pid отправителя][тип][данные] - сообщение другого клиента
         const byte MsgPlayerInfo = 27;  // хост -> клиент: [pid][внешний вид] - сведения о другом игроке
         const byte MsgPlayerLeft = 28;  // хост -> клиент: [pid] - игрок вышел
+        const byte MsgElevator = 32;    // лифты: [1][лифт][этаж][вверх] вызов (все); [2][полный][n]{[лифт][y][этаж]} хост -> клиент: где стоят лифты
         const byte MsgDown = 30;        // игрок -> все: [состояние: 1 лежу, 0 подняли, 2 не дождался, 3 меня поднимают][сколько секунд осталось]
         const byte MsgRevive = 31;      // игрок -> все: [кого][1 начал поднимать, 0 перестал, 2 поднял]
         const byte MsgProfile = 29;    // профиль игрока: [1][json] клиент->хост сохранить; [2] клиент->хост запросить; [3][есть][json] хост->клиент; [4] хост->клиент: сохраняю игру, пришли профиль сейчас
@@ -4077,6 +4089,7 @@ namespace SodCoop
                 try { ProfileTick(dt); } catch (Exception e) { if (!profErrLogged) { profErrLogged = true; Plugin.L.LogWarning($"[PROFILE] {e.Message}"); } }
                 try { KoTick(p, dt); } catch (Exception e) { if (!koErrLogged) { koErrLogged = true; Plugin.L.LogWarning($"[KO] {e.Message}"); } }
                 try { DownTick(p, dt); } catch (Exception e) { if (!downErrLogged) { downErrLogged = true; Plugin.L.LogWarning($"[DOWN] {e.Message}"); } }
+                try { ElevatorTick(); } catch (Exception e) { if (!elevErrLogged) { elevErrLogged = true; Plugin.L.LogWarning($"[LIFT] {e.Message}"); } }
 
                 // Синхронизация предметов мира (которые несёт игрок)
                 if (Plugin.CfgObjSync.Value)
@@ -10386,6 +10399,126 @@ namespace SodCoop
             GUI.matrix = old;
         }
 
+        // ---------- Лифты ----------
+        // Синхронизируем вызовы, а не положение кабины: тогда у каждого игрока лифт едет своей логикой игры (ElevatorUpdate),
+        // сам открывает двери и везёт пассажира. Вызовы горожан бывают только у хоста (у клиента ИИ остановлен) - их он тоже рассылает.
+        // Хост присылает, где стоят лифты, при подключении и раз в 5 с (стоящие лифты выравниваются через родной LoadElevatorSaveData)
+        static bool applyingElevator, elevErrLogged;
+        static System.Collections.Generic.Dictionary<int, Elevator> elevById;
+        static float elevMapAt = -100f, elevStateAt;
+        static int elevMissLog;
+
+        // лифт определяем так же, как сохранение игры: по tileID нижней плитки
+        static int ElevId(Elevator e)
+        {
+            try { var t = e.bottom ?? e.top; return t != null ? t.tileID : -1; } catch (Exception) { return -1; }
+        }
+
+        static void RebuildElevMap()
+        {
+            elevMapAt = Time.realtimeSinceStartup;
+            var map = new System.Collections.Generic.Dictionary<int, Elevator>();
+            try
+            {
+                var bl = CityBuildings.Instance != null ? CityBuildings.Instance.buildingDirectory : null;
+                for (int i = 0; bl != null && i < bl.Count; i++)
+                {
+                    var sw = bl[i] != null ? bl[i].stairwells : null;
+                    if (sw == null) continue;
+                    foreach (var kv in sw) { var e = kv.Value; if (e == null) continue; int id = ElevId(e); if (id >= 0) map[id] = e; }
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[LIFT] список лифтов: " + e.Message); }
+            elevById = map;
+            Plugin.Dbg($"[LIFT] лифтов в городе: {map.Count}");
+        }
+
+        static Elevator ElevatorById(int id)
+        {
+            Elevator e;
+            if (elevById != null && elevById.TryGetValue(id, out e) && e != null) return e;
+            if (Time.realtimeSinceStartup - elevMapAt > 10f) { RebuildElevMap(); if (elevById.TryGetValue(id, out e)) return e; }
+            return null;
+        }
+
+        internal static void OnElevatorCall(Elevator e, int floor, bool up)
+        {
+            if (applyingElevator || manager == null || manager.ConnectedPeersCount == 0 || e == null) return;
+            int id = ElevId(e);
+            if (id < 0) return;
+            var w = new NetDataWriter(); w.Put(MsgElevator); w.Put((byte)1); w.Put(id); w.Put(floor); w.Put(up);
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+            Plugin.Dbg($"[LIFT] вызов лифта {id} на этаж {floor} ({(up ? "вверх" : "вниз")}) отправлен");
+        }
+
+        static void OnElevatorMsg(NetDataReader r)
+        {
+            byte op = r.GetByte();
+            if (op == 1)
+            {
+                int id = r.GetInt(), floor = r.GetInt(); bool up = r.GetBool();
+                var e = ElevatorById(id);
+                if (e == null) { if (elevMissLog++ < 5) Plugin.L.LogWarning($"[LIFT] лифт {id} не найден"); return; }
+                applyingElevator = true;
+                try { e.CallElevator(floor, up); }
+                finally { applyingElevator = false; }
+                Plugin.Dbg($"[LIFT] другой игрок вызвал лифт {id} на этаж {floor}");
+            }
+            else if (op == 2 && !IsHost)
+            {
+                bool full = r.GetBool();
+                int n = r.GetInt(), fixedN = 0;
+                for (int i = 0; i < n; i++)
+                {
+                    int id = r.GetInt(); float y = r.GetFloat(); int floor = r.GetInt();
+                    var e = ElevatorById(id);
+                    if (e == null) continue;
+                    try
+                    {
+                        if (e.isMoving || e.inTransit) continue;   // свой лифт едет - не трогаем, приедет сам
+                        float cy = e.spawnedObject != null ? e.spawnedObject.position.y : y;
+                        if (e.currentFloor == floor && Mathf.Abs(cy - y) < 0.05f) continue;
+                        var sv = new StateSaveData.ElevatorStateSave(); sv.tileID = id; sv.yPos = y; sv.floor = floor;
+                        e.LoadElevatorSaveData(sv);
+                        fixedN++;
+                    }
+                    catch (Exception ex) { if (elevMissLog++ < 5) Plugin.L.LogWarning($"[LIFT] выровнять лифт {id}: {ex.Message}"); }
+                }
+                if (full || fixedN > 0) Plugin.L.LogInfo($"[LIFT] положение лифтов от хоста: {n}, выровнено: {fixedN}");
+            }
+        }
+
+        // хост: где стоят лифты (только стоящие; едущие и так приедут куда вызвали)
+        static void SendElevatorState(NetPeer to, bool full)
+        {
+            if (manager == null) return;
+            if (elevById == null || Time.realtimeSinceStartup - elevMapAt > 60f) RebuildElevMap();
+            var list = new System.Collections.Generic.List<KeyValuePair<int, Elevator>>();
+            foreach (var kv in elevById)
+            {
+                var e = kv.Value; if (e == null) continue;
+                try { if (e.isMoving || e.inTransit) continue; } catch (Exception) { continue; }
+                list.Add(kv);
+            }
+            var w = new NetDataWriter(); w.Put(MsgElevator); w.Put((byte)2); w.Put(full); w.Put(list.Count);
+            foreach (var kv in list)
+            {
+                var e = kv.Value;
+                float y = 0f; try { y = e.spawnedObject != null ? e.spawnedObject.position.y : e.desiredY; } catch (Exception) { }
+                w.Put(kv.Key); w.Put(y); w.Put(e.currentFloor);
+            }
+            if (to != null) to.Send(w, DeliveryMethod.ReliableOrdered); else manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+        }
+
+        static void ElevatorTick()
+        {
+            if (!IsHost || manager == null || manager.ConnectedPeersCount == 0) return;
+            float now = Time.realtimeSinceStartup;
+            if (now < elevStateAt) return;
+            elevStateAt = now + 5f;
+            SendElevatorState(null, false);
+        }
+
         static int MaxPlayersNow() { return Mathf.Clamp(Plugin.CfgMaxPlayers.Value, 2, 4); }
 
         // убрать игрока: аватар, двойник, иконка на карте
@@ -10433,7 +10566,7 @@ namespace SodCoop
 
         static bool IsRelayed(byte t)
         {
-            return t == MsgPos || t == MsgAction || t == MsgItem || t == MsgHeld || t == MsgObj || t == MsgItemEv || t == MsgDoor || t == MsgBodyFx || t == MsgShot || t == MsgWeapon || t == MsgSound || t == MsgDown || t == MsgRevive;
+            return t == MsgPos || t == MsgAction || t == MsgItem || t == MsgHeld || t == MsgObj || t == MsgItemEv || t == MsgDoor || t == MsgBodyFx || t == MsgShot || t == MsgWeapon || t == MsgSound || t == MsgDown || t == MsgRevive || t == MsgElevator;
         }
 
         static bool NeedsCtx(byte t)
@@ -10524,6 +10657,7 @@ namespace SodCoop
                 if (ok)
                 {
                     SendDoorSnapshot(peer); SendRoomSnapshot(peer); SendWindowSnapshot(peer); SendTime(); SendSoldSnapshot(peer); SendFurnSnapshot(peer);
+                    try { SendElevatorState(peer, true); } catch (Exception e) { Plugin.L.LogWarning("[LIFT] снимок: " + e.Message); }
                     foreach (var o in players)
                     {
                         if (o == me || o.peer == null) continue;
@@ -10647,6 +10781,10 @@ namespace SodCoop
             else if (type == MsgBodyFx)
             {
                 OnBodyFx(reader);
+            }
+            else if (type == MsgElevator)
+            {
+                OnElevatorMsg(reader);
             }
             else if (type == MsgDown)
             {
