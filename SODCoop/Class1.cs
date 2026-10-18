@@ -339,7 +339,7 @@ namespace SodCoop
             Harmony.CreateAndPatchAll(typeof(PlayerPatch));
             Harmony.CreateAndPatchAll(typeof(MeleePatch));
             Harmony.CreateAndPatchAll(typeof(BlockPatch));
-            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch) })
+            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch) })
             {
                 try { Harmony.CreateAndPatchAll(t); }
                 catch (Exception e) { L.LogWarning($"[PATCH] {t.Name}: {e.Message}"); }
@@ -673,6 +673,20 @@ namespace SodCoop
         public static bool Prefix()
         {
             return !Net.ClientFollowsHostWeather();
+        }
+    }
+
+    // Невидимый житель-двойник игрока: смотреть на него как на собеседника нельзя (поговорить, обыскать и т.д.).
+    // OnPlayerLookAtChange выбирает цель по лучу, а подсказки клавиш InteractionRaycastCheck строит уже после него -
+    // поэтому цель-двойника убираем сразу здесь, и игра ведёт себя так, будто игрок смотрит в пустоту.
+    // Удары не страдают: MeleeAttack ищет цель своим SphereCast, а не через то, на что смотрит игрок
+    [HarmonyPatch(typeof(InteractionController), "OnPlayerLookAtChange")]
+    public static class PuppetLookPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(InteractionController __instance)
+        {
+            try { Net.FilterPuppetLook(__instance); } catch (Exception) { }
         }
     }
 
@@ -5886,7 +5900,7 @@ namespace SodCoop
                 }
                 if (IsHost && !applyingRemote && players.Count > 0 && c != null && !IsPuppetCit(c) && Plugin.CfgNoFriendlyFire.Value)
                 {
-                    var att = fromWho as Citizen;
+                    var att = AsCitizen(fromWho);
                     if (att != null && att != c && !IsPuppetCit(att) && att.ai != null)
                     {
                         bool atPuppet = false;
@@ -5988,8 +6002,17 @@ namespace SodCoop
 
         static bool IsPuppetActor(Actor a)
         {
-            var c = a as Citizen;
+            var c = AsCitizen(a);
             return c != null && IsPuppetCit(c);
+        }
+
+        // IL2CPP: обёртка может быть создана как Actor/Human, тогда "as Citizen" даёт null - пробуем ещё TryCast
+        static Citizen AsCitizen(Il2CppSystem.Object a)
+        {
+            if (a == null) return null;
+            var c = a as Citizen;
+            if (c != null) return c;
+            try { return a.TryCast<Citizen>(); } catch (Exception) { return null; }
         }
 
         // хост: чьим двойником является горожанин / клиент: чей это двойник (по humanID)
@@ -6057,7 +6080,7 @@ namespace SodCoop
                 puppetRends = rs;
                 for (int i = 0; i < rs.Length; i++)
                 {
-                    try { var r = rs[i]; if (r != null && r.enabled) { r.enabled = false; on++; } } catch (Exception) { }
+                    try { var r = rs[i]; if (r != null && r.enabled) { r.enabled = false; NoteHidden(c.humanID, r); on++; } } catch (Exception) { }
                 }
             }
             catch (Exception) { }
@@ -6068,18 +6091,92 @@ namespace SodCoop
             }
         }
 
+        // Что мод спрятал у жителей-двойников (по humanID): при возврате включаем только это, а не все части модели -
+        // часть рендереров (запасная одежда и т.п.) выключена самой игрой, и их включение давало видимого «призрака»
+        static readonly System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<Renderer>> puppetHiddenRends = new System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<Renderer>>();
+        static readonly System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<Collider>> puppetHiddenCols = new System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<Collider>>();
+
+        static void NoteHidden(int id, Renderer r)
+        {
+            System.Collections.Generic.List<Renderer> l;
+            if (!puppetHiddenRends.TryGetValue(id, out l)) { l = new System.Collections.Generic.List<Renderer>(); puppetHiddenRends[id] = l; }
+            foreach (var x in l) if (x != null && x.Pointer == r.Pointer) return;
+            l.Add(r);
+        }
+
+        static void NoteHidden(int id, Collider c)
+        {
+            System.Collections.Generic.List<Collider> l;
+            if (!puppetHiddenCols.TryGetValue(id, out l)) { l = new System.Collections.Generic.List<Collider>(); puppetHiddenCols[id] = l; }
+            foreach (var x in l) if (x != null && x.Pointer == c.Pointer) return;
+            l.Add(c);
+        }
+
+        static void UnhidePuppet(int id)
+        {
+            System.Collections.Generic.List<Renderer> rs; System.Collections.Generic.List<Collider> cs;
+            int n = 0;
+            if (puppetHiddenRends.TryGetValue(id, out rs)) { foreach (var r in rs) { try { if (r != null) { r.enabled = true; n++; } } catch (Exception) { } } puppetHiddenRends.Remove(id); }
+            if (puppetHiddenCols.TryGetValue(id, out cs)) { foreach (var c in cs) { try { if (c != null) c.enabled = true; } catch (Exception) { } } puppetHiddenCols.Remove(id); }
+            if (n > 0) Plugin.L.LogInfo($"[PUPPET] житель {id} снова видим (частей: {n})");
+        }
+
+        // куда отпустить житель: домой, бездомного - на случайную улицу подальше от игроков
+        static NewNode PuppetReleaseSpot(Citizen c)
+        {
+            try { var h = c.home; if (h != null) { var n = c.FindSafeTeleport(h, false, true); if (n != null) return n; } } catch (Exception) { }
+            try
+            {
+                var sd = CityData.Instance.streetDirectory;
+                var me = Player.Instance != null ? Player.Instance.transform.position : Vector3.zero;
+                for (int k = 0; k < 15 && sd != null && sd.Count > 0; k++)
+                {
+                    var s = sd[UnityEngine.Random.Range(0, sd.Count)];
+                    if (s == null) continue;
+                    var n = c.FindSafeTeleport(s, false, true);
+                    if (n == null) continue;
+                    bool near = Vector3.Distance(n.position, me) < 40f;
+                    foreach (var o in players) if (Vector3.Distance(n.position, o.targetPos) < 40f) near = true;
+                    if (!near || k == 14) return n;
+                }
+            }
+            catch (Exception) { }
+            return null;
+        }
+
         static void ReleasePuppet(string why)
         {
             var c = puppet; puppet = null; puppetId = -1;
             if (c == null) return;
+            string where = "на месте";
             try
             {
-                if (puppetRends != null) for (int i = 0; i < puppetRends.Length; i++) { try { if (puppetRends[i] != null) puppetRends[i].enabled = true; } catch (Exception) { } }
-                if (Plugin.CfgPuppetNoAI.Value && c.ai != null) c.ai.EnableAI(true);
+                // сначала увести с места игрока, потом показывать: иначе житель появляется там, где только что стоял клиент
+                var n = PuppetReleaseSpot(c);
+                if (n != null) { c.Teleport(n, null, true, false, true); where = c.home != null ? "домой" : "на улицу"; }
             }
-            catch (Exception) { }
+            catch (Exception e) { Plugin.L.LogWarning("[PUPPET] увести двойника: " + e.Message); }
+            UnhidePuppet(c.humanID);
+            try { if (Plugin.CfgPuppetNoAI.Value && c.ai != null) c.ai.EnableAI(true); } catch (Exception) { }
             puppetRends = null;
-            Plugin.L.LogInfo($"[PUPPET] двойник {c.humanID} ({c.citizenName}) возвращён в город: {why}");
+            Plugin.L.LogInfo($"[PUPPET] двойник {c.humanID} ({c.citizenName}) возвращён в город {where}: {why}");
+        }
+
+        // под взглядом невидимый двойник другого игрока - не предлагаем с ним говорить, обыскивать и т.п.
+        static int lookBlockLog;
+        internal static void FilterPuppetLook(InteractionController ic)
+        {
+            if (manager == null || players.Count == 0 || ic == null) return;
+            var cur = ic.currentLookingAtInteractable;
+            if (cur == null) return;
+            var it = cur.interactable;
+            if (it == null || it.isActor == null) return;
+            var h = it.isActor.TryCast<Human>();
+            if (h == null || h.isPlayer || !IsPuppetId(h.humanID)) return;
+            ic.currentLookingAtInteractable = null;
+            ic.lookingAtInteractable = false;
+            try { ic.UpdateInteractionText(); } catch (Exception) { }   // убрать имя жителя у прицела
+            if (lookBlockLog++ < 3) Plugin.L.LogInfo($"[PUPPET] смотрю на двойника {h.humanID}: взаимодействие с ним скрыто");
         }
 
         static void PuppetTick(float dt)
@@ -6175,6 +6272,7 @@ namespace SodCoop
         static void OnPuppetId(int id)
         {
             if (id == puppetId) return;
+            if (puppetId >= 0) UnhidePuppet(puppetId);   // хост сменил двойника: прежний житель снова обычный
             puppetId = id; puppetHideId = -1;
         }
 
@@ -6201,11 +6299,11 @@ namespace SodCoop
             try
             {
                 var rs = c.gameObject.GetComponentsInChildren<Renderer>(true);
-                for (int i = 0; i < rs.Length; i++) { try { if (rs[i] != null && rs[i].enabled) rs[i].enabled = false; } catch (Exception) { } }
+                for (int i = 0; i < rs.Length; i++) { try { if (rs[i] != null && rs[i].enabled) { rs[i].enabled = false; NoteHidden(c.humanID, rs[i]); } } catch (Exception) { } }
                 if (!Plugin.CfgPvp.Value)
                 {
                     var cs = c.gameObject.GetComponentsInChildren<Collider>(true);
-                    for (int i = 0; i < cs.Length; i++) { try { if (cs[i] != null && cs[i].enabled) cs[i].enabled = false; } catch (Exception) { } }
+                    for (int i = 0; i < cs.Length; i++) { try { if (cs[i] != null && cs[i].enabled) { cs[i].enabled = false; NoteHidden(c.humanID, cs[i]); } } catch (Exception) { } }
                 }
                 if (puppetHideId != puppetId) Plugin.L.LogInfo($"[PUPPET] у меня горожанин {puppetId} ({c.citizenName}) - двойник другого игрока: спрятан");
                 puppetHideId = puppetId;
@@ -10021,6 +10119,7 @@ namespace SodCoop
                 Enter(rp);
                 DestroyAvatar();
                 if (puppet != null) ReleasePuppet("игрок вышел");
+                else if (!IsHost && puppetId >= 0) { UnhidePuppet(puppetId); puppetId = -1; }   // у клиента двойник ушедшего снова обычный житель
                 Leave();
             }
             catch (Exception e) { Leave(); Plugin.L.LogWarning("[NET] RemovePlayer: " + e.Message); }
@@ -10050,6 +10149,9 @@ namespace SodCoop
             }
             Leave();
             players.Clear();
+            // клиент: двойники других игроков снова обычные жители
+            foreach (var id in new List<int>(puppetHiddenRends.Keys)) UnhidePuppet(id);
+            foreach (var id in new List<int>(puppetHiddenCols.Keys)) UnhidePuppet(id);
         }
 
         static bool IsRelayed(byte t)
