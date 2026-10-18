@@ -2791,6 +2791,8 @@ namespace SodCoop
             public float meshMissAt;
             public float heldU = 1f;
             public bool heldWeaponMode;
+            public string remoteHeldPreset = "";
+            public bool heldPresetMode;
             public string poseCur = "";
             public int poseLayer = -1;
             public int posePrevHash;
@@ -2887,6 +2889,8 @@ namespace SodCoop
             meshMissAt = r.meshMissAt;
             heldU = r.heldU;
             heldWeaponMode = r.heldWeaponMode;
+            remoteHeldPreset = r.remoteHeldPreset;
+            heldPresetMode = r.heldPresetMode;
             poseCur = r.poseCur;
             poseLayer = r.poseLayer;
             posePrevHash = r.posePrevHash;
@@ -2965,6 +2969,8 @@ namespace SodCoop
             r.meshMissAt = meshMissAt;
             r.heldU = heldU;
             r.heldWeaponMode = heldWeaponMode;
+            r.remoteHeldPreset = remoteHeldPreset;
+            r.heldPresetMode = heldPresetMode;
             r.poseCur = poseCur;
             r.poseLayer = poseLayer;
             r.posePrevHash = posePrevHash;
@@ -8415,7 +8421,8 @@ namespace SodCoop
             var parts = new System.Collections.Generic.List<HeldPart>();
             ScanHeld(parts);
             SendWeaponIfChanged();
-            string sig = HeldSig(parts);
+            string hpn = parts.Count > 0 ? HeldPresetName() : "";
+            string sig = HeldSig(parts) + "#" + hpn;
             if (sig == heldSentSig && Time.realtimeSinceStartup < heldResendAt) return;
             if (sig != heldSentSig)
                 Plugin.Dbg($"[HELD] у меня в руках: {curItem}, частей={parts.Count} {(parts.Count > 0 ? "первая: меш=" + parts[0].mesh + " материал=" + string.Join("/", parts[0].mats) + " масштаб узла0=" + (parts[0].chain.Length >= 10 ? parts[0].chain[7].ToString("G4") : "-") + " узлов=" + (parts[0].chain.Length / 10) : "")}");
@@ -8434,6 +8441,7 @@ namespace SodCoop
                 w.Put(p.chain.Length / 10);
                 foreach (var f in p.chain) w.Put(f);
             }
+            w.Put(hpn);   // в конце: старые версии мода это поле просто не читают
             manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
         }
 
@@ -8498,7 +8506,7 @@ namespace SodCoop
         {
             if (heldL != null) UnityEngine.Object.Destroy(heldL);
             if (heldR != null) UnityEngine.Object.Destroy(heldR);
-            heldL = heldR = null; heldWeaponMode = false;
+            heldL = heldR = null; heldWeaponMode = false; heldPresetMode = false;
         }
 
         static GameObject Container(Transform bone)
@@ -8510,6 +8518,9 @@ namespace SodCoop
         }
 
         static bool heldWeaponMode;
+        static string remoteHeldPreset = "";   // пресет предмета в руке другого игрока (кола, бургер...)
+        static bool heldPresetMode;            // предмет собран из префаба пресета, как у горожан игры
+        static string anchorNameR, anchorNameL;
         static System.Collections.Generic.Dictionary<string, InteractablePreset> weaponItemPreset;
 
         static void SetLayerRec(Transform t, int layer)
@@ -8611,12 +8622,82 @@ namespace SodCoop
             catch (Exception e) { Plugin.L.LogWarning("[WEAPON] модель в руке: " + e.Message); ClearHeld(); return false; }
         }
 
+        // пресет предмета в выбранном слоте инвентаря (кола, бургер...) - по нему получатель строит предмет как у горожан
+        static string HeldPresetName()
+        {
+            try
+            {
+                var bs = BioScreenController.Instance;
+                var sl = bs != null ? bs.selectedSlot : null;
+                var it = sl != null ? sl.GetInteractable() : null;
+                return it != null ? PresetNameOf(it) : "";
+            }
+            catch (Exception) { return ""; }
+        }
+
+        // кость руки, к которой игра крепит предметы горожан (CitizenOutfitController.GetBodyAnchor). У аватара контроллера нет,
+        // поэтому берём имя кости у любого горожанина и ищем такую же в модели аватара
+        static Transform HeldAnchor(bool left)
+        {
+            if (anchorNameR == null)
+            {
+                try
+                {
+                    var list = CityData.Instance.citizenDirectory;
+                    for (int i = 0; list != null && i < list.Count; i++)
+                    {
+                        var oc = list[i] != null ? list[i].outfitController : null;
+                        if (oc == null) continue;
+                        var r = oc.GetBodyAnchor(CitizenOutfitController.CharacterAnchor.HandRight);
+                        var l = oc.GetBodyAnchor(CitizenOutfitController.CharacterAnchor.HandLeft);
+                        if (r == null || l == null) continue;
+                        anchorNameR = r.name; anchorNameL = l.name;
+                        Plugin.L.LogInfo($"[HELD] кости для предметов в руке у горожан: '{anchorNameR}' / '{anchorNameL}'");
+                        break;
+                    }
+                }
+                catch (Exception e) { Plugin.L.LogWarning("[HELD] анкер руки: " + e.Message); }
+                if (anchorNameR == null) { anchorNameR = ""; anchorNameL = ""; }
+            }
+            string nm = left ? anchorNameL : anchorNameR;
+            Transform t = nm != "" ? FindDeep(avatarModel, nm) : null;
+            return t ?? FindHandBone(left);
+        }
+
+        // как NewAIController.UpdateHeldItems у горожан: префаб пресета в кости руки, localPosition/localEulerAngles из пресета,
+        // коллайдеры, физика и скрипты убраны
+        static bool BuildHeldFromPreset()
+        {
+            var pr = FindPreset(remoteHeldPreset);
+            if (pr == null || pr.prefab == null) return false;
+            string hand = (Plugin.CfgHeldHand.Value ?? "Auto").Trim().ToLowerInvariant();
+            bool left = hand == "left" || (hand == "auto" && remoteHeld.Count > 0 && remoteHeld[0].side == 1);
+            var anchor = HeldAnchor(left);
+            if (anchor == null) return false;
+            GameObject go;
+            try { go = UnityEngine.Object.Instantiate(pr.prefab, anchor); }
+            catch (Exception e) { Plugin.L.LogWarning($"[HELD] префаб '{remoteHeldPreset}': {e.Message}"); return false; }
+            if (go == null) return false;
+            go.name = "HeldItem";
+            go.transform.localPosition = pr.aiHeldObjectPosition;
+            go.transform.localEulerAngles = pr.aiHeldObjectRotation;
+            try { foreach (var c in go.GetComponentsInChildren<Collider>(true)) UnityEngine.Object.Destroy(c); } catch (Exception) { }
+            try { foreach (var rb in go.GetComponentsInChildren<Rigidbody>(true)) UnityEngine.Object.Destroy(rb); } catch (Exception) { }
+            try { foreach (var mb in go.GetComponentsInChildren<MonoBehaviour>(true)) UnityEngine.Object.Destroy(mb); } catch (Exception) { }
+            try { int layer = anchor.gameObject.layer; foreach (var t in go.GetComponentsInChildren<Transform>(true)) t.gameObject.layer = layer; } catch (Exception) { }
+            if (left) heldL = go; else heldR = go;
+            heldPresetMode = true;
+            Plugin.Dbg($"[HELD] предмет второго игрока '{remoteHeldPreset}' собран из префаба в кости '{anchor.name}' (смещение {pr.aiHeldObjectPosition}, поворот {pr.aiHeldObjectRotation})");
+            return true;
+        }
+
         static void BuildHeld()
         {
             ClearHeld();
             if (avatarModel == null) return;
             if (remoteWeaponName != "" && BuildWeaponModel()) return;
             if (remoteHeld.Count == 0) return;
+            if (remoteHeldPreset != "" && BuildHeldFromPreset()) return;
             if (meshCache.Count == 0) RebuildCaches();
             var bl = FindHandBone(true);
             var br = FindHandBone(false);
@@ -8682,6 +8763,7 @@ namespace SodCoop
                 if (Plugin.CfgHeldShow.Value) BuildHeld(); else ClearHeld();
             }
             if (heldL == null && heldR == null) return;
+            if (heldPresetMode) return;   // положение задано смещениями самой игры (aiHeldObjectPosition/Rotation)
             if (heldWeaponMode)
             {
                 ApplyHeld(heldR ?? heldL, ParseV3(Plugin.CfgWpnPos.Value, Vector3.zero), Quaternion.Euler(ParseV3(Plugin.CfgWpnRot.Value, Vector3.zero)), Plugin.CfgWpnScale.Value);
@@ -10437,7 +10519,8 @@ namespace SodCoop
                     for (int j = 0; j < hp.chain.Length; j++) hp.chain[j] = reader.GetFloat();
                     remoteHeld.Add(hp);
                 }
-                string rsig = HeldSig(remoteHeld);
+                remoteHeldPreset = reader.AvailableBytes > 0 ? reader.GetString() : "";
+                string rsig = HeldSig(remoteHeld) + "#" + remoteHeldPreset;
                 if (rsig != remoteHeldSig) { remoteHeldSig = rsig; remoteHeldDirty = true; }
             }
             else if (type == MsgItem)
