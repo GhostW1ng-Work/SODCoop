@@ -95,6 +95,7 @@ namespace SodCoop
         internal static ConfigEntry<int> CfgSocialAmount;
         internal static ConfigEntry<bool> CfgInvisible;
         internal static ConfigEntry<bool> CfgTraceBreak;
+        internal static ConfigEntry<string> CfgAutoTest, CfgAutoTestJobs;
         internal static ConfigEntry<string> CfgTypeRegex;
         internal static ConfigEntry<bool> CfgAvatarLightFix;
         internal static ConfigEntry<bool> CfgDoorSnap;
@@ -290,6 +291,11 @@ namespace SodCoop
                 "Keep the other player's model lit after room lights are switched off and on (sets the renderers' light layer mask to all layers)");
             CfgTypeRegex = Config.Bind("Debug", "TypeRegex", "apartment|residen|purchas|forsale|realestate|estate|landlord|lease|ownership|sale",
                 "Regex (case-insensitive) for class names listed in the log as [TYPES] ~25 s after entering the game when TraceBreak=true");
+            CfgAutoTest = Config.Bind("Debug", "AutoTest", "",
+                "Self-test without a person: 'host' loads the newest save and hosts on 127.0.0.1:Port; 'client' connects to it. Then the client takes the jobs " +
+                "from AutoTestJobs and completes their call objective, the host opens the murder case; both log [AUTOTEST] and quit. Empty = off");
+            CfgAutoTestJobs = Config.Bind("Debug", "AutoTestJobs", "19,5",
+                "Self-test: job ids the client takes (from the host's save)");
             CfgTraceBreak = Config.Bind("Debug", "TraceBreak", false,
                 "Diagnostics: once, ~25 s after you are in the game, log game classes whose names contain Window/Glass/Break/Shatter (no patching). Used to find how windows break");
             CfgDoorSync = Config.Bind("Doors", "Sync", true,
@@ -359,7 +365,7 @@ namespace SodCoop
             Harmony.CreateAndPatchAll(typeof(PlayerPatch));
             Harmony.CreateAndPatchAll(typeof(MeleePatch));
             Harmony.CreateAndPatchAll(typeof(BlockPatch));
-            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SelfTripFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch), typeof(ProfileEventPatch), typeof(KnockPatch), typeof(BargePatch), typeof(JobCreationPatch), typeof(JobAcceptPatch), typeof(CaseResolvePatch), typeof(PinnedMenuPatch), typeof(ShareCommandPatch), typeof(PhoneCallLogPatch), typeof(PhoneCallLogPatch2), typeof(JobInfoPatch), typeof(ObjectiveCompletePatch), typeof(ObjectiveAddPatch) })
+            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SelfTripFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch), typeof(ProfileEventPatch), typeof(KnockPatch), typeof(BargePatch), typeof(JobCreationPatch), typeof(JobAcceptPatch), typeof(CaseResolvePatch), typeof(PinnedMenuPatch), typeof(ShareCommandPatch), typeof(PhoneCallLogPatch), typeof(PhoneCallLogPatch2), typeof(JobInfoPatch), typeof(ObjectiveCompletePatch), typeof(ObjectiveAddPatch), typeof(MurderClientBlockPatch), typeof(MurderCaseNotifyPatch), typeof(MurderDiscoveryPatch), typeof(BuildingAlarmPatch), typeof(AddressAlarmPatch), typeof(ComputerPatch), typeof(PagePatch) })
             {
                 try { Harmony.CreateAndPatchAll(t); }
                 catch (Exception e) { L.LogWarning($"[PATCH] {t.Name}: {e.Message}"); }
@@ -833,6 +839,8 @@ namespace SodCoop
                 Plugin.L.LogInfo($"[JOB] задание {__instance.jobID} уже взято - второй раз не беру");
                 return false;
             }
+            // AcceptJob прикалывает к делу улику бумажки-объявления (post.evidence): если ссылки нет, игра падала посреди взятия
+            if (depth == 0 && __instance != null && !Net.EnsureJobPost(__instance)) return false;
             depth++; __state = true;
             return true;
         }
@@ -840,10 +848,16 @@ namespace SodCoop
         [HarmonyPostfix]
         public static void Postfix(SideJob __instance, bool __state)
         {
-            if (!__state) return;
-            depth--;
-            if (depth > 0) return;
+            if (!__state || depth > 1) return;
             try { Net.OnJobAccepted(__instance); } catch (Exception e) { Plugin.L.LogWarning("[JOB] " + e.Message); }
+        }
+
+        // счётчик - в финализаторе: если AcceptJob упал, постфикс не вызывается, и счётчик застревал - дальше ни одно взятие не уходило другим
+        [HarmonyFinalizer]
+        public static Exception Finalizer(bool __state, Exception __exception)
+        {
+            if (__state) depth--;
+            return __exception;
         }
     }
 
@@ -905,6 +919,101 @@ namespace SodCoop
         public static void Postfix(Telephone __0, Telephone __1, Human __2, Human __3, TelephoneController.CallSource __4, TelephoneController.PhoneCall __result)
         {
             try { Net.LogPhoneCall(__0 != null ? __0.number : -1, __1 != null ? __1.number : -1, __2, __3, __4, __result); } catch (Exception) { }
+        }
+    }
+
+    // Убийства придумывает и совершает только хост: у клиента выбор убийцы/жертвы, само убийство, цели ИИ убийцы и предметы
+    // (оружие, визитка, граффити, тайник) выключены - всё это присылает хост (MsgMurder)
+    [HarmonyPatch]
+    public static class MurderClientBlockPatch
+    {
+        public static System.Collections.Generic.IEnumerable<System.Reflection.MethodBase> TargetMethods()
+        {
+            var bf = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.DeclaredOnly;
+            var mc = new System.Collections.Generic.HashSet<string> { "Tick", "PickNewMurderer", "PickNewVictim", "ExecuteNewMurder", "TriggerNextMurder", "SpawnItemsCheck", "SpawnItem", "SpawnPlayerTaunt", "ExecuteSniperShot" };
+            foreach (var m in typeof(MurderController).GetMethods(bf)) if (mc.Contains(m.Name)) yield return m;
+            var mu = new System.Collections.Generic.HashSet<string> { "CreateMurderGoal", "PickNewMurderWeapon", "PickNewCallingCard", "PlaceCallingCard", "GenerateGraffiti", "WeaponDisposal", "GenerateRansomDetails", "GenerateFakeNumber", "GenerateMoniker", "TryPickNewVictimSite", "OnCleanCrimeScene" };
+            foreach (var m in typeof(MurderController.Murder).GetMethods(bf)) if (mu.Contains(m.Name)) yield return m;
+        }
+
+        [HarmonyPrefix]
+        public static bool Prefix() { return !Net.BlockLocalMurders(); }
+    }
+
+    // Тело нашёл сам игрок (обыскал) - игра заводит дело через OnVictimDiscovery, минуя NewMurderCaseNotify
+    [HarmonyPatch(typeof(MurderController), "OnVictimDiscovery")]
+    public static class MurderDiscoveryPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix()
+        {
+            try { Net.OnVictimDiscovered(); } catch (Exception e) { Plugin.L.LogWarning("[MURDER] находка: " + e.Message); }
+        }
+    }
+
+    // Тело нашли, полиция едет -> «Новое дело об убийстве» (GameplayController.NewMurderCaseNotify из CallEnforcers) у всех игроков
+    [HarmonyPatch(typeof(GameplayController), "NewMurderCaseNotify")]
+    public static class MurderCaseNotifyPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(NewGameLocation __0)
+        {
+            try { Net.OnMurderCaseNotify(__0); } catch (Exception e) { Plugin.L.LogWarning("[MURDER] дело: " + e.Message); }
+        }
+    }
+
+    // Тревога в здании / квартире (опускает стальные шторы на этаже): только от хоста
+    [HarmonyPatch(typeof(NewBuilding), "SetAlarm")]
+    public static class BuildingAlarmPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix() { return Net.AlarmAllowed(); }
+
+        [HarmonyPostfix]
+        public static void Postfix(NewBuilding __instance, bool __0, Human __1, NewFloor __2)
+        {
+            try { Net.OnBuildingAlarm(__instance, __0, __1, __2); } catch (Exception e) { Plugin.L.LogWarning("[ALARM] " + e.Message); }
+        }
+    }
+
+    [HarmonyPatch(typeof(NewAddress), "SetAlarm")]
+    public static class AddressAlarmPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix() { return Net.AlarmAllowed(); }
+
+        [HarmonyPostfix]
+        public static void Postfix(NewAddress __instance, bool __0, Human __1)
+        {
+            try { Net.OnAddressAlarm(__instance, __0, __1); } catch (Exception e) { Plugin.L.LogWarning("[ALARM] " + e.Message); }
+        }
+    }
+
+    // Компьютер: какая программа открыта и кто вошёл - видно другим игрокам
+    [HarmonyPatch]
+    public static class ComputerPatch
+    {
+        public static System.Collections.Generic.IEnumerable<System.Reflection.MethodBase> TargetMethods()
+        {
+            yield return AccessTools.Method(typeof(ComputerController), "SetComputerApp");
+            yield return AccessTools.Method(typeof(ComputerController), "SetLoggedIn");
+        }
+
+        [HarmonyPostfix]
+        public static void Postfix(ComputerController __instance)
+        {
+            try { Net.OnComputer(__instance); } catch (Exception e) { Plugin.L.LogWarning("[PC] " + e.Message); }
+        }
+    }
+
+    // Листы в папке (многостраничная улика): какая страница открыта
+    [HarmonyPatch(typeof(EvidenceMultiPage), "SetPage")]
+    public static class PagePatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(EvidenceMultiPage __instance, int __0)
+        {
+            try { Net.OnPage(__instance, __0); } catch (Exception e) { Plugin.L.LogWarning("[PAGE] " + e.Message); }
         }
     }
 
@@ -2753,6 +2862,7 @@ namespace SodCoop
                 Lan.Tick();
                 Net.Poll();
                 MenuAuto.Tick();
+                try { Net.AutoTestTick(); } catch (Exception e) { Plugin.L.LogWarning("[AUTOTEST] " + e); }
                 if (Net.Started && Net.KeyDown(KeyCode.End)) Net.LeaveSession();
                 if (!alive) { alive = true; Plugin.L.LogInfo("[DRV] Update работает"); }
                 if (!keyParsed)
@@ -3308,7 +3418,8 @@ namespace SodCoop
         const byte MsgRelay = 26;       // хост -> клиент: [pid отправителя][тип][данные] - сообщение другого клиента
         const byte MsgPlayerInfo = 27;  // хост -> клиент: [pid][внешний вид] - сведения о другом игроке
         const byte MsgPlayerLeft = 28;  // хост -> клиент: [pid] - игрок вышел
-        const byte MsgJob = 34;         // задания: [1][номер][json] хост->клиент задание с предметами; [2][номер] убрано; [3][номер] взял; [4][номер][награда] сдал; [5] улика; [6][n][номера] живые задания; [7][номер][текст] выслушал заказчика; [9][номер][цель] цель выполнена; [10][номер][цель...] новая цель
+        const byte MsgJob = 34;         // задания: [1][номер][json] хост->клиент задание с предметами; [2][номер] убрано; [3][номер] взял; [4][номер][награда] сдал; [5] улика; [6][n][номера] живые задания; [7][номер][текст] выслушал заказчика; [9][номер][цель] цель выполнена; [10][номер][выбор][цель...] новая цель; [11][номер][выбор] случайный выбор задания (место встречи, таксофон...); [12][n]{[житель][буква]} хост: буквы отпечатков; [13][житель] клиент: нашёл отпечатки; [14] компьютер; [15] страница папки; [16] тревога; [17] тревоги у хоста (снимок)
+        const byte MsgMurder = 35;      // хост -> клиент: [1][активно][номер][json] убийство с его предметами; [2][n][номера] какие убийства есть у хоста; [3][вид][номер] новое дело об убийстве (место)
         const byte MsgKnock = 33;       // игрок -> все: [дверь][ударов, -1 = выбиваю плечом][настойчивость] - я стучу в дверь
         const byte MsgElevator = 32;    // лифты: [1][лифт][этаж][вверх] вызов (все); [2][полный][n]{[лифт][y][этаж]} хост -> клиент: где стоят лифты
         const byte MsgDown = 30;        // игрок -> все: [состояние: 1 лежу, 0 подняли, 2 не дождался, 3 меня поднимают][сколько секунд осталось]
@@ -5416,6 +5527,7 @@ namespace SodCoop
         {
             string n = name.ToLowerInvariant();
             if (n.Contains("light") || n.Contains("lamp") || n.Contains("switch") || n.Contains("lantern")) return true;
+            if (n.Contains("computer") || n.Contains("cruncher")) return true;   // включённый компьютер видно другим
             try { if (it.preset != null && it.preset.isLight != null) return true; } catch (Exception) { }
             return false;
         }
@@ -7656,8 +7768,10 @@ namespace SodCoop
                 {
                     try { c.isInBed = inBed; c.isInLowBed = low; ac.SetInBed(inBed, low, false, true); } catch (Exception) { }
                 }
+                // мёртвого хост помечает и «оглушённым» - нокаут поверх смерти поднимал труп у клиента
                 bool koNow = (t.flags & 2) != 0;
-                if (t.apKo != (koNow ? 1 : 0))
+                if (dead) t.apKo = koNow ? 1 : 0;   // мёртвого не оглушаем и не «приводим в себя»
+                else if (t.apKo != (koNow ? 1 : 0))
                 {
                     bool first = t.apKo < 0; t.apKo = koNow ? 1 : 0;
                     if (!(first && !koNow))
@@ -10738,7 +10852,7 @@ namespace SodCoop
         }
 
         static bool jobLoopLogged;
-        static float clientLoopAt;
+        static float clientLoopAt, jobChoiceAt, printAt;
 
         // клиент: то, что JobCreationCheck делает со взятыми заданиями (без создания новых и без конца по сроку - это решает хост)
         internal static void ClientJobWorldLoop()
@@ -10950,37 +11064,8 @@ namespace SodCoop
             var obj = JsonUtility.FromJson(System.Text.Encoding.UTF8.GetString(bytes), Il2CppInterop.Runtime.Il2CppType.Of<StateSaveData>());
             var data = obj != null ? obj.TryCast<StateSaveData>() : null;
             if (data == null) { Plugin.L.LogWarning($"[JOB] задание {jobId}: не разобрано"); return; }
-            int newItems = 0, updItems = 0;
-            if (data.interactables != null)
-            {
-                var dict = CityData.Instance.savableInteractableDictionary;
-                // Interactable.OnLoad ищет мебель-родителя (fp) в CityConstructor.loadingFurnitureReference, а эта таблица есть только
-                // во время загрузки сейва - иначе NullReferenceException. На время загрузки подкладываем свою
-                var cc = CityConstructor.Instance;
-                Il2CppSystem.Collections.Generic.Dictionary<int, FurnitureLocation> oldRef = null;
-                bool swapped = false;
-                try { if (cc != null) { oldRef = cc.loadingFurnitureReference; cc.loadingFurnitureReference = FurnitureRef(data.interactables); swapped = true; } }
-                catch (Exception e) { Plugin.L.LogWarning("[JOB] таблица мебели: " + e.Message); }
-                try {
-                foreach (var it in data.interactables)
-                {
-                    if (it == null) continue;
-                    try
-                    {
-                        Interactable ex;
-                        if (dict != null && dict.TryGetValue(it.id, out ex) && ex != null)
-                        {
-                            // id предметов, созданных во время игры, у клиента и хоста могут совпасть: чужой предмет не трогаем
-                            if (PresetNameOf(ex) != (it.p ?? "")) { Plugin.L.LogWarning($"[JOB] предмет {it.id} задания {jobId}: у меня под этим номером '{PresetNameOf(ex)}', у хоста '{it.p}' - пропускаю"); continue; }
-                            ex.CopyState(it); updItems++;   // уже есть - только состояние
-                        }
-                        else { it.wasLoadedFromSave = true; it.MainSetupStart(); it.OnLoad(); newItems++; }
-                    }
-                    catch (Exception e) { Plugin.L.LogWarning($"[JOB] предмет {it.id} задания {jobId}: {e.Message}"); }
-                }
-                }
-                finally { if (swapped) try { cc.loadingFurnitureReference = oldRef; } catch (Exception) { } }
-            }
+            int newItems, updItems;
+            ImportItems(data.interactables, "[JOB]", "задания " + jobId, out newItems, out updItems);
             if (data.fakeTelephone != null)
             {
                 int added = 0;
@@ -11022,6 +11107,59 @@ namespace SodCoop
             }
         }
 
+        // свободный номер для своего предмета, уступившего номер предмету хоста: далеко за номерами, которые раздаёт игра
+        static int localItemId = 1900000000;
+        static int FreeLocalItemId()
+        {
+            var dict = CityData.Instance.savableInteractableDictionary;
+            while (dict != null && dict.ContainsKey(localItemId)) localItemId++;
+            return localItemId++;
+        }
+
+        // предметы в формате сейва - как SaveStateController.LoadSaveState: новый - MainSetupStart/OnLoad, уже есть - CopyState
+        static void ImportItems(Il2CppSystem.Collections.Generic.List<Interactable> items, string tag, string what, out int newItems, out int updItems)
+        {
+            newItems = 0; updItems = 0;
+            if (items == null) return;
+            var dict = CityData.Instance.savableInteractableDictionary;
+            // Interactable.OnLoad ищет мебель-родителя (fp) в CityConstructor.loadingFurnitureReference, а эта таблица есть только
+            // во время загрузки сейва - иначе NullReferenceException. На время загрузки подкладываем свою
+            var cc = CityConstructor.Instance;
+            Il2CppSystem.Collections.Generic.Dictionary<int, FurnitureLocation> oldRef = null;
+            bool swapped = false;
+            try { if (cc != null) { oldRef = cc.loadingFurnitureReference; cc.loadingFurnitureReference = FurnitureRef(items); swapped = true; } }
+            catch (Exception e) { Plugin.L.LogWarning(tag + " таблица мебели: " + e.Message); }
+            try
+            {
+                foreach (var it in items)
+                {
+                    if (it == null) continue;
+                    try
+                    {
+                        Interactable ex;
+                        if (dict != null && dict.TryGetValue(it.id, out ex) && ex != null)
+                        {
+                            // id предметов, созданных во время игры, у клиента и хоста могут совпасть: чужой предмет не трогаем
+                            if (PresetNameOf(ex) != (it.p ?? ""))
+                            {
+                                // номер занят моим предметом, созданным во время игры (например, объявлением о продаже квартиры): мой
+                                // переезжает на свободный номер, а предмет хоста встаёт под своим - иначе у меня не было его объявлений
+                                int nid = FreeLocalItemId();
+                                dict.Remove(it.id); ex.id = nid; dict[nid] = ex;
+                                Plugin.L.LogInfo($"{tag} предмет {it.id} ({what}): мой '{PresetNameOf(ex)}' перенёс на номер {nid}, ставлю '{it.p}' хоста");
+                                it.wasLoadedFromSave = true; it.MainSetupStart(); it.OnLoad(); newItems++;
+                                continue;
+                            }
+                            ex.CopyState(it); updItems++;   // уже есть - только состояние
+                        }
+                        else { it.wasLoadedFromSave = true; it.MainSetupStart(); it.OnLoad(); newItems++; }
+                    }
+                    catch (Exception e) { Plugin.L.LogWarning($"{tag} предмет {it.id} ({what}): {e.Message}"); }
+                }
+            }
+            finally { if (swapped) try { cc.loadingFurnitureReference = oldRef; } catch (Exception) { } }
+        }
+
         // мебель по номеру (FurnitureLocation.id) для Interactable.OnLoad: строим один раз, перестраиваем, если нужного номера нет
         static Il2CppSystem.Collections.Generic.Dictionary<int, FurnitureLocation> furnRef;
 
@@ -11042,13 +11180,425 @@ namespace SodCoop
             return d;
         }
 
+        // Случайный выбор задания (место встречи, тайник, таксофон и время «погони», адрес саботажа...) игра делает у каждого игрока сама,
+        // когда задание доходит до нужного этапа - у всех выходили разные места и время. Выбор того, кто дошёл первым, едет с целями
+        // (op 9/10, до добавления цели - текст цели строится из него) и отдельно (op 11); у остальных ObjectiveStateLoop видит, что уже выбрано.
+        // Ключи: 1 место встречи, 2 номер угощения на встрече, 3 мебель тайника, 4 точка тайника, 5 таксофон «погони», 6 телефон, с которого
+        // звонят, 7 время звонка; саботаж: 8 адрес, 9 время звонка; кража: 10-12 время кражи, 13 комната; кейс: 14 носитель, 15 место встречи
+        static System.Collections.Generic.List<(byte k, double a, double b, double c)> JobChoices(SideJob j)
+        {
+            var l = new System.Collections.Generic.List<(byte, double, double, double)>();
+            if (j == null) return l;
+            if (j.meetingPoint != 0) { l.Add((1, j.meetingPoint, FurnIdOf(j.chosenMeetingPoint), 0)); l.Add((2, j.meetingConsumableIndex, 0, 0)); }
+            if (j.secretLocationFurniture != 0) l.Add((3, j.secretLocationFurniture, 0, 0));
+            if (j.secretLocationNode != Vector3Int.zero) l.Add((4, j.secretLocationNode.x, j.secretLocationNode.y, j.secretLocationNode.z));
+            if (j.gooseChasePhone != 0) { l.Add((5, j.gooseChasePhone, FurnIdOf(j.chosenGooseChasePhone), 0)); l.Add((6, j.gooseChaseFromPhone, 0, 0)); }
+            if (j.gooseChaseCallTime != 0f) l.Add((7, j.gooseChaseCallTime, 0, 0));
+            var sb = j.TryCast<SideJobSabotage>();
+            if (sb != null) { if (sb.chosenAddress != null) l.Add((8, sb.chosenAddress.id, 0, 0)); if (sb.callTime != 0f) l.Add((9, sb.callTime, 0, 0)); }
+            var si = j.TryCast<SideJobStolenItem>();
+            if (si != null) { if (si.theftTime != 0f) l.Add((10, si.theftTime, 0, 0)); if (si.theftTimeFrom != 0f) l.Add((11, si.theftTimeFrom, 0, 0)); if (si.theftTimeTo != 0f) l.Add((12, si.theftTimeTo, 0, 0)); if (si.stolenItemRoom != 0) l.Add((13, si.stolenItemRoom, 0, 0)); }
+            var bc = j.TryCast<SideJobStealBriefcase>();
+            if (bc != null) { if (bc.carrier != 0) l.Add((14, bc.carrier, 0, 0)); if (bc.meetNodeLocation != Vector3Int.zero) l.Add((15, bc.meetNodeLocation.x, bc.meetNodeLocation.y, bc.meetNodeLocation.z)); }
+            return l;
+        }
+
+        static int FurnIdOf(Interactable it)
+        {
+            try { return it != null && it.furnitureParent != null ? it.furnitureParent.id : 0; } catch (Exception) { return 0; }
+        }
+
+        // предмет по номеру; встроенные в мебель (стул, таксофон) игра создаёт, только когда мебель появляется рядом с игроком -
+        // у другого игрока далеко от того места их ещё нет: создаём встроенные предметы этой мебели сами
+        static Interactable FindItemOrIntegrated(int id, int furnId)
+        {
+            var it = FindById(id);
+            if (it != null) return it;
+            try { if (CityData.Instance.savableInteractableDictionary.TryGetValue(id, out it) && it != null) return it; } catch (Exception) { }
+            if (furnId == 0) return null;
+            try
+            {
+                var map = FurnitureRef(new Il2CppSystem.Collections.Generic.List<Interactable>());
+                FurnitureLocation f;
+                if (map == null || !map.TryGetValue(furnId, out f) || f == null) { Plugin.L.LogWarning($"[JOB] мебель {furnId} у меня не найдена"); return null; }
+                if (!f.createdInteractables) f.CreateInteractables();
+                if (f.integratedInteractables != null) foreach (var x in f.integratedInteractables) if (x != null && x.id == id) return x;
+                Plugin.L.LogWarning($"[JOB] в мебели {furnId} нет предмета {id} (встроенных: {(f.integratedInteractables != null ? f.integratedInteractables.Count : 0)})");
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[JOB] мебель {furnId}: {e.Message}"); }
+            return null;
+        }
+
+        static void PutJobChoices(NetDataWriter w, SideJob j)
+        {
+            var l = JobChoices(j);
+            w.Put((byte)l.Count);
+            foreach (var x in l) { w.Put(x.k); w.Put(x.a); w.Put(x.b); w.Put(x.c); }
+        }
+
+        // Чужой выбор берём, если у меня ещё не выбрано. Выбор хоста главнее: хост узнаёт о выполненной цели раньше, чем клиент
+        // докрутит своё задание, и оба успевали выбрать каждый своё - у клиента тогда выбор (и цель с ним, см. AddObjectiveHere) заменяется
+        static void ApplyJobChoices(NetDataReader r, SideJob j, int pid)
+        {
+            bool force = !IsHost && pid == 0;
+            int n = r.GetByte();
+            var got = new System.Collections.Generic.Dictionary<byte, (double a, double b, double c)>();
+            for (int i = 0; i < n; i++) { byte key = r.GetByte(); got[key] = (r.GetDouble(), r.GetDouble(), r.GetDouble()); }
+            if (j == null || n == 0) return;
+            var applied = new System.Collections.Generic.List<string>();
+            (double a, double b, double c) v;
+            try
+            {
+                if (got.TryGetValue(1, out v) && (force ? j.meetingPoint != (int)v.a : j.meetingPoint == 0))
+                {
+                    var mp = FindItemOrIntegrated((int)v.a, (int)v.b);
+                    if (mp != null)
+                    {
+                        j.meetingPoint = (int)v.a; j.chosenMeetingPoint = mp;
+                        (double a, double b, double c) c2; if (got.TryGetValue(2, out c2)) j.meetingConsumableIndex = (int)c2.a;
+                        applied.Add("место встречи " + mp.GetName());
+                    }
+                    else Plugin.L.LogWarning($"[JOB] задание {j.jobID}: место встречи {(int)v.a} у меня не найдено");
+                }
+                if (got.TryGetValue(3, out v) && (force ? j.secretLocationFurniture != (int)v.a : j.secretLocationFurniture == 0)) { j.secretLocationFurniture = (int)v.a; applied.Add("мебель тайника"); }
+                if (got.TryGetValue(4, out v) && (force || j.secretLocationNode == Vector3Int.zero) && j.secretLocationNode != new Vector3Int((int)v.a, (int)v.b, (int)v.c)) { j.secretLocationNode = new Vector3Int((int)v.a, (int)v.b, (int)v.c); applied.Add("тайник"); }
+                if (got.TryGetValue(5, out v) && (force ? j.gooseChasePhone != (int)v.a : j.gooseChasePhone == 0))
+                {
+                    var ph = FindItemOrIntegrated((int)v.a, (int)v.b);
+                    j.gooseChasePhone = (int)v.a; if (ph != null) j.chosenGooseChasePhone = ph;
+                    (double a, double b, double c) c6; if (got.TryGetValue(6, out c6)) j.gooseChaseFromPhone = (int)c6.a;
+                    applied.Add("таксофон " + (ph != null ? ph.GetName() : "?"));
+                }
+                if (got.TryGetValue(7, out v) && (force ? j.gooseChaseCallTime != v.a : j.gooseChaseCallTime == 0f)) { j.gooseChaseCallTime = (float)v.a; applied.Add("время звонка"); }
+                var sb = j.TryCast<SideJobSabotage>();
+                if (sb != null)
+                {
+                    NewAddress ad;
+                    if (got.TryGetValue(8, out v) && (force ? (sb.chosenAddress == null || sb.chosenAddress.id != (int)v.a) : sb.chosenAddress == null) && CityData.Instance.addressDictionary.TryGetValue((int)v.a, out ad)) { sb.chosenAddress = ad; applied.Add("адрес"); }
+                    if (got.TryGetValue(9, out v) && (force ? sb.callTime != v.a : sb.callTime == 0f)) { sb.callTime = (float)v.a; applied.Add("время звонка"); }
+                }
+                var si = j.TryCast<SideJobStolenItem>();
+                if (si != null)
+                {
+                    if (got.TryGetValue(10, out v) && (force || si.theftTime == 0f)) si.theftTime = (float)v.a;
+                    if (got.TryGetValue(11, out v) && (force || si.theftTimeFrom == 0f)) si.theftTimeFrom = (float)v.a;
+                    if (got.TryGetValue(12, out v) && (force || si.theftTimeTo == 0f)) si.theftTimeTo = (float)v.a;
+                    if (got.TryGetValue(13, out v) && (force || si.stolenItemRoom == 0)) si.stolenItemRoom = (int)v.a;
+                }
+                var bc = j.TryCast<SideJobStealBriefcase>();
+                if (bc != null)
+                {
+                    if (got.TryGetValue(14, out v) && (force ? bc.carrier != (int)v.a : bc.carrier == 0)) { bc.carrier = (int)v.a; applied.Add("носитель кейса"); }
+                    if (got.TryGetValue(15, out v) && (force || bc.meetNodeLocation == Vector3Int.zero) && bc.meetNodeLocation != new Vector3Int((int)v.a, (int)v.b, (int)v.c)) { bc.meetNodeLocation = new Vector3Int((int)v.a, (int)v.b, (int)v.c); applied.Add("место встречи"); }
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[JOB] выбор задания {j.jobID}: {e.Message}"); }
+            if (applied.Count > 0) Plugin.L.LogInfo($"[JOB] задание {j.jobID}: от игрока {pid} - " + string.Join(", ", applied));
+        }
+
+        // выбор, сделанный не при добавлении цели (например, время звонка) - отдельным сообщением, как только появился
+        static readonly System.Collections.Generic.Dictionary<int, string> jobChoiceSent = new System.Collections.Generic.Dictionary<int, string>();
+
+        static void JobChoicesTick()
+        {
+            var ctl = SideJobController.Instance;
+            if (ctl == null || ctl.allJobsDictionary == null) return;
+            foreach (var kv in ctl.allJobsDictionary)
+            {
+                var j = kv.Value; if (j == null || !j.accepted || j.state == SideJob.JobState.ended) continue;
+                var l = JobChoices(j);
+                if (l.Count == 0) continue;
+                var sig = string.Join(";", l);
+                string old; if (jobChoiceSent.TryGetValue(j.jobID, out old) && old == sig) continue;
+                jobChoiceSent[j.jobID] = sig;
+                var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)11); w.Put(j.jobID); PutJobChoices(w, j);
+                manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+            }
+        }
+
+        internal static bool EnsureJobPost(SideJob j)
+        {
+            try
+            {
+                if (j.post != null) return true;
+                Interactable p = null;
+                var dict = CityData.Instance.savableInteractableDictionary;
+                bool has = j.postID > 0 && dict != null && dict.TryGetValue(j.postID, out p) && p != null;
+                if (has && PresetNameOf(p) == "JobNote") { j.post = p; Plugin.L.LogInfo($"[JOB] задание {j.jobID}: ссылка на объявление {j.postID} восстановлена"); return true; }
+                Plugin.L.LogWarning($"[JOB] задание {j.jobID}: нет объявления (postID {j.postID}, под этим номером у меня {(has ? "'" + PresetNameOf(p) + "'" : "ничего")}) - взять не могу, игра упала бы");
+                Toast($"Job {j.jobID}: its note is missing here, cannot take it.");
+                return false;
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[JOB] объявление задания {j.jobID}: {e.Message}"); return true; }
+        }
+
+        // ---------- Тревоги (стальные шторы на этажах) ----------
+        // Тревогу включает и выключает только хост (его камеры видят двойников клиентов, таймер тревоги идёт у него). У клиента своя
+        // тревога не срабатывает, а хостовая приходит сюда; иначе у клиента этаж оставался заблокированным, шторы - закрытыми
+        static bool applyingAlarm;
+
+        internal static bool AlarmAllowed()
+        {
+            return applyingAlarm || manager == null || RtMode != NetMode.Client;
+        }
+
+        // цель тревоги: [0] нет, [1][pid] игрок (у хоста его двойник), [2][humanID] житель
+        static void PutAlarmTarget(NetDataWriter w, Human t)
+        {
+            if (t == null) { w.Put((byte)0); w.Put(0); return; }
+            if (t.isPlayer) { w.Put((byte)1); w.Put(0); return; }
+            foreach (var rp in players) if (PuppetIdOf(rp) == t.humanID) { w.Put((byte)1); w.Put(rp.pid); return; }
+            w.Put((byte)2); w.Put(t.humanID);
+        }
+
+        static Human GetAlarmTarget(NetDataReader r)
+        {
+            byte k = r.GetByte(); int v = r.GetInt();
+            if (k == 1) return v == MyPid ? Player.Instance : null;
+            if (k == 2) { Human h; if (CityData.Instance.GetHuman(v, out h, false)) return h; }
+            return null;
+        }
+
+        internal static void OnBuildingAlarm(NewBuilding b, bool val, Human target, NewFloor floor)
+        {
+            if (!IsHost || applyingAlarm || b == null || manager == null || manager.ConnectedPeersCount == 0) return;
+            var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)16); w.Put((byte)1); w.Put(b.buildingID); w.Put(val);
+            w.Put(floor != null ? floor.floor : int.MinValue); PutAlarmTarget(w, target);
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+            Plugin.L.LogInfo($"[ALARM] тревога в здании {b.buildingID}{(floor != null ? " этаж " + floor.floor : "")}: {(val ? "включена" : "выключена")}");
+        }
+
+        internal static void OnAddressAlarm(NewAddress a, bool val, Human target)
+        {
+            if (!IsHost || applyingAlarm || a == null || manager == null || manager.ConnectedPeersCount == 0) return;
+            var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)16); w.Put((byte)2); w.Put(a.id); w.Put(val); w.Put(0); PutAlarmTarget(w, target);
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+            Plugin.L.LogInfo($"[ALARM] тревога в {a.name}: {(val ? "включена" : "выключена")}");
+        }
+
+        static NewBuilding BuildingById(int id)
+        {
+            var l = CityBuildings.Instance.buildingDirectory;
+            if (l != null) foreach (var b in l) if (b != null && b.buildingID == id) return b;
+            return null;
+        }
+
+        static void OnAlarmMsg(NetDataReader r)
+        {
+            byte kind = r.GetByte(); int id = r.GetInt(); bool val = r.GetBool(); int floorNum = r.GetInt();
+            var target = GetAlarmTarget(r);
+            applyingAlarm = true;
+            try
+            {
+                if (kind == 1)
+                {
+                    var b = BuildingById(id); if (b == null) { Plugin.L.LogWarning($"[ALARM] здание {id} не найдено"); return; }
+                    NewFloor f = null; if (floorNum != int.MinValue && b.floors != null) b.floors.TryGetValue(floorNum, out f);
+                    b.SetAlarm(val, target, f);
+                    Plugin.L.LogInfo($"[ALARM] тревога в здании {id}: {(val ? "включена" : "выключена")} (от хоста)");
+                }
+                else
+                {
+                    NewAddress a; if (!CityData.Instance.addressDictionary.TryGetValue(id, out a) || a == null) return;
+                    a.SetAlarm(val, target);
+                    Plugin.L.LogInfo($"[ALARM] тревога в {a.name}: {(val ? "включена" : "выключена")} (от хоста)");
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[ALARM] " + e.Message); }
+            finally { applyingAlarm = false; }
+        }
+
+        static void SendAlarmSnapshot(NetPeer peer)
+        {
+            var bl = new System.Collections.Generic.List<int>(); var al = new System.Collections.Generic.List<int>();
+            foreach (var b in CityBuildings.Instance.buildingDirectory) if (b != null && b.alarmActive) bl.Add(b.buildingID);
+            foreach (var kv in CityData.Instance.addressDictionary) if (kv.Value != null && kv.Value.alarmActive) al.Add(kv.Key);
+            var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)17);
+            w.Put(bl.Count); foreach (var x in bl) w.Put(x);
+            w.Put(al.Count); foreach (var x in al) w.Put(x);
+            peer.Send(w, DeliveryMethod.ReliableOrdered);
+        }
+
+        // клиент: у хоста тревоги нет, а у меня есть (сработала своя или застряла из сейва) - снимаю
+        static void OnAlarmSnapshot(NetDataReader r)
+        {
+            var bs = new System.Collections.Generic.HashSet<int>(); int n = r.GetInt(); for (int i = 0; i < n; i++) bs.Add(r.GetInt());
+            var ads = new System.Collections.Generic.HashSet<int>(); n = r.GetInt(); for (int i = 0; i < n; i++) ads.Add(r.GetInt());
+            int off = 0, on = 0;
+            applyingAlarm = true;
+            try
+            {
+                foreach (var b in CityBuildings.Instance.buildingDirectory)
+                {
+                    if (b == null) continue;
+                    bool want = bs.Contains(b.buildingID);
+                    if (b.alarmActive != want) { try { b.SetAlarm(want, null, null); if (want) on++; else off++; } catch (Exception) { } }
+                }
+                foreach (var kv in CityData.Instance.addressDictionary)
+                {
+                    var a = kv.Value; if (a == null) continue;
+                    bool want = ads.Contains(kv.Key);
+                    if (a.alarmActive != want) { try { a.SetAlarm(want, null); if (want) on++; else off++; } catch (Exception) { } }
+                }
+            }
+            finally { applyingAlarm = false; }
+            Plugin.L.LogInfo($"[ALARM] тревоги как у хоста: включил {on}, снял {off}");
+        }
+
+        // ---------- Компьютеры ----------
+        static bool applyingComputer;
+        static System.Collections.Generic.Dictionary<string, CruncherAppPreset> appByName;
+
+        internal static void OnComputer(ComputerController cc)
+        {
+            if (applyingComputer || cc == null || !cc.playerControlled || manager == null || manager.ConnectedPeersCount == 0) return;
+            var it = cc.ic != null ? cc.ic.interactable : null;
+            if (it == null) return;
+            var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)14); w.Put(it.id);
+            w.Put(cc.currentApp != null ? cc.currentApp.name : "");
+            var li = cc.loggedInAs;
+            w.Put(li != null && !li.isPlayer ? li.humanID : -1);
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+            Plugin.Dbg($"[PC] компьютер {it.id}: программа '{(cc.currentApp != null ? cc.currentApp.name : "")}', вход: {(li != null ? li.humanID.ToString() : "нет")}");
+        }
+
+        static void OnComputerMsg(NetDataReader r, int pid)
+        {
+            int id = r.GetInt(); string app = r.GetString(); int login = r.GetInt();
+            var it = FindById(id);
+            if (it == null) { try { CityData.Instance.savableInteractableDictionary.TryGetValue(id, out it); } catch (Exception) { } }
+            var cc = it != null && it.controller != null ? it.controller.computer : null;
+            if (cc == null) return;   // компьютер далеко и не создан - включённым его покажет синхронизация переключателя
+            if (appByName == null)
+            {
+                appByName = new System.Collections.Generic.Dictionary<string, CruncherAppPreset>();
+                foreach (var a in Resources.FindObjectsOfTypeAll<CruncherAppPreset>()) if (a != null && !appByName.ContainsKey(a.name)) appByName[a.name] = a;
+            }
+            applyingComputer = true;
+            try
+            {
+                Human h = null; if (login >= 0) CityData.Instance.GetHuman(login, out h, false);
+                if (h != null && (cc.loggedInAs == null || cc.loggedInAs.humanID != login)) cc.SetLoggedIn(h);
+                CruncherAppPreset ap;
+                if (app != "" && appByName.TryGetValue(app, out ap) && (cc.currentApp == null || cc.currentApp.name != app)) cc.SetComputerApp(ap, true);
+                Plugin.Dbg($"[PC] компьютер {id}: у игрока {pid} программа '{app}'");
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[PC] " + e.Message); }
+            finally { applyingComputer = false; }
+        }
+
+        // ---------- Листы в папках ----------
+        static bool applyingPage;
+
+        internal static void OnPage(EvidenceMultiPage ev, int page)
+        {
+            if (applyingPage || ev == null || manager == null || manager.ConnectedPeersCount == 0) return;
+            var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)15); w.Put(ev.evID ?? ""); w.Put(EvidenceSig(ev)); w.Put(page);
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+        }
+
+        static void OnPageMsg(NetDataReader r)
+        {
+            string id = r.GetString(); string sig = r.GetString(); int page = r.GetInt();
+            Evidence ev = null;
+            try { Toolbox.Instance.TryGetEvidence(id, out ev); } catch (Exception) { }
+            if (sig != "" && (ev == null || EvidenceSig(ev) != sig)) ev = FindEvidenceBySig(sig);
+            var mp = ev != null ? ev.TryCast<EvidenceMultiPage>() : null;
+            if (mp == null || mp.page == page) return;
+            applyingPage = true;
+            try { mp.SetPage(page, false); } catch (Exception e) { Plugin.L.LogWarning("[PAGE] " + e.Message); }
+            finally { applyingPage = false; }
+        }
+
+        // ---------- Буквы отпечатков ----------
+        // Тип отпечатков жителя (буква) игра выдаёт по порядку, когда игрок впервые находит его отпечатки (EvidenceFingerprintController:
+        // Human.fingerprintLoop = GameplayController.printsLetterLoop++) - у каждого игрока свой порядок и свои буквы. Буквы выдаёт хост:
+        // клиент сообщает «нашёл отпечатки жителя», хост даёт ему следующую свою букву и рассылает всем
+        static readonly System.Collections.Generic.Dictionary<int, int> printSent = new System.Collections.Generic.Dictionary<int, int>();
+        static readonly System.Collections.Generic.HashSet<int> printAsked = new System.Collections.Generic.HashSet<int>();
+        static readonly System.Collections.Generic.Dictionary<int, int> printFromHost = new System.Collections.Generic.Dictionary<int, int>();
+
+        static void AssignPrintLetter(Human h)
+        {
+            var gc = GameplayController.Instance;
+            if (gc == null || h == null) return;
+            h.fingerprintLoop = gc.printsLetterLoop;
+            gc.printsLetterLoop = gc.printsLetterLoop + 1;
+            Plugin.L.LogInfo($"[PRINTS] житель {h.humanID}: отпечатки нашёл другой игрок, буква №{h.fingerprintLoop}");
+        }
+
+        static void ApplyPrintLetter(int hid, int loop)
+        {
+            printFromHost[hid] = loop;
+            Human h;
+            if (!CityData.Instance.GetHuman(hid, out h, false) || h == null) return;
+            if (h.fingerprintLoop != loop)
+            {
+                // букву хоста ставим и моему жителю, у которого она уже была (он получит свою от хоста следующим списком)
+                foreach (var c in CityData.Instance.citizenDirectory) if (c != null && c.humanID != hid && c.fingerprintLoop == loop && !printFromHost.ContainsKey(c.humanID)) { c.fingerprintLoop = -1; printAsked.Remove(c.humanID); }
+                h.fingerprintLoop = loop;
+            }
+            var gc = GameplayController.Instance;
+            if (gc != null && gc.printsLetterLoop <= loop) gc.printsLetterLoop = loop + 1;
+        }
+
+        static void PrintLettersTick()
+        {
+            var dir = CityData.Instance != null ? CityData.Instance.citizenDirectory : null;
+            if (dir == null) return;
+            if (IsHost)
+            {
+                var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)12);
+                var fresh = new System.Collections.Generic.List<(int, int)>();
+                foreach (var c in dir)
+                {
+                    if (c == null || c.fingerprintLoop < 0) continue;
+                    int old; if (printSent.TryGetValue(c.humanID, out old) && old == c.fingerprintLoop) continue;
+                    printSent[c.humanID] = c.fingerprintLoop; fresh.Add((c.humanID, c.fingerprintLoop));
+                }
+                if (fresh.Count == 0) return;
+                w.Put(fresh.Count); foreach (var x in fresh) { w.Put(x.Item1); w.Put(x.Item2); }
+                manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+            }
+            else
+            {
+                foreach (var c in dir)
+                {
+                    if (c == null || c.fingerprintLoop < 0 || printFromHost.ContainsKey(c.humanID) || !printAsked.Add(c.humanID)) continue;
+                    var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)13); w.Put(c.humanID);
+                    manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+                }
+            }
+        }
+
+        // все буквы - новому клиенту
+        static void SendPrintSnapshot(NetPeer peer)
+        {
+            var dir = CityData.Instance != null ? CityData.Instance.citizenDirectory : null;
+            if (dir == null) return;
+            var l = new System.Collections.Generic.List<(int, int)>();
+            foreach (var c in dir) if (c != null && c.fingerprintLoop >= 0) l.Add((c.humanID, c.fingerprintLoop));
+            var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)12); w.Put(l.Count);
+            foreach (var x in l) { w.Put(x.Item1); w.Put(x.Item2); }
+            peer.Send(w, DeliveryMethod.ReliableOrdered);
+        }
+
+        // AcceptJob ставит первую цель ещё до своего конца (где уходит «взял»): другим цель приходила раньше, чем задание у них взято
+        static void EnsureAcceptSent(int jobId)
+        {
+            var j = JobById(jobId);
+            if (j != null && j.accepted && !jobAcceptSent.Contains(jobId)) OnJobAccepted(j);
+        }
+
         internal static void OnObjectiveAdded(Case c, object[] a)
         {
             if (applyingJob || c == null || RtMode == NetMode.Off || !Plugin.CfgJobSync.Value || manager == null || manager.ConnectedPeersCount == 0) return;
             int jobId = c.jobReference;
             if (jobId <= 0) return;
+            EnsureAcceptSent(jobId);
             var t = a[1] as Objective.ObjectiveTrigger;
             var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)10); w.Put(jobId);
+            PutJobChoices(w, JobById(jobId));
             w.Put((string)a[0] ?? "");
             w.Put(t != null);
             if (t != null)
@@ -11066,9 +11616,11 @@ namespace SodCoop
 
         static void AddObjectiveHere(RP rp, NetDataReader r)
         {
-            int jobId = r.GetInt(); string entry = r.GetString();
+            int jobId = r.GetInt();
             int pid = rp != null ? rp.pid : 0;
             var j = JobById(jobId);
+            ApplyJobChoices(r, j, pid);
+            string entry = r.GetString();
             Objective.ObjectiveTrigger t = null;
             if (r.GetBool())
             {
@@ -11087,6 +11639,19 @@ namespace SodCoop
             try
             {
                 if (t != null) t.SetupNonSerialized();
+                // цель от хоста главнее: моя с тем же entryRef могла быть построена по моему выбору (другое место / время) - заменяем
+                if (!IsHost && pid == 0)
+                {
+                    int removed = 0;
+                    foreach (var lst in new[] { c.currentActiveObjectives, c.inactiveCurrentObjectives })
+                    {
+                        if (lst == null) continue;
+                        var mine = new System.Collections.Generic.List<Objective>();
+                        foreach (var o in lst) if (o != null && !o.isComplete && o.queueElement != null && o.queueElement.entryRef == entry) mine.Add(o);
+                        foreach (var o in mine) { try { o.Remove(); removed++; } catch (Exception) { } }
+                    }
+                    if (removed > 0) Plugin.L.LogInfo($"[JOB] задание {jobId}: моя цель '{entry}' заменена хостовой");
+                }
                 c.AddObjective(entry, t, usePointer, pp, icon, act, delay, removePrev, chapter, silent, crouch, j, bottom, false, parsing);
                 Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{entry}' от игрока {pid} передана игре (дубль игра не поставит)");
             }
@@ -11100,9 +11665,11 @@ namespace SodCoop
             var c = o.thisCase;
             int jobId = c != null ? c.jobReference : 0;
             if (jobId <= 0 || string.IsNullOrEmpty(o.name)) return;
+            EnsureAcceptSent(jobId);
             Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{o.name}' выполнена у меня, сообщаю другим");
             if (manager == null || manager.ConnectedPeersCount == 0) return;
             var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)9); w.Put(jobId); w.Put(o.name);
+            PutJobChoices(w, JobById(jobId));
             manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
         }
 
@@ -11282,8 +11849,35 @@ namespace SodCoop
             Plugin.L.LogInfo($"[JOB] я сдал задание {jobId}, награда {got} - всем игрокам");
         }
 
+        // клиент: пока город не загружен (передача сейва, главное меню), задания и убийства от хоста - в очередь, разберём после загрузки
+        static readonly System.Collections.Generic.List<(bool murder, RP rp, byte[] data)> worldMsgQueue = new System.Collections.Generic.List<(bool, RP, byte[])>();
+
+        static bool WorldReady()
+        {
+            if (IsHost) return true;
+            try { return !xferMode && !InMainMenu() && Player.Instance != null && CityData.Instance != null && SideJobController.Instance != null && MurderController.Instance != null; } catch (Exception) { return false; }
+        }
+
+        static void WorldMsgQueueTick()
+        {
+            if (worldMsgQueue.Count == 0 || !WorldReady()) return;
+            var list = new System.Collections.Generic.List<(bool murder, RP rp, byte[] data)>(worldMsgQueue);
+            worldMsgQueue.Clear();
+            Plugin.L.LogInfo($"[JOB] город загружен - разбираю отложенные сообщения: {list.Count}");
+            foreach (var x in list)
+            {
+                try
+                {
+                    var rd = new NetDataReader(x.data);
+                    if (x.murder) OnMurderMsg(rd); else OnJobMsg(x.rp, rd);
+                }
+                catch (Exception e) { Plugin.L.LogWarning("[JOB] отложенное сообщение: " + e.Message); }
+            }
+        }
+
         static void OnJobMsg(RP rp, NetDataReader r)
         {
+            if (!WorldReady()) { worldMsgQueue.Add((false, rp, r.GetRemainingBytes())); return; }
             byte op = r.GetByte();
             if (!Plugin.CfgJobSync.Value) return;
             if (op == 1 && !IsHost)
@@ -11332,6 +11926,25 @@ namespace SodCoop
             {
                 OnEvidenceShared(rp, r);
             }
+            else if (op == 14) { OnComputerMsg(r, rp != null ? rp.pid : 0); }
+            else if (op == 15) { OnPageMsg(r); }
+            else if (op == 16 && !IsHost) { OnAlarmMsg(r); }
+            else if (op == 17 && !IsHost) { OnAlarmSnapshot(r); }
+            else if (op == 12 && !IsHost)
+            {
+                int n = r.GetInt();
+                for (int i = 0; i < n; i++) ApplyPrintLetter(r.GetInt(), r.GetInt());
+            }
+            else if (op == 13 && IsHost)
+            {
+                int hid = r.GetInt();
+                Human h; if (CityData.Instance.GetHuman(hid, out h, false) && h != null && h.fingerprintLoop < 0) AssignPrintLetter(h);
+            }
+            else if (op == 11)
+            {
+                int id = r.GetInt();
+                ApplyJobChoices(r, JobById(id), rp != null ? rp.pid : 0);
+            }
             else if (op == 10)
             {
                 AddObjectiveHere(rp, r);
@@ -11339,6 +11952,7 @@ namespace SodCoop
             else if (op == 9)
             {
                 int id = r.GetInt(); string name = r.GetString();
+                ApplyJobChoices(r, JobById(id), rp != null ? rp.pid : 0);
                 CompleteObjectiveHere(id, name, rp != null ? rp.pid : 0);
             }
             else if (op == 7)
@@ -11425,10 +12039,46 @@ namespace SodCoop
             int nk = el.dk != null ? el.dk.Count : 0;
             w.Put(nk);
             for (int i = 0; i < nk; i++) w.Put((int)el.dk[i]);
+            Evidence sev = null;
+            try { Toolbox.Instance.TryGetEvidence(el.id, out sev); } catch (Exception) { }
+            w.Put(EvidenceSig(sev));
             manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
             string nm = el.n ?? el.id;
             Toast("Shared with the other players: " + nm);
             Plugin.L.LogInfo($"[JOB] улика '{el.id}' отправлена другим игрокам (дело задания {jobRef})");
+        }
+
+        // «вид предмета|владелец|автор|адресат» - чем улика-предмет является, независимо от номера
+        static string EvidenceSig(Evidence ev)
+        {
+            if (ev == null) return "";
+            try
+            {
+                var it = ev.interactable;
+                string kind = it != null ? PresetNameOf(it) : (ev.preset != null ? ev.preset.name : "");
+                return kind + "|" + (ev.belongsTo != null ? ev.belongsTo.humanID : -1) + "|" + (ev.writer != null ? ev.writer.humanID : -1) + "|" + (ev.reciever != null ? ev.reciever.humanID : -1);
+            }
+            catch (Exception) { return ""; }
+        }
+
+        static Evidence FindEvidenceBySig(string sig)
+        {
+            try
+            {
+                var list = CityData.Instance.interactableDirectory;
+                for (int i = 0; list != null && i < list.Count; i++)
+                {
+                    var it = list[i]; if (it == null || it.evidence == null) continue;
+                    if (EvidenceSig(it.evidence) == sig) return it.evidence;
+                }
+                foreach (var kv in CityData.Instance.savableInteractableDictionary)
+                {
+                    var it = kv.Value; if (it == null || it.evidence == null) continue;
+                    if (EvidenceSig(it.evidence) == sig) return it.evidence;
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[JOB] поиск улики: " + e.Message); }
+            return null;
         }
 
         static void OnEvidenceShared(RP rp, NetDataReader r)
@@ -11436,10 +12086,19 @@ namespace SodCoop
             string evId = r.GetString(); int jobRef = r.GetInt(); int nk = r.GetInt();
             var keys = new Il2CppSystem.Collections.Generic.List<Evidence.DataKey>();
             for (int i = 0; i < nk; i++) keys.Add((Evidence.DataKey)r.GetInt());
+            string sig = r.AvailableBytes > 0 ? r.GetString() : "";
             int pid = rp != null ? rp.pid : 0;
             Evidence ev = null;
             bool found = false;
             try { found = Toolbox.Instance.TryGetEvidence(evId, out ev) && ev != null; } catch (Exception) { }
+            // предметы, созданные во время игры (документы в шкафах и т.п.), у игроков под разными номерами: под этим номером у меня
+            // может быть другой предмет - тогда ищем такой же по виду и владельцу/автору/адресату
+            if (sig != "" && (!found || EvidenceSig(ev) != sig))
+            {
+                var alt = FindEvidenceBySig(sig);
+                Plugin.L.LogInfo($"[JOB] улика '{evId}' от игрока {pid}: у меня под этим номером {(found ? "'" + EvidenceSig(ev) + "'" : "ничего")}, ищу '{sig}' - {(alt != null ? "нашёл " + alt.evID : "не нашёл")}");
+                ev = alt; found = alt != null;
+            }
             if (!found) { Toast($"Player {pid} shared evidence you do not have yet."); Plugin.L.LogWarning($"[JOB] улика '{evId}' от игрока {pid} у меня не найдена"); return; }
             var cp = CasePanelController.Instance;
             if (cp == null) return;
@@ -11464,8 +12123,9 @@ namespace SodCoop
 
         static void JobTick()
         {
+            try { WorldMsgQueueTick(); } catch (Exception e) { Plugin.L.LogWarning("[JOB] очередь: " + e.Message); }
             if (!Plugin.CfgJobSync.Value || manager == null || manager.ConnectedPeersCount == 0) return;
-            if (IsHost) JobHostTick();
+            if (IsHost) { JobHostTick(); try { MurderHostTick(); } catch (Exception e) { if (!murderErrLogged) { murderErrLogged = true; Plugin.L.LogWarning("[MURDER] " + e); } } }
             else if (Time.realtimeSinceStartup >= clientLoopAt)
             {
                 // у хоста задания крутит игра, у клиента - только редкий JobCreationCheck: после разговора задание ждало его
@@ -11475,9 +12135,409 @@ namespace SodCoop
             }
             EvidenceShareTick();
             PendingJobInfoTick();
+            if (Time.realtimeSinceStartup >= printAt) { printAt = Time.realtimeSinceStartup + 1f; try { PrintLettersTick(); } catch (Exception e) { Plugin.L.LogWarning("[PRINTS] " + e.Message); } }
+            if (Time.realtimeSinceStartup >= jobChoiceAt) { jobChoiceAt = Time.realtimeSinceStartup + 1f; try { JobChoicesTick(); } catch (Exception e) { Plugin.L.LogWarning("[JOB] выбор: " + e.Message); } }
         }
 
         internal static double MoneyNow() { return GcGet("money"); }
+
+        // ---------- Самопроверка без человека (Debug.AutoTest) ----------
+        // хост: грузит свежий сейв и поднимает сервер; клиент: подключается к 127.0.0.1. В игре клиент берёт задания из AutoTestJobs и
+        // засчитывает цель «позвони» (как после звонка), хост заводит дело об убийстве. Через минуту оба пишут, что у них вышло, и выходят
+        static int atStage; static float atAt, atInGameAt, atCaseAt; static bool atCaseDone;
+
+        static void AtLog(string m) { Plugin.L.LogInfo("[AUTOTEST] " + m); }
+
+        internal static void AutoTestTick()
+        {
+            string mode = (Plugin.CfgAutoTest.Value ?? "").Trim().ToLowerInvariant();
+            if (mode != "host" && mode != "client") return;
+            float now = Time.realtimeSinceStartup;
+            Application.runInBackground = true;
+            if (now < atAt) return;
+            bool menu = InMainMenu();
+            if (atStage == 0)
+            {
+                if (!menu) { atAt = now + 1f; return; }
+                atAt = now + 5f; atStage = 1; AtLog("главное меню открыто, режим " + mode);
+                return;
+            }
+            if (atStage == 1)
+            {
+                if (mode == "host")
+                {
+                    var saves = MenuAuto.SaveNames();
+                    if (saves.Count == 0) { AtLog("нет сейвов"); atStage = 99; return; }
+                    ApplyHost("autotest", "", Plugin.CfgPort.Value);
+                    MenuAuto.LoadSave(saves[0]);
+                    AtLog("хост: гружу " + saves[0]);
+                }
+                else
+                {
+                    ApplyClient("127.0.0.1", Plugin.CfgPort.Value, "");
+                    StartTransfer();
+                    AtLog("клиент: подключаюсь");
+                }
+                atStage = 2; atAt = now + 5f;
+                return;
+            }
+            bool inGame = !menu && Player.Instance != null && manager != null && manager.ConnectedPeersCount > 0;
+            if (atStage == 2)
+            {
+                if (mode == "client" && !inGame && now > atInGameAt + 0f && serverPeer == null && !xferMode && manager == null && RtMode == NetMode.Off) { atStage = 1; atAt = now + 20f; AtLog("клиент: хост ещё не готов, повторю"); return; }
+                if (!inGame) { atAt = now + 1f; return; }
+                atStage = 3; atInGameAt = now; atAt = now + 40f; AtLog("в игре, второй игрок на связи - жду 40 с");
+                return;
+            }
+            // окно в фоне - игра встаёт на паузу, а цели заданий ставятся только во время игры
+            if (atStage >= 3 && atStage <= 5) { try { var sd = SessionData.Instance; if (sd != null && !sd.play) sd.ResumeGame(); } catch (Exception) { } }
+            if (mode == "host" && atStage >= 3 && atStage <= 5 && !atCaseDone && now >= atCaseAt)
+            {
+                atCaseAt = now + 10f;
+                try
+                {
+                    var mc = MurderController.Instance; var cm = mc != null ? mc.GetCurrentMurder() : null;
+                    if (cm != null && cm.location != null)
+                    {
+                        atCaseDone = true;
+                        AtLog($"убийство {cm.murderID} ({cm.state}) место {cm.location.name}, дело у меня: {(mc.currentActiveCase != null)} - завожу дело");
+                        GameplayController.Instance.NewMurderCaseNotify(cm.location);
+                    }
+                }
+                catch (Exception e) { atCaseDone = true; AtLog("дело об убийстве: " + e.Message); }
+            }
+            if (atStage == 3)
+            {
+                if (mode == "client")
+                {
+                    foreach (var part in (Plugin.CfgAutoTestJobs.Value ?? "").Split(','))
+                    {
+                        int id; if (!int.TryParse(part.Trim(), out id)) continue;
+                        var j = JobById(id);
+                        if (j == null) { AtLog($"задание {id}: нет"); continue; }
+                        AtLog($"задание {id} ({(j.preset != null ? j.preset.name : "?")}, {j.state}, взято {j.accepted}): беру");
+                        try { if (!j.accepted) j.AcceptJob(); } catch (Exception e) { AtLog($"задание {id}: взять - {e.Message}"); }
+                    }
+                }
+                atStage = 4; atAt = now + 25f;
+                return;
+            }
+            if (atStage == 4)
+            {
+                if (mode == "client")
+                {
+                    foreach (var part in (Plugin.CfgAutoTestJobs.Value ?? "").Split(','))
+                    {
+                        int id; if (!int.TryParse(part.Trim(), out id)) continue;
+                        var j = JobById(id); var c = j != null ? j.thisCase : null;
+                        if (c == null) { AtLog($"задание {id}: дела нет"); continue; }
+                        var call = new System.Collections.Generic.List<Objective>();
+                        if (c.currentActiveObjectives != null) foreach (var o in c.currentActiveObjectives) if (o != null && !o.isComplete && o.queueElement != null && o.queueElement.entryRef == "Call") call.Add(o);
+                        foreach (var o in call) { try { o.Complete(); } catch (Exception e) { AtLog("цель: " + e.Message); } }
+                        AtLog($"задание {id}: засчитал звонок ({call.Count} целей)");
+                    }
+                }
+                atStage = 5; atAt = now + 150f;
+                return;
+            }
+            if (atStage == 5)
+            {
+                var ctl = SideJobController.Instance;
+                if (ctl != null && ctl.allJobsDictionary != null)
+                    foreach (var kv in ctl.allJobsDictionary)
+                    {
+                        var j = kv.Value; if (j == null || !j.accepted) continue;
+                        var sb = new System.Text.StringBuilder();
+                        foreach (var x in JobChoices(j)) sb.Append(x.k).Append('=').Append(x.a).Append(x.b != 0 || x.c != 0 ? "," + x.b + "," + x.c : "").Append(' ');
+                        sb.Append("| цели: ");
+                        var c = j.thisCase;
+                        if (c != null && c.currentActiveObjectives != null) foreach (var o in c.currentActiveObjectives) if (o != null) sb.Append('[').Append(o.queueElement != null ? o.queueElement.entryRef : "?").Append(": ").Append(o.name).Append(o.isComplete ? " (выполнена)" : "").Append("] ");
+                        AtLog($"ИТОГ задание {j.jobID} этап {j.phase}: выбор {sb}");
+                    }
+                try
+                {
+                    var mc = MurderController.Instance; var cm = mc != null ? mc.GetCurrentMurder() : null;
+                    AtLog($"ИТОГ убийство: {(cm != null ? cm.murderID + " " + cm.state + " убийца " + cm.murdererID + " жертва " + cm.victimID : "нет")}, дело у меня: {(mc != null && mc.currentActiveCase != null ? mc.currentActiveCase.name : "нет")}");
+                }
+                catch (Exception e) { AtLog("убийство: " + e.Message); }
+                atStage = 6; atAt = now + (mode == "host" ? 15f : 5f);
+                return;
+            }
+            if (atStage == 6) { AtLog("готово, выхожу"); atStage = 99; Application.Quit(); }
+        }
+
+        // ---------- Убийства ----------
+        // Убийства придумывает и совершает хост (у клиента MurderController выключен, см. MurderClientBlockPatch). Хост пересылает убийство
+        // (MurderController.Murder, сохраняемый объект игры) с его предметами в формате сейва; клиент грузит, как SaveStateController:
+        // новое - в список активных/прошлых и LoadSerializedData, уже есть - переписывает сохраняемые поля. Тело жертвы и сама смерть
+        // приходят с горожанами; дело об убийстве у каждого игрока своё (его создаёт игра, когда игрок находит тело)
+        static bool murderErrLogged, applyingMurderCase;
+
+        static bool MurderLocKey(NewGameLocation loc, out byte kind, out int id)
+        {
+            kind = 0; id = 0;
+            var ad = loc.TryCast<NewAddress>(); var st = loc.TryCast<StreetController>();
+            if (ad != null) { kind = 1; id = ad.id; } else if (st != null) { kind = 2; id = st.streetID; }
+            return kind != 0;
+        }
+
+        // для какого убийства дело у меня уже заведено (своё или от другого игрока) - второе такое же дело не заводим и не рассылаем
+        static readonly System.Collections.Generic.HashSet<int> murderCaseSeen = new System.Collections.Generic.HashSet<int>();
+
+        static string MurderCaseName()
+        {
+            try { var mc = MurderController.Instance; return mc != null && mc.currentActiveCase != null ? (mc.currentActiveCase.name ?? "") : ""; } catch (Exception) { return ""; }
+        }
+
+        static bool MurderCaseOnBoard()
+        {
+            try
+            {
+                var mc = MurderController.Instance; var cp = CasePanelController.Instance;
+                if (mc == null || cp == null || mc.currentActiveCase == null || cp.activeCases == null) return false;
+                foreach (var c in cp.activeCases) if (c != null && c.Pointer == mc.currentActiveCase.Pointer) return true;
+            }
+            catch (Exception) { }
+            return false;
+        }
+
+        static int CurrentMurderId()
+        {
+            try { var mc = MurderController.Instance; var m = mc != null ? mc.GetCurrentMurder() : null; return m != null ? m.murderID : -1; } catch (Exception) { return -1; }
+        }
+
+        internal static void OnMurderCaseNotify(NewGameLocation loc) { SendMurderCase(loc); }
+
+        internal static void OnVictimDiscovered()
+        {
+            NewGameLocation loc = null;
+            try { var mc = MurderController.Instance; var m = mc != null ? mc.GetCurrentMurder() : null; if (m != null) loc = m.location; } catch (Exception) { }
+            if (loc != null) SendMurderCase(loc); else { int mid = CurrentMurderId(); if (mid >= 0) murderCaseSeen.Add(mid); }
+        }
+
+        static void SendMurderCase(NewGameLocation loc)
+        {
+            int mid = CurrentMurderId();
+            bool first = murderCaseSeen.Add(mid);
+            if (applyingMurderCase || !first || loc == null || manager == null || manager.ConnectedPeersCount == 0) return;
+            byte kind; int id;
+            if (!MurderLocKey(loc, out kind, out id)) { Plugin.L.LogWarning("[MURDER] новое дело: место не адрес и не улица"); return; }
+            var w = new NetDataWriter(); w.Put(MsgMurder); w.Put((byte)3); w.Put(kind); w.Put(id); w.Put(false); w.Put(MurderCaseName());
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+            Plugin.L.LogInfo($"[MURDER] новое дело об убийстве {mid} ({loc.name}) - сообщаю другим");
+        }
+        static float murderPollAt;
+        static readonly System.Collections.Generic.Dictionary<int, string> murderSentSig = new System.Collections.Generic.Dictionary<int, string>();
+
+        internal static bool BlockLocalMurders()
+        {
+            return manager != null && RtMode == NetMode.Client;
+        }
+
+        static string MurderSig(MurderController.Murder m, bool active)
+        {
+            return active + "|" + (int)m.state + "|" + m.murdererID + "|" + m.victimID + "|" + m.victimSiteID + "|" + m.weaponID + "|" + m.ammoID + "|" + m.callingCardID + "|" +
+                (m.graffitiIDs != null ? m.graffitiIDs.Count : 0) + "|" + m.killTime + "|" + (int)m.ransomPhase + "|" + m.monkierPre + m.monkierPost + "|" + m.ransomSiteID + "|" + m.meetRestaurantID;
+        }
+
+        static System.Collections.Generic.List<(MurderController.Murder m, bool active)> AllMurders()
+        {
+            var res = new System.Collections.Generic.List<(MurderController.Murder, bool)>();
+            var mc = MurderController.Instance;
+            if (mc == null) return res;
+            if (mc.activeMurders != null) foreach (var m in mc.activeMurders) if (m != null) res.Add((m, true));
+            if (mc.inactiveMurders != null) foreach (var m in mc.inactiveMurders) if (m != null) res.Add((m, false));
+            return res;
+        }
+
+        static void MurderHostTick()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (now < murderPollAt) return;
+            murderPollAt = now + 2f;
+            var ids = new System.Collections.Generic.List<int>();
+            foreach (var x in AllMurders())
+            {
+                ids.Add(x.m.murderID);
+                string sig = MurderSig(x.m, x.active), old;
+                if (murderSentSig.TryGetValue(x.m.murderID, out old) && old == sig) continue;
+                if (SendMurder(x.m, x.active, null)) murderSentSig[x.m.murderID] = sig;
+            }
+        }
+
+        // предметы убийства: activeMurderItems, оружие, патроны, визитка, граффити (кроме тех, что у кого-то в кармане)
+        static System.Collections.Generic.List<Interactable> MurderItems(MurderController.Murder m)
+        {
+            var res = new System.Collections.Generic.List<Interactable>();
+            var ids = new System.Collections.Generic.HashSet<int>();
+            System.Action<Interactable> add = it => { try { if (it != null && it.inInventory == null && ids.Add(it.id)) res.Add(it); } catch (Exception) { } };
+            try { if (m.activeMurderItems != null) foreach (var kv in m.activeMurderItems) add(kv.Value); } catch (Exception) { }
+            try { add(m.weapon); add(m.ammo); add(m.callingCard); } catch (Exception) { }
+            try { if (m.graffiti != null) foreach (var g in m.graffiti) add(g); } catch (Exception) { }
+            try { if (m.graffitiIDs != null) foreach (var gid in m.graffitiIDs) { Interactable g; if (CityData.Instance.savableInteractableDictionary.TryGetValue(gid, out g)) add(g); } } catch (Exception) { }
+            return res;
+        }
+
+        static bool SendMurder(MurderController.Murder m, bool active, NetPeer to)
+        {
+            try
+            {
+                var data = new StateSaveData();
+                data.murders = new Il2CppSystem.Collections.Generic.List<MurderController.Murder>();
+                data.murders.Add(m);
+                data.interactables = new Il2CppSystem.Collections.Generic.List<Interactable>();
+                var items = MurderItems(m);
+                foreach (var it in items) data.interactables.Add(it);
+                var bytes = System.Text.Encoding.UTF8.GetBytes(JsonUtility.ToJson(data));
+                var w = new NetDataWriter(); w.Put(MsgMurder); w.Put((byte)1); w.Put(active); w.Put(m.murderID); w.PutBytesWithLength(bytes);
+                if (to != null) to.Send(w, DeliveryMethod.ReliableOrdered); else manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+                Plugin.L.LogInfo($"[MURDER] убийство {m.murderID} ({m.state}, {(active ? "идёт" : "прошлое")}, убийца {m.murdererID}, жертва {m.victimID}) отправлено: предметов {items.Count}, {bytes.Length} байт");
+                return true;
+            }
+            catch (Exception e) { if (!murderErrLogged) { murderErrLogged = true; Plugin.L.LogWarning("[MURDER] отправка: " + e); } return false; }
+        }
+
+        static void SendMurderSnapshot(NetPeer peer)
+        {
+            var ids = new System.Collections.Generic.List<int>();
+            foreach (var x in AllMurders())
+            {
+                ids.Add(x.m.murderID);
+                if (SendMurder(x.m, x.active, peer)) murderSentSig[x.m.murderID] = MurderSig(x.m, x.active);
+            }
+            var w = new NetDataWriter(); w.Put(MsgMurder); w.Put((byte)2); w.Put(ids.Count);
+            foreach (var id in ids) w.Put(id);
+            peer.Send(w, DeliveryMethod.ReliableOrdered);
+            // дело об убийстве у хоста уже заведено (тело нашли до подключения) - клиенту тоже, если у него своего нет
+            try
+            {
+                var mc = MurderController.Instance;
+                var cm = mc != null ? mc.GetCurrentMurder() : null;
+                if (mc != null && mc.currentActiveCase != null && cm != null && cm.location != null)
+                {
+                    byte kind; int lid;
+                    if (MurderLocKey(cm.location, out kind, out lid))
+                    {
+                        var wc = new NetDataWriter(); wc.Put(MsgMurder); wc.Put((byte)3); wc.Put(kind); wc.Put(lid); wc.Put(true); wc.Put(MurderCaseName());
+                        peer.Send(wc, DeliveryMethod.ReliableOrdered);
+                    }
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[MURDER] дело в снимке: " + e.Message); }
+        }
+
+        static void OnMurderMsg(NetDataReader r)
+        {
+            if (!WorldReady()) { worldMsgQueue.Add((true, null, r.GetRemainingBytes())); return; }
+            byte op = r.GetByte();
+            if (IsHost && op != 3) return;   // хосту от клиентов приходит только «нашёл тело»
+            if (op == 1)
+            {
+                bool active = r.GetBool(); int id = r.GetInt(); var bytes = r.GetBytesWithLength();
+                ImportMurder(id, active, bytes);
+            }
+            else if (op == 3)
+            {
+                byte kind = r.GetByte(); int locId = r.GetInt(); bool snap = r.GetBool(); string caseName = r.AvailableBytes > 0 ? r.GetString() : "";
+                if (snap && MurderCaseOnBoard()) return;
+                if (murderCaseSeen.Contains(CurrentMurderId()) && MurderCaseOnBoard()) { Plugin.L.LogInfo("[MURDER] новое дело от другого игрока - у меня оно уже есть"); return; }
+                NewGameLocation loc = null;
+                try
+                {
+                    if (kind == 1) { NewAddress ad; if (CityData.Instance.addressDictionary.TryGetValue(locId, out ad)) loc = ad; }
+                    else if (kind == 2) { foreach (var st in CityData.Instance.streetDirectory) if (st != null && st.streetID == locId) { loc = st; break; } }
+                }
+                catch (Exception) { }
+                if (loc == null) { Plugin.L.LogWarning($"[MURDER] новое дело: место {kind}/{locId} у меня не найдено"); return; }
+                applyingMurderCase = true;
+                try { GameplayController.Instance.NewMurderCaseNotify(loc); Plugin.L.LogInfo($"[MURDER] новое дело об убийстве: {loc.name}"); }
+                catch (Exception e) { Plugin.L.LogWarning("[MURDER] новое дело: " + e.Message); }
+                // OnVictimDiscovery по своим проверкам может дело не завести (у клиента было уведомление, а на доске пусто) - заводим, как он
+                try
+                {
+                    if (!MurderCaseOnBoard())
+                    {
+                        var mc1 = MurderController.Instance; var cp1 = CasePanelController.Instance;
+                        Plugin.L.LogInfo($"[MURDER] дела на доске нет (у убийцы дело: {(mc1 != null && mc1.currentActiveCase != null ? mc1.currentActiveCase.name : "нет")}) - завожу сам");
+                        var nc = cp1.CreateNewCase(Case.CaseType.murder, (Case.CaseStatus)0, true, string.IsNullOrEmpty(caseName) ? "Murder" : caseName);
+                        if (nc != null) mc1.AssignActiveCase(nc);
+                        Plugin.L.LogInfo($"[MURDER] дело заведено: {(nc != null ? nc.name : "не вышло")}, на доске: {MurderCaseOnBoard()}");
+                    }
+                }
+                catch (Exception e) { Plugin.L.LogWarning("[MURDER] завести дело: " + e.Message); }
+                finally { applyingMurderCase = false; }
+            }
+            else if (op == 2)
+            {
+                int n = r.GetInt(); var alive = new System.Collections.Generic.HashSet<int>();
+                for (int i = 0; i < n; i++) alive.Add(r.GetInt());
+                var mc = MurderController.Instance; if (mc == null) return;
+                int gone = 0;
+                foreach (var lst in new[] { mc.activeMurders, mc.inactiveMurders })
+                {
+                    if (lst == null) continue;
+                    for (int i = lst.Count - 1; i >= 0; i--) if (lst[i] != null && !alive.Contains(lst[i].murderID)) { lst.RemoveAt(i); gone++; }
+                }
+                Plugin.L.LogInfo($"[MURDER] убийств у хоста: {n}; убрано у меня лишних (из старого сейва): {gone}");
+            }
+        }
+
+        // сохраняемые поля убийства (простые типы, строки, перечисления, списки номеров) - через свойства interop-обёртки
+        static System.Reflection.PropertyInfo[] murderProps;
+
+        static void CopyMurderFields(MurderController.Murder from, MurderController.Murder to)
+        {
+            if (murderProps == null)
+            {
+                var l = new System.Collections.Generic.List<System.Reflection.PropertyInfo>();
+                foreach (var pr in typeof(MurderController.Murder).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.DeclaredOnly))
+                {
+                    if (!pr.CanRead || !pr.CanWrite) continue;
+                    var t = pr.PropertyType;
+                    if (t.IsPrimitive || t.IsEnum || t == typeof(string) || t == typeof(Vector3Int) || t == typeof(Il2CppSystem.Collections.Generic.List<int>)) l.Add(pr);
+                }
+                murderProps = l.ToArray();
+            }
+            foreach (var pr in murderProps) { try { pr.SetValue(to, pr.GetValue(from)); } catch (Exception) { } }
+        }
+
+        static void ImportMurder(int id, bool active, byte[] bytes)
+        {
+            var obj = JsonUtility.FromJson(System.Text.Encoding.UTF8.GetString(bytes), Il2CppInterop.Runtime.Il2CppType.Of<StateSaveData>());
+            var data = obj != null ? obj.TryCast<StateSaveData>() : null;
+            if (data == null || data.murders == null || data.murders.Count == 0) { Plugin.L.LogWarning($"[MURDER] убийство {id}: не разобрано"); return; }
+            int newItems, updItems;
+            ImportItems(data.interactables, "[MURDER]", "убийства " + id, out newItems, out updItems);
+            var nm = data.murders[0];
+            var mc = MurderController.Instance;
+            if (mc == null || nm == null) return;
+            if (mc.activeMurders == null) mc.activeMurders = new Il2CppSystem.Collections.Generic.List<MurderController.Murder>();
+            if (mc.inactiveMurders == null) mc.inactiveMurders = new Il2CppSystem.Collections.Generic.List<MurderController.Murder>();
+            MurderController.Murder cur = null; bool curActive = false;
+            foreach (var x in AllMurders()) if (x.m.murderID == id) { cur = x.m; curActive = x.active; break; }
+            bool isNew = cur == null;
+            if (isNew) cur = nm;
+            else CopyMurderFields(nm, cur);
+            if (isNew || curActive != active)
+            {
+                mc.activeMurders.Remove(cur); mc.inactiveMurders.Remove(cur);
+                (active ? mc.activeMurders : mc.inactiveMurders).Add(cur);
+            }
+            try { cur.LoadSerializedData(); } catch (Exception e) { Plugin.L.LogWarning($"[MURDER] убийство {id}: {e.Message}"); }
+            // текущий убийца и жертва - по идущему убийству (по ним игра проверяет ответы в деле)
+            try
+            {
+                if (active)
+                {
+                    if (cur.murderer != null) mc.currentMurderer = cur.murderer;
+                    if (cur.victim != null) mc.currentVictim = cur.victim;
+                    if (cur.preset != null) mc.murderPreset = cur.preset;
+                    if (cur.mo != null) mc.chosenMO = cur.mo;
+                }
+            }
+            catch (Exception) { }
+            Plugin.L.LogInfo($"[MURDER] убийство {id} {(isNew ? "получено" : "обновлено")} ({cur.state}, {(active ? "идёт" : "прошлое")}, убийца {cur.murdererID}, жертва {cur.victimID}): новых предметов {newItems}, обновлено {updItems}");
+        }
 
         // ---------- Стук в дверь ----------
         // NewDoor.OnKnock -> GameplayController.KnockOnDoor: корутина со звуками стука и сообщение жильцам. Стучащий (actor) - источник
@@ -11702,7 +12762,7 @@ namespace SodCoop
 
         static bool IsRelayed(byte t)
         {
-            return t == MsgPos || t == MsgAction || t == MsgItem || t == MsgHeld || t == MsgObj || t == MsgItemEv || t == MsgDoor || t == MsgBodyFx || t == MsgShot || t == MsgWeapon || t == MsgSound || t == MsgDown || t == MsgRevive || t == MsgElevator || t == MsgKnock || t == MsgJob;
+            return t == MsgPos || t == MsgAction || t == MsgItem || t == MsgHeld || t == MsgObj || t == MsgItemEv || t == MsgDoor || t == MsgBodyFx || t == MsgShot || t == MsgWeapon || t == MsgSound || t == MsgDown || t == MsgRevive || t == MsgElevator || t == MsgKnock || t == MsgJob || t == MsgMurder;
         }
 
         static bool NeedsCtx(byte t)
@@ -11795,6 +12855,9 @@ namespace SodCoop
                     SendDoorSnapshot(peer); SendRoomSnapshot(peer); SendWindowSnapshot(peer); SendTime(); SendSoldSnapshot(peer); SendFurnSnapshot(peer);
                     try { SendElevatorState(peer, true); } catch (Exception e) { Plugin.L.LogWarning("[LIFT] снимок: " + e.Message); }
                     try { SendJobSnapshot(peer); } catch (Exception e) { Plugin.L.LogWarning("[JOB] снимок: " + e.Message); }
+                    try { SendMurderSnapshot(peer); } catch (Exception e) { Plugin.L.LogWarning("[MURDER] снимок: " + e.Message); }
+                    try { SendPrintSnapshot(peer); } catch (Exception e) { Plugin.L.LogWarning("[PRINTS] снимок: " + e.Message); }
+                    try { SendAlarmSnapshot(peer); } catch (Exception e) { Plugin.L.LogWarning("[ALARM] снимок: " + e.Message); }
                     foreach (var o in players)
                     {
                         if (o == me || o.peer == null) continue;
@@ -11918,6 +12981,10 @@ namespace SodCoop
             else if (type == MsgBodyFx)
             {
                 OnBodyFx(reader);
+            }
+            else if (type == MsgMurder)
+            {
+                try { OnMurderMsg(reader); } catch (Exception e) { Plugin.L.LogWarning("[MURDER] " + e); }
             }
             else if (type == MsgJob)
             {
