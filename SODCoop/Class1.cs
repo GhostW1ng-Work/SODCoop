@@ -114,6 +114,7 @@ namespace SodCoop
         internal static ConfigEntry<bool> CfgSeedLook;
         internal static ConfigEntry<float> CfgNpcRate;
         internal static ConfigEntry<float> CfgNpcRange;
+        internal static ConfigEntry<bool> CfgWorldNeverPauses;
         internal static ConfigEntry<bool> CfgMapIcon;
         internal static ConfigEntry<float> CfgMapIconSize;
         internal static ConfigEntry<int> CfgCarryObjValue;
@@ -315,6 +316,8 @@ namespace SodCoop
             CfgPvp = Config.Bind("Npc", "PlayerVsPlayer", true, "Players can damage each other (client hits the host through its hidden double citizen)");
             CfgNpcSync = Config.Bind("Npc", "Sync", true, "The host controls the citizens: their positions and animations are sent to the client (the client's NPC AI is paused)");
             CfgNpcRate = Config.Bind("Npc", "SendInterval", 0.1f, "Seconds between citizen updates sent by the host");
+            CfgWorldNeverPauses = Config.Bind("Npc", "WorldNeverPauses", true,
+                "In multiplayer the pause menu, case board, inventory and other pausing windows do not stop the world: time and citizens keep going (the player still cannot move while a menu is open)");
             CfgNpcRange = Config.Bind("Npc", "NearRange", 120f, "Citizens closer than this many meters to any player are sent every update, the rest are sent in a slow rotation");
             CfgMapIcon = Config.Bind("Map", "ShowOtherPlayer", true, "Show the other player as a green circle on the minimap and the big map");
             CfgMapIconSize = Config.Bind("Map", "IconSize", 18f, "Size of the other player's icon on the map (pixels)");
@@ -368,7 +371,7 @@ namespace SodCoop
             Harmony.CreateAndPatchAll(typeof(PlayerPatch));
             Harmony.CreateAndPatchAll(typeof(MeleePatch));
             Harmony.CreateAndPatchAll(typeof(BlockPatch));
-            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SelfTripFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch), typeof(ProfileEventPatch), typeof(KnockPatch), typeof(BargePatch), typeof(JobCreationPatch), typeof(JobAcceptPatch), typeof(CaseResolvePatch), typeof(PinnedMenuPatch), typeof(ShareCommandPatch), typeof(PhoneCallLogPatch), typeof(PhoneCallLogPatch2), typeof(JobInfoPatch), typeof(ObjectiveCompletePatch), typeof(ObjectiveAddPatch), typeof(MurderClientBlockPatch), typeof(MurderCaseNotifyPatch), typeof(MurderDiscoveryPatch), typeof(BuildingAlarmPatch), typeof(AddressAlarmPatch), typeof(ComputerPatch), typeof(PagePatch), typeof(CaseStatusPatch), typeof(RestrainPatch) })
+            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SelfTripFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch), typeof(ProfileEventPatch), typeof(KnockPatch), typeof(BargePatch), typeof(JobCreationPatch), typeof(JobAcceptPatch), typeof(CaseResolvePatch), typeof(PinnedMenuPatch), typeof(ShareCommandPatch), typeof(PhoneCallLogPatch), typeof(PhoneCallLogPatch2), typeof(JobInfoPatch), typeof(ObjectiveCompletePatch), typeof(ObjectiveAddPatch), typeof(MurderClientBlockPatch), typeof(MurderCaseNotifyPatch), typeof(MurderDiscoveryPatch), typeof(BuildingAlarmPatch), typeof(AddressAlarmPatch), typeof(ComputerPatch), typeof(PagePatch), typeof(CaseStatusPatch), typeof(RestrainPatch), typeof(TickRatePatch), typeof(GooseChasePatch), typeof(WorldAlivePatch), typeof(KeepInvokesPatch), typeof(PauseReentryPatch) })
             {
                 try { Harmony.CreateAndPatchAll(t); }
                 catch (Exception e) { L.LogWarning($"[PATCH] {t.Name}: {e.Message}"); }
@@ -1079,6 +1082,70 @@ namespace SodCoop
         {
             try { Net.OnCaseResolved(__instance, __state); } catch (Exception e) { Plugin.L.LogWarning("[JOB] " + e.Message); }
         }
+    }
+
+    // Игра часто обновляет только жителей рядом со своим игроком. У хоста жители возле клиента почти не думали и стояли:
+    // после расчёта игры поднимаем им частоту, как рядом с игроком
+    [HarmonyPatch(typeof(Human), "UpdateTickRateOnProx")]
+    public static class TickRatePatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(Human __instance)
+        {
+            try { Net.RaiseTickNearPlayers(__instance); } catch (Exception) { }
+        }
+    }
+
+    // Ответ на звонок «погони» (SideJob.OnGooseChaseSuccess): игра создаёт кейс с данными задания только у ответившего.
+    // У клиента - не создаём, а просим хоста: его кейс и цели расходятся всем обычной синхронизацией задания
+    [HarmonyPatch(typeof(SideJob), "OnGooseChaseSuccess")]
+    public static class GooseChasePatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(SideJob __instance)
+        {
+            try { return Net.OnGooseChaseSuccess(__instance); } catch (Exception e) { Plugin.L.LogWarning("[JOB] погоня: " + e.Message); return true; }
+        }
+    }
+
+    // В мультиплеере мир не встаёт на паузу. Пауза в игре - это флаг SessionData.play, его читают и меню, и окна, поэтому
+    // его не трогаем, а включаем только на время обновления мира: время, жители, убийства
+    [HarmonyPatch]
+    public static class WorldAlivePatch
+    {
+        [HarmonyTargetMethods]
+        public static IEnumerable<System.Reflection.MethodBase> TargetMethods()
+        {
+            yield return AccessTools.Method(typeof(SessionData), "Update");
+            yield return AccessTools.Method(typeof(CitizenBehaviour), "Update");
+            yield return AccessTools.Method(typeof(CitizenBehaviour), "LateUpdate");
+            yield return AccessTools.Method(typeof(CitizenBehaviour), "RoutineCheck");
+            yield return AccessTools.Method(typeof(CitizenBehaviour), "GameWorldCheck");
+            yield return AccessTools.Method(typeof(CitizenBehaviour), "LightLevelLoop");
+            yield return AccessTools.Method(typeof(MurderController), "Update");
+        }
+
+        [HarmonyPrefix]
+        public static void Prefix(out bool __state) { __state = Net.ForcePlayBegin(); }
+
+        [HarmonyPostfix]
+        public static void Postfix(bool __state) { if (__state) Net.ForcePlayEnd(); }
+    }
+
+    // На паузе игра снимает повторяющиеся проверки жителей (распорядок, мир) - в мультиплеере оставляем их работать
+    [HarmonyPatch(typeof(CitizenBehaviour), "GameSpeedChange")]
+    public static class KeepInvokesPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(CitizenBehaviour __instance) { return Net.OnGameSpeedChange(__instance); }
+    }
+
+    // Пока мир обновляется с включённым флагом, игра может решить "поставить паузу" (например, окно потеряло фокус) - не даём
+    [HarmonyPatch(typeof(SessionData), "PauseGame")]
+    public static class PauseReentryPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix() { return !Net.ForcingPlay; }
     }
 
     // Бланк дела взят (Case.SetStatus handInCollected) -> у остальных бланк этого дела тоже взят
@@ -3170,6 +3237,7 @@ namespace SodCoop
             public int remoteSeatId = -1, puppetSeatId = -1;
             public float remoteDrunk;
             public int remoteElevId = -1; public float remoteElevDy;
+            public bool remoteFlash; public float remotePitch;
             public float sitK;
             public float crouchBoneK;
             public float crouchAnimK;
@@ -3273,6 +3341,7 @@ namespace SodCoop
             remoteSeatId = r.remoteSeatId; puppetSeatId = r.puppetSeatId;
             remoteDrunk = r.remoteDrunk;
             remoteElevId = r.remoteElevId; remoteElevDy = r.remoteElevDy;
+            remoteFlash = r.remoteFlash; remotePitch = r.remotePitch;
             sitK = r.sitK;
             crouchBoneK = r.crouchBoneK;
             crouchAnimK = r.crouchAnimK;
@@ -3358,6 +3427,7 @@ namespace SodCoop
             r.remoteSeatId = remoteSeatId; r.puppetSeatId = puppetSeatId;
             r.remoteDrunk = remoteDrunk;
             r.remoteElevId = remoteElevId; r.remoteElevDy = remoteElevDy;
+            r.remoteFlash = remoteFlash; r.remotePitch = remotePitch;
             r.sitK = sitK;
             r.crouchBoneK = crouchBoneK;
             r.crouchAnimK = crouchAnimK;
@@ -3779,6 +3849,8 @@ namespace SodCoop
         // другой игрок в кабине лифта: номер лифта и высота ног над полом кабины. Лифт у каждого едет своей логикой и чуть по-своему,
         // поэтому аватар ставим по моей кабине - иначе он трясся и проваливался сквозь пол едущего лифта
         static int remoteElevId = -1; static float remoteElevDy;
+        // фонарик другого игрока и наклон его взгляда (куда светит)
+        static bool remoteFlash; static float remotePitch;
         static float remoteDrunk;       // насколько пьян другой игрок (0..1): параметр "drunk" аниматора горожан включает пьяную походку
         static int puppetSeatId = -1;   // хост: сиденье, где двойник этого игрока записан пользователем (горожане туда не сядут)
         static bool seatSnapped;        // аватар поставлен в точку сиденья, как сидит горожанин
@@ -4485,6 +4557,9 @@ namespace SodCoop
                         int elevId = -1; float elevDy = 0f;
                         try { ElevatorUnder(p, feetSend, out elevId, out elevDy); } catch (Exception) { }
                         w.Put(elevId); w.Put(elevDy);
+                        bool flashOn = false; try { var fpc = FirstPersonItemController.Instance; flashOn = fpc != null && fpc.flashlight; } catch (Exception) { }
+                        float pitch = 0f; try { var cm = Camera.main; if (cm != null) pitch = Mathf.DeltaAngle(0f, cm.transform.eulerAngles.x); } catch (Exception) { }
+                        w.Put(flashOn); w.Put(pitch);
                         manager.SendToAll(w, DeliveryMethod.Sequenced);
                         if (curItem != sentItem || Time.realtimeSinceStartup > itemSendAt)
                         {
@@ -4522,6 +4597,7 @@ namespace SodCoop
                     if (avatar != null)
                     {
                         var tr = avatar.transform;
+                        try { AvatarFlash(avatar, targetYaw); } catch (Exception e) { if (!flashErrLogged) { flashErrLogged = true; Plugin.L.LogWarning("[FLASH] " + e.Message); } }
                         Vector3 tp = targetPos + new Vector3(0f, Plugin.CfgAvatarYOffset.Value, 0f);
                         Quaternion tq = Quaternion.Euler(0f, targetYaw + Plugin.CfgAvatarYawOffset.Value, 0f);
                         // сидит: ставим туда же, где на этом сиденье сидит горожанин (если игрок не сел заметно в стороне, например на край дивана)
@@ -5580,6 +5656,40 @@ namespace SodCoop
         sealed class LeverWant { public bool val; public float until, fixAt; public int fixes; }
         static readonly System.Collections.Generic.Dictionary<int, LeverWant> leverWant = new System.Collections.Generic.Dictionary<int, LeverWant>();
 
+        // Рычаг может двигаться как дверца (DoorMovementController): положение тогда держит он и игра выставляет sw0 по нему.
+        // Ставим и его, и sw0; что было и что стало - в лог, чтобы понять, кто возвращает рычаг
+        static readonly System.Collections.Generic.Dictionary<int, DoorMovementController> leverCtl = new System.Collections.Generic.Dictionary<int, DoorMovementController>();
+
+        static DoorMovementController LeverCtl(Interactable lev)
+        {
+            DoorMovementController c;
+            if (leverCtl.TryGetValue(lev.id, out c)) return c;
+            float d;
+            c = FindMoveCtl(NameHash(PresetNameOf(lev)), lev.wPos, out d);
+            try { if (c != null && c.interactable != null && c.interactable.Pointer != lev.Pointer) c = null; } catch (Exception) { c = null; }
+            leverCtl[lev.id] = c;
+            Plugin.L.LogInfo($"[SWITCH] рычаг '{PresetNameOf(lev)}' id={lev.id}: {(c != null ? "двигается как дверца (" + c.GetIl2CppType().Name + "), isOpen=" + c.isOpen : "своего механизма нет")}");
+            return c;
+        }
+
+        static void SetLever(Interactable lev, bool val, string why)
+        {
+            var c = LeverCtl(lev);
+            bool b0 = lev.sw0, o0 = c != null && c.isOpen;
+            applyingDoor = true;
+            try
+            {
+                // настоящее положение рычага - число 0..1 (extra state); вкл/выкл игра через кадр выставляет по нему
+                float want = val ? 1f : 0f;
+                if (Mathf.Abs(lev.GetExtraStateValue() - want) > 0.01f) lev.SetExtraStateValue(want, true);
+                if (lev.sw0 != val) lev.SetSwitchState(val, DoorActor(), true, true, false);
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[SWITCH] рычаг: " + e.Message); }
+            finally { applyingDoor = false; }
+            float ev = -1f; try { ev = lev.GetExtraStateValue(); } catch (Exception) { }
+            Plugin.L.LogInfo($"[SWITCH] {why}: рычаг '{PresetNameOf(lev)}' -> {val}: sw0 {b0}->{lev.sw0}" + (c != null ? $", дверца {o0}->{c.isOpen}" : "") + $", extra={ev:F2}, кадр {Time.frameCount}");
+        }
+
         static void HoldLever(Interactable it, bool val)
         {
             leverWant[it.id] = new LeverWant { val = val, until = Time.realtimeSinceStartup + 5f };
@@ -5599,11 +5709,7 @@ namespace SodCoop
                 Interactable lev;
                 if (!breakerLevers.TryGetValue(kv.Key, out lev) || lev == null || lev.sw0 == lw.val) continue;
                 lw.fixes++;
-                applyingDoor = true;
-                try { lev.SetSwitchState(lw.val, DoorActor(), true, true, false); }
-                catch (Exception e) { Plugin.L.LogWarning("[SWITCH] вернуть рычаг: " + e.Message); }
-                finally { applyingDoor = false; }
-                Plugin.L.LogInfo($"[SWITCH] игра вернула рычаг '{PresetNameOf(lev)}' назад - ставлю {lw.val}, как дёрнул другой игрок (сейчас {lev.sw0})");
+                SetLever(lev, lw.val, "игра вернула рычаг назад (" + lw.fixes + ")");
             }
             foreach (var id in done) leverWant.Remove(id);
             if (IsHost && done.Count > 0) alarmSnapAt = 0f;   // устоявшееся положение - сразу всем
@@ -5808,7 +5914,13 @@ namespace SodCoop
                     else if (!applyingDoor && interactor == null)
                     {
                         LeverWant lw;
-                        if (leverWant.TryGetValue(it.id, out lw) && lw.val != val && Time.realtimeSinceStartup < lw.until) lw.fixAt = Time.realtimeSinceStartup + 0.1f;
+                        if (leverWant.TryGetValue(it.id, out lw) && lw.val != val && Time.realtimeSinceStartup < lw.until)
+                        {
+                            lw.fixAt = Time.realtimeSinceStartup + 0.1f;
+                            DoorMovementController c0; leverCtl.TryGetValue(it.id, out c0);
+                            float ev0 = -1f; try { ev0 = it.GetExtraStateValue(); } catch (Exception) { }
+                            Plugin.L.LogInfo($"[SWITCH] игра ставит рычаг {val} (кадр {Time.frameCount}), extra={ev0:F2}" + (c0 != null ? $", дверца isOpen={c0.isOpen}" : ""));
+                        }
                     }
                     if (!applyingDoor && IsPlayerActor(interactor)) { leverMineUntil[it.id] = Time.realtimeSinceStartup + 4f; alarmSnapAt = 0f; }   // хост разошлёт снимок сразу
                 }
@@ -5896,7 +6008,8 @@ namespace SodCoop
                 if (before != val)
                 {
                     Actor act = DoorActor();
-                    if (idx == 0) it.SetSwitchState(val, act, IsSecuritySwitch(it), IsSecuritySwitch(it), false);   // рычаг щитка: с обновлением вида
+                    if (idx == 0 && IsSecuritySwitch(it)) { applyingDoor = false; SetLever(it, val, "второй игрок"); }
+                    else if (idx == 0) it.SetSwitchState(val, act, false, false, false);
                     else if (idx == 1) it.SetCustomState1(val, act, false, false, false);
                     else if (idx == 2) it.SetCustomState2(val, act, false, false, false);
                     else it.SetCustomState3(val, act, false, false, false);
@@ -7623,6 +7736,112 @@ namespace SodCoop
             }
         }
 
+        // ---------- Мир без паузы ----------
+        internal static bool ForcingPlay;
+        static bool invokesKept, worldAliveLogged;
+
+        static bool KeepWorld()
+        {
+            return Plugin.CfgWorldNeverPauses.Value && manager != null && RtMode != NetMode.Off && Started;
+        }
+
+        internal static bool ForcePlayBegin()
+        {
+            if (ForcingPlay || !KeepWorld()) return false;
+            var sd = SessionData.Instance;
+            if (sd == null || sd.play) return false;
+            try { if (!sd.startedGame) return false; } catch (Exception) { return false; }
+            sd.play = true; ForcingPlay = true;
+            if (!worldAliveLogged) { worldAliveLogged = true; Plugin.L.LogInfo("[PAUSE] игра на паузе, но мир продолжает жить (мультиплеер)"); }
+            return true;
+        }
+
+        internal static void ForcePlayEnd()
+        {
+            ForcingPlay = false;
+            try { var sd = SessionData.Instance; if (sd != null) sd.play = false; } catch (Exception) { }
+        }
+
+        internal static bool OnGameSpeedChange(CitizenBehaviour cb)
+        {
+            var sd = SessionData.Instance;
+            if (sd == null) return true;
+            if (!sd.play)
+            {
+                if (!KeepWorld()) return true;
+                invokesKept = true;   // проверки жителей не снимаем
+                worldAliveLogged = false;
+                return false;
+            }
+            // снова игра: игра заново запустит проверки - старые убираем, чтобы не шли дважды
+            if (invokesKept) { invokesKept = false; try { cb.CancelInvoke(); } catch (Exception) { } }
+            return true;
+        }
+
+        // ---------- Частота жителей возле других игроков (хост) ----------
+        static readonly System.Collections.Generic.HashSet<int> tickRaised = new System.Collections.Generic.HashSet<int>();
+        static readonly System.Collections.Generic.List<Vector3> remoteSpots = new System.Collections.Generic.List<Vector3>();
+        static float tickRaiseAt, remoteSpotsAt;
+        static int tickRaiseLogN;
+
+        static void RefreshRemoteSpots()
+        {
+            if (Time.unscaledTime - remoteSpotsAt < 0.5f) return;
+            remoteSpotsAt = Time.unscaledTime;
+            remoteSpots.Clear();
+            SyncCur();
+            foreach (var rp in players) if (rp.avatar != null) remoteSpots.Add(rp.targetPos);
+        }
+
+        static NewAIController.AITickRate RateNearPlayers(Human h)
+        {
+            RefreshRemoteSpots();
+            if (remoteSpots.Count == 0) return NewAIController.AITickRate.veryLow;
+            Vector3 p = h.transform.position;
+            float d2 = float.MaxValue;
+            foreach (var v in remoteSpots) d2 = Mathf.Min(d2, (p - v).sqrMagnitude);
+            if (d2 < 15f * 15f) return NewAIController.AITickRate.veryHigh;
+            if (d2 < 35f * 35f) return NewAIController.AITickRate.high;
+            if (d2 < 70f * 70f) return NewAIController.AITickRate.medium;
+            return NewAIController.AITickRate.veryLow;
+        }
+
+        internal static void RaiseTickNearPlayers(Human h)
+        {
+            if (!IsHost || manager == null || manager.ConnectedPeersCount == 0 || h == null || h.isPlayer) return;
+            var ai = h.ai; if (ai == null) return;
+            var want = RateNearPlayers(h);
+            if (want == NewAIController.AITickRate.veryLow) return;
+            if ((int)ai.desiredTickRate < (int)want) ai.SetDesiredTickRate(want, false);
+            tickRaised.Add(h.humanID);
+        }
+
+        // раз в секунду: жителям возле клиентов - частоту как возле игрока; ушёл клиент - пусть игра пересчитает сама
+        static void TickRateTick()
+        {
+            float now = Time.unscaledTime;
+            if (now < tickRaiseAt) return;
+            tickRaiseAt = now + 1f;
+            int up = 0, back = 0;
+            foreach (var kv in npcById)
+            {
+                var c = kv.Value; if (c == null) continue;
+                try
+                {
+                    if (c.isDead || c.ai == null) continue;
+                    var want = RateNearPlayers(c);
+                    if (want != NewAIController.AITickRate.veryLow)
+                    {
+                        if ((int)c.ai.desiredTickRate < (int)want) { c.ai.SetDesiredTickRate(want, false); up++; }
+                        tickRaised.Add(kv.Key);
+                    }
+                    else if (tickRaised.Remove(kv.Key)) { c.UpdateTickRateOnProx(); back++; }
+                }
+                catch (Exception) { }
+            }
+            if ((up > 0 || back > 0) && tickRaiseLogN++ % 20 == 0) Plugin.L.LogInfo($"[NPC] хост: жителей возле других игроков ускорил {up}, вернул игре {back}, всего ускорено {tickRaised.Count}");
+        }
+
         static void NpcTick(float dt)
         {
             if (!Plugin.CfgNpcSync.Value || manager == null || manager.ConnectedPeersCount == 0) return;
@@ -7630,7 +7849,7 @@ namespace SodCoop
             if (npcById.Count == 0) return;
             PuppetsFrame(dt);
             CorpseTick();
-            if (IsHost) NpcSendTick();
+            if (IsHost) { NpcSendTick(); try { TickRateTick(); } catch (Exception e) { if (!npcErrLogged) { npcErrLogged = true; Plugin.L.LogWarning("[NPC] частота: " + e.Message); } } }
             else NpcClientTick(dt);
         }
 
@@ -10722,7 +10941,7 @@ namespace SodCoop
         static string snapPath = "";
         static float snapUntil;
 
-        internal static void OnWorldLoading() { worldGen++; }
+        internal static void OnWorldLoading() { worldGen++; gooseDone.Clear(); }   // кейсы «погони» - заново для каждой загрузки мира
 
         static string SnapPathFor(string savePath)
         {
@@ -11496,6 +11715,7 @@ namespace SodCoop
             if (data == null) { Plugin.L.LogWarning($"[JOB] задание {jobId}: не разобрано"); return; }
             int newItems, updItems;
             ImportItems(data.interactables, "[JOB]", "задания " + jobId, out newItems, out updItems);
+            try { DropMyJobDupes(JobById(jobId), data.interactables); } catch (Exception e) { Plugin.L.LogWarning($"[JOB] дубли задания {jobId}: {e.Message}"); }
             if (data.fakeTelephone != null)
             {
                 int added = 0;
@@ -11535,6 +11755,51 @@ namespace SodCoop
                 if (wasAccepted && nj.state != SideJob.JobState.ended) AcceptJobHere(nj, "его взяли до моего подключения");
                 if (knew) AcquireJobInfoHere(nj, infoMsg, "его выслушали до моего подключения");
             }
+        }
+
+        // Свои этапы задания игра клиента проходит сама и создаёт свои предметы (кейс «погони»), а потом такой же приходит от хоста -
+        // у клиента было два кейса. Свой предмет задания, у которого есть такой же хоста, убираем, в задании ставим хостовый
+        static void DropMyJobDupes(SideJob j, Il2CppSystem.Collections.Generic.List<Interactable> items)
+        {
+            if (IsHost || j == null || items == null || j.activeJobItems == null) return;
+            var host = new System.Collections.Generic.Dictionary<string, Interactable>();
+            var hostPtr = new System.Collections.Generic.HashSet<IntPtr>();
+            var hostIds = new System.Collections.Generic.HashSet<int>();
+            foreach (var it in items)
+            {
+                if (it == null || !HasJobId(it, j.jobID)) continue;
+                Interactable loc;
+                if (!idMap.TryGetValue(it.id | SideOf(0), out loc) || loc == null) loc = FindById(it.id);
+                if (loc == null) continue;
+                hostPtr.Add(loc.Pointer); hostIds.Add(loc.id); hostIds.Add(it.id);
+                host[it.p ?? ""] = loc;
+            }
+            if (host.Count == 0) return;
+            var drop = new System.Collections.Generic.List<(JobPreset.JobTag tag, Interactable mine, Interactable theirs)>();
+            foreach (var kv in j.activeJobItems)
+            {
+                var mine = kv.Value; if (mine == null || hostPtr.Contains(mine.Pointer) || hostIds.Contains(mine.id)) continue;
+                Interactable theirs;
+                if (!host.TryGetValue(PresetNameOf(mine), out theirs) || theirs.id == mine.id || theirs.Pointer == mine.Pointer) continue;
+                // только предметы, созданные во время игры у меня самого (у предметов из сейва номер общий с хостом)
+                if (mine.id < RuntimeIdStart) continue;
+                try { if (mine.inInventory != null) continue; } catch (Exception) { }
+                drop.Add((kv.Key, mine, theirs));
+            }
+            foreach (var d in drop)
+            {
+                j.activeJobItems[d.tag] = d.theirs;
+                applyingRemote = true;
+                try { d.mine.SafeDelete(false); } catch (Exception) { } finally { applyingRemote = false; }
+                Plugin.L.LogInfo($"[JOB] задание {j.jobID}: мой '{PresetNameOf(d.mine)}' (id {d.mine.id}) убрал - есть такой же от хоста (id {d.theirs.id})");
+            }
+        }
+
+        static bool HasJobId(Interactable it, int jobId)
+        {
+            var pv = it.pv; if (pv == null) return false;
+            for (int k = 0; k < pv.Count; k++) { var x = pv[k]; if (x != null && x.varType == Interactable.PassedVarType.jobID && Mathf.RoundToInt(x.value) == jobId) return true; }
+            return false;
         }
 
         // свободный номер для своего предмета, уступившего номер предмету хоста: далеко за номерами, которые раздаёт игра
@@ -11962,7 +12227,8 @@ namespace SodCoop
                                 Interactable lev;
                                 if (!breakerLevers.TryGetValue(kv.Key, out lev) || lev == null || lev.sw0 == kv.Value) continue;
                                 if (leverWant.ContainsKey(kv.Key)) continue;   // ещё держу чужой рывок
-                                try { lev.SetSwitchState(kv.Value, null, true, true, false); levers++; HoldLever(lev, kv.Value); } catch (Exception) { }
+                                try { applyingDoor = false; SetLever(lev, kv.Value, "снимок хоста"); levers++; HoldLever(lev, kv.Value); } catch (Exception) { }
+                                applyingDoor = true;
                                 try { lastSwitchSent[((long)lev.Pointer << 2)] = kv.Value; } catch (Exception) { }
                             }
                         }
@@ -12197,6 +12463,21 @@ namespace SodCoop
             bool removePrev = r.GetBool(); string chapter = r.GetString(); bool silent = r.GetBool(); bool crouch = r.GetBool(); bool bottom = r.GetBool(); bool parsing = r.GetBool();
             var c = j != null ? j.thisCase : null;
             if (c == null) { Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{entry}' от игрока {pid} - у меня задание не взято"); return; }
+            // цель хоста указывает на его предмет (ящик с наградой и т.п.): у меня он может быть под другим номером или ещё не пришёл.
+            // Нет его у меня, а своя такая же цель есть - оставляю свою: на хостовой у клиента не было значка на карте
+            if (t != null && t.interactableID != 0 && t.interactableID != -1 && !IsHost && pid == 0)
+            {
+                Interactable tgt = null;
+                if (!idMap.TryGetValue(t.interactableID | SideOf(0), out tgt) || tgt == null) tgt = FindById(t.interactableID);
+                if (tgt != null) t.interactableID = tgt.id;
+                else
+                {
+                    bool haveMine = false;
+                    foreach (var lst in new[] { c.currentActiveObjectives, c.inactiveCurrentObjectives })
+                        if (lst != null) foreach (var o in lst) if (o != null && !o.isComplete && o.queueElement != null && o.queueElement.entryRef == entry) haveMine = true;
+                    if (haveMine) { Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{entry}' хоста указывает на его предмет {t.interactableID}, которого у меня нет - оставляю свою"); return; }
+                }
+            }
             applyingJob = true;
             try
             {
@@ -12448,6 +12729,20 @@ namespace SodCoop
             return null;
         }
 
+        static bool MyJobCaseHandedIn(int jobId, out Case.CaseStatus st)
+        {
+            st = Case.CaseStatus.handInNotCollected;
+            var cp = CasePanelController.Instance;
+            if (cp == null || cp.activeCases == null) return false;
+            foreach (var c in cp.activeCases)
+            {
+                if (c == null || c.jobReference != jobId) continue;
+                st = c.caseStatus;
+                if (st == Case.CaseStatus.submitted || st == Case.CaseStatus.closable || st == Case.CaseStatus.archived) return true;
+            }
+            return false;
+        }
+
         static bool ResolveLikeOther(int jobId, NetDataReader r)
         {
             if (r.AvailableBytes < 4) return false;
@@ -12518,6 +12813,25 @@ namespace SodCoop
             Plugin.L.LogInfo($"[NPC] горожанин {h.humanID}: я {(val ? "надел" : "снял")} наручники - сообщаю хосту");
         }
 
+        static readonly System.Collections.Generic.HashSet<int> gooseDone = new System.Collections.Generic.HashSet<int>();
+
+        internal static bool OnGooseChaseSuccess(SideJob j)
+        {
+            if (j == null || applyingJob || manager == null || manager.ConnectedPeersCount == 0 || !Plugin.CfgJobSync.Value) return true;
+            if (IsHost)
+            {
+                if (!gooseDone.Add(j.jobID)) { Plugin.L.LogInfo($"[JOB] задание {j.jobID}: ответил на звонок, но кейс уже создан по ответу другого игрока"); return false; }
+                Plugin.L.LogInfo($"[JOB] задание {j.jobID}: я ответил на звонок - создаю кейс с данными");
+                return true;
+            }
+            var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)20); w.Put(j.jobID);
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+            // этап проходит и моя игра (иначе задание у меня оставалось до «погони» и звонок в конце начинал его заново);
+            // мой кейс уберётся, когда придёт такой же от хоста (DropMyJobDupes)
+            Plugin.L.LogInfo($"[JOB] задание {j.jobID}: я ответил на звонок - хост тоже создаст кейс, лишний у меня уберётся");
+            return true;
+        }
+
         static void OnRestrainMsg(NetDataReader r)
         {
             int id = r.GetInt(); bool val = r.GetBool(); float dur = r.GetFloat();
@@ -12584,9 +12898,27 @@ namespace SodCoop
             }
             else if (op == 18) { OnCaseStatusMsg(rp, r); }
             else if (op == 19 && IsHost) { OnRestrainMsg(r); }
+            else if (op == 20 && IsHost)
+            {
+                int id = r.GetInt(); var j = JobById(id);
+                if (j == null || !j.accepted) { Plugin.L.LogWarning($"[JOB] задание {id}: игрок {(rp != null ? rp.pid : 0)} ответил на звонок, но у меня задание не взято"); return; }
+                if (!gooseDone.Add(id)) { Plugin.L.LogInfo($"[JOB] задание {id}: игрок {(rp != null ? rp.pid : 0)} ответил на звонок - кейс уже создан"); return; }
+                applyingJob = true;
+                try { j.OnGooseChaseSuccess(); Plugin.L.LogInfo($"[JOB] задание {id}: игрок {(rp != null ? rp.pid : 0)} ответил на звонок - создал кейс с данными, он уйдёт всем"); }
+                catch (Exception e) { Plugin.L.LogWarning($"[JOB] кейс задания {id}: {e.Message}"); }
+                finally { applyingJob = false; }
+            }
             else if (op == 4)
             {
                 int id = r.GetInt(), money = r.GetInt();
+                // задание сдаётся/сдано и у меня (цели синхронны - моя игра закрывает его сама): второй раз сдавать нельзя -
+                // игра заново выдаёт награду (второй синхродиск в ящике, деньги ещё раз)
+                Case.CaseStatus myStatus;
+                if (id > 0 && MyJobCaseHandedIn(id, out myStatus))
+                {
+                    Plugin.L.LogInfo($"[JOB] задание {id} сдано игроком {(rp != null ? rp.pid : 0)}, у меня оно уже сдано само ({myStatus}) - награду второй раз не даю");
+                    return;
+                }
                 bool resolved = false;
                 try { resolved = ResolveLikeOther(id, r); } catch (Exception e) { Plugin.L.LogWarning("[JOB] ответы дела: " + e.Message); }
                 if (resolved || id <= 0)
@@ -13376,6 +13708,34 @@ namespace SodCoop
             Plugin.Dbg($"[LIFT] лифтов в городе: {map.Count}");
         }
 
+        static bool flashErrLogged, flashLogged;
+
+        // Фонарик на аватаре: копия моего фонарика (тот же свет, что у игры), у головы аватара, светит туда, куда смотрит игрок
+        static void AvatarFlash(GameObject av, float yaw)
+        {
+            var t = av.transform.Find("SodCoopFlash");
+            if (!remoteFlash) { if (t != null && t.gameObject.activeSelf) t.gameObject.SetActive(false); return; }
+            if (t == null)
+            {
+                var fp = FirstPersonItemController.Instance;
+                var src = fp != null ? fp.flashLightObject : null;
+                if (src == null) return;
+                var go = UnityEngine.Object.Instantiate(src);
+                go.name = "SodCoopFlash";
+                go.transform.SetParent(av.transform, false);
+                t = go.transform;
+                if (!flashLogged) { flashLogged = true; Plugin.L.LogInfo($"[FLASH] фонарик на аватаре: источников света {go.GetComponentsInChildren<Light>(true).Length}"); }
+            }
+            if (!t.gameObject.activeSelf)
+            {
+                t.gameObject.SetActive(true);
+                foreach (var l in t.GetComponentsInChildren<Light>(true)) { l.enabled = true; l.gameObject.SetActive(true); }
+            }
+            var rot = Quaternion.Euler(remotePitch, yaw, 0f);
+            t.position = av.transform.position + Vector3.up * 1.5f + rot * Vector3.forward * 0.3f;
+            t.rotation = rot;
+        }
+
         // я в кабине лифта: какой лифт и на сколько ноги выше пола кабины
         static void ElevatorUnder(Player p, float feetY, out int id, out float dy)
         {
@@ -13861,6 +14221,7 @@ namespace SodCoop
                 remoteSeatId = reader.AvailableBytes >= 4 ? reader.GetInt() : -1;
                 remoteDrunk = reader.AvailableBytes >= 1 ? reader.GetByte() / 255f : 0f;
                 if (reader.AvailableBytes >= 8) { remoteElevId = reader.GetInt(); remoteElevDy = reader.GetFloat(); } else remoteElevId = -1;
+                if (reader.AvailableBytes >= 5) { remoteFlash = reader.GetBool(); remotePitch = reader.GetFloat(); } else remoteFlash = false;
                 if (avatar == null) CreateAvatar();
             }
         }
