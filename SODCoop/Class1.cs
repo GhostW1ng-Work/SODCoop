@@ -371,7 +371,7 @@ namespace SodCoop
             Harmony.CreateAndPatchAll(typeof(PlayerPatch));
             Harmony.CreateAndPatchAll(typeof(MeleePatch));
             Harmony.CreateAndPatchAll(typeof(BlockPatch));
-            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SelfTripFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch), typeof(ProfileEventPatch), typeof(KnockPatch), typeof(BargePatch), typeof(JobCreationPatch), typeof(JobAcceptPatch), typeof(CaseResolvePatch), typeof(PinnedMenuPatch), typeof(ShareCommandPatch), typeof(PhoneCallLogPatch), typeof(PhoneCallLogPatch2), typeof(JobInfoPatch), typeof(ObjectiveCompletePatch), typeof(ObjectiveAddPatch), typeof(MurderClientBlockPatch), typeof(MurderCaseNotifyPatch), typeof(MurderDiscoveryPatch), typeof(BuildingAlarmPatch), typeof(AddressAlarmPatch), typeof(ComputerPatch), typeof(PagePatch), typeof(CaseStatusPatch), typeof(RestrainPatch), typeof(TickRatePatch), typeof(GooseChasePatch), typeof(WorldAlivePatch), typeof(KeepInvokesPatch), typeof(PauseReentryPatch) })
+            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SelfTripFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch), typeof(ProfileEventPatch), typeof(KnockPatch), typeof(BargePatch), typeof(JobCreationPatch), typeof(JobAcceptPatch), typeof(CaseResolvePatch), typeof(PinnedMenuPatch), typeof(ShareCommandPatch), typeof(PhoneCallLogPatch), typeof(PhoneCallLogPatch2), typeof(JobInfoPatch), typeof(ObjectiveCompletePatch), typeof(ObjectiveAddPatch), typeof(MurderClientBlockPatch), typeof(MurderCaseNotifyPatch), typeof(MurderDiscoveryPatch), typeof(BuildingAlarmPatch), typeof(AddressAlarmPatch), typeof(ComputerPatch), typeof(PagePatch), typeof(CaseStatusPatch), typeof(RestrainPatch), typeof(TickRatePatch), typeof(GooseChasePatch), typeof(WorldAlivePatch), typeof(KeepInvokesPatch), typeof(PauseReentryPatch), typeof(LookAroundPatch), typeof(CctvCapturePatch) })
             {
                 try { Harmony.CreateAndPatchAll(t); }
                 catch (Exception e) { L.LogWarning($"[PATCH] {t.Name}: {e.Message}"); }
@@ -1093,6 +1093,35 @@ namespace SodCoop
         public static void Postfix(Human __instance)
         {
             try { Net.RaiseTickNearPlayers(__instance); } catch (Exception) { }
+        }
+    }
+
+    // «Можно войти осмотреться?» (особый случай lookAroundHome): игра даёт фразу, только если житель сейчас у себя дома
+    // и пропуска в этот дом у меня ещё нет. У клиента место жителя обновляется реже, чем двигается тело - перед проверкой обновляю
+    [HarmonyPatch(typeof(DialogController), "TestSpecialCaseAvailability")]
+    public static class LookAroundPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(DialogPreset preset, Citizen saysTo)
+        {
+            try { Net.BeforeLookAround(preset, saysTo); } catch (Exception) { }
+        }
+
+        [HarmonyPostfix]
+        public static void Postfix(DialogPreset preset, Citizen saysTo, bool __result)
+        {
+            try { Net.AfterLookAround(preset, saysTo, __result); } catch (Exception) { }
+        }
+    }
+
+    // Снимки камер наблюдения: считаю, сколько раз камеры пытались снять и сколько кадров сняли (записи не перематывались)
+    [HarmonyPatch(typeof(SceneRecorder), "ExecuteCapture")]
+    public static class CctvCapturePatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(SceneRecorder.SceneCapture __result)
+        {
+            try { Net.OnCctvCapture(__result != null); } catch (Exception) { }
         }
     }
 
@@ -7816,6 +7845,63 @@ namespace SodCoop
             tickRaised.Add(h.humanID);
         }
 
+        static float lookLogAt;
+
+        internal static void BeforeLookAround(DialogPreset p, Citizen c)
+        {
+            if (p == null || c == null || (int)p.specialCase != 10 || IsHost || manager == null || manager.ConnectedPeersCount == 0) return;
+            c.UpdateGameLocation(0f, false);
+        }
+
+        internal static void AfterLookAround(DialogPreset p, Citizen c, bool ok)
+        {
+            if (p == null || c == null || (int)p.specialCase != 10 || manager == null || manager.ConnectedPeersCount == 0) return;
+            if (Time.unscaledTime - lookLogAt < 3f) return;
+            lookLogAt = Time.unscaledTime;
+            var home = c.home; var loc = c.currentGameLocation;
+            bool pass = false;
+            try { var gc = GameplayController.Instance; pass = home != null && gc != null && gc.guestPasses != null && gc.guestPasses.ContainsKey(home); } catch (Exception) { }
+            Plugin.L.LogInfo($"[DIALOG] «осмотреться» у жителя {c.humanID}: {(ok ? "можно" : "нельзя")}; дом {(home != null ? home.name : "нет")}, " +
+                $"сейчас он в {(loc != null ? loc.name : "нигде")}, пропуск {(pass ? "уже есть" : "нет")}");
+        }
+
+        static int cctvCalls, cctvShots;
+        static float cctvLogAt;
+
+        internal static void OnCctvCapture(bool made) { cctvCalls++; if (made) cctvShots++; }
+
+        // раз в минуту: что делают камеры - снимают ли, сколько кадров хранят
+        static void CctvTick()
+        {
+            float now = Time.unscaledTime;
+            if (now - cctvLogAt < 60f) return;
+            cctvLogAt = now;
+            int recs = 0, stored = 0, maxCap = 0; float oldest = float.MaxValue, newest = 0f;
+            var cb = CitizenBehaviour.Instance;
+            var list = cb != null ? cb.sceneRecorders : null;
+            if (list != null)
+                foreach (var r in list)
+                {
+                    if (r == null) continue;
+                    recs++;
+                    var it = r.interactable;
+                    int n = it != null && it.cap != null ? it.cap.Count : 0;
+                    stored += n; if (n > maxCap) maxCap = n;
+                    if (r.lastCaptureAt < oldest) oldest = r.lastCaptureAt;
+                    if (r.lastCaptureAt > newest) newest = r.lastCaptureAt;
+                }
+            var sd = SessionData.Instance;
+            if (sd != null && list != null && newest > sd.gameTime + 0.05f)
+            {
+                float back = sd.gameTime - 1f; int fixedN = 0;
+                foreach (var r in list) if (r != null && r.lastCaptureAt > sd.gameTime + 0.05f) { r.lastCaptureAt = back; fixedN++; }
+                Plugin.L.LogInfo($"[CCTV] у {fixedN} камер последний снимок «из будущего» ({oldest:F2}..{newest:F2} при времени {sd.gameTime:F2}) - они ждали его и не снимали. Сбросил");
+            }
+            Plugin.L.LogInfo($"[CCTV] за минуту: камеры пробовали снять {cctvCalls} раз, сняли {cctvShots}; камер {recs}, кадров в памяти {stored} (у одной до {maxCap}); " +
+                $"время игры {(sd != null ? sd.gameTime : 0f):F2}, последние снимки камер от {(recs > 0 ? oldest : 0f):F2} до {newest:F2}");
+            cctvCalls = cctvShots = 0;
+        }
+
         // раз в секунду: жителям возле клиентов - частоту как возле игрока; ушёл клиент - пусть игра пересчитает сама
         static void TickRateTick()
         {
@@ -7849,6 +7935,7 @@ namespace SodCoop
             if (npcById.Count == 0) return;
             PuppetsFrame(dt);
             CorpseTick();
+            try { CctvTick(); } catch (Exception) { }
             if (IsHost) { NpcSendTick(); try { TickRateTick(); } catch (Exception e) { if (!npcErrLogged) { npcErrLogged = true; Plugin.L.LogWarning("[NPC] частота: " + e.Message); } } }
             else NpcClientTick(dt);
         }
@@ -11504,7 +11591,8 @@ namespace SodCoop
         static string JobSig(SideJob j)
         {
             int ph; jobPhoneCount.TryGetValue(j.jobID, out ph);
-            return (int)j.state + "|" + j.postID + "|" + j.phase + "|" + j.failed + "|" + j.knowHandInLocation + "|" + ph;
+            int dl = 0; try { dl = j.dialog != null ? j.dialog.Count : 0; } catch (Exception) { }
+            return (int)j.state + "|" + j.postID + "|" + j.phase + "|" + j.failed + "|" + j.knowHandInLocation + "|" + ph + "|" + dl;
         }
 
         // номер телефона задание регистрирует позже, чем вешает объявление (в ObjectiveStateLoop) - считаем, чтобы переслать
@@ -12609,6 +12697,7 @@ namespace SodCoop
             // этап задания (phase) у каждого игрока свой: ObjectiveStateLoop по нему ставит цели («позвони заказчику» и т.д.) и
             // регистрирует номер. Если копировать этап хоста, клиент перепрыгивал свои цели, и его звонок заданию не засчитывался
             if (nj.knowHandInLocation && !cur.knowHandInLocation) QueueJobInfo(cur.jobID, nj.jobInfoDialogMsg, 0);
+            try { SyncJobDialogs(cur, nj); } catch (Exception e) { Plugin.L.LogWarning($"[JOB] фразы задания {cur.jobID}: {e.Message}"); }
             if (nj.state != cur.state)
             {
                 applyingJob = true;
@@ -12620,6 +12709,28 @@ namespace SodCoop
                 catch (Exception e) { Plugin.L.LogWarning($"[JOB] состояние задания {cur.jobID}: {e.Message}"); }
                 finally { applyingJob = false; }
                 Plugin.L.LogInfo($"[JOB] задание {cur.jobID}: {nj.state}");
+            }
+        }
+
+        // Фразы, которые задание даёт жителям («Я расследую пропажу… можно осмотрюсь?», расспросы заказчика), игра добавляет на этапах
+        // задания. Этапы у клиента свои, и часть фраз у него не появлялась - добавляю те, что есть у хоста
+        static void SyncJobDialogs(SideJob cur, SideJob nj)
+        {
+            if (IsHost || cur == null || nj == null || nj.dialog == null || cur.state == SideJob.JobState.ended) return;
+            foreach (var d in nj.dialog)
+            {
+                if (d == null || string.IsNullOrEmpty(d.dialogRef)) continue;
+                bool have = false;
+                if (cur.dialog != null)
+                    foreach (var m in cur.dialog) if (m != null && m.humanID == d.humanID && m.dialogRef == d.dialogRef && m.roomID == d.roomID) { have = true; break; }
+                if (have) continue;
+                var h = d.GetHuman(); var pr = d.GetDialog();
+                if (h == null || pr == null) { Plugin.L.LogWarning($"[JOB] задание {cur.jobID}: фраза '{d.dialogRef}' жителю {d.humanID} - не нашёл {(h == null ? "жителя" : "фразу")}"); continue; }
+                NewRoom room = null; try { room = d.GetRoom(); } catch (Exception) { }
+                applyingJob = true;
+                try { cur.AddDialogOption(h, d.key, pr, room); }
+                finally { applyingJob = false; }
+                Plugin.L.LogInfo($"[JOB] задание {cur.jobID}: фраза '{d.dialogRef}' жителю {d.humanID} - как у хоста");
             }
         }
 
