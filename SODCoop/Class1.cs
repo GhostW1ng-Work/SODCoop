@@ -95,6 +95,7 @@ namespace SodCoop
         internal static ConfigEntry<int> CfgSocialAmount;
         internal static ConfigEntry<bool> CfgInvisible;
         internal static ConfigEntry<string> CfgRevealPrintsKey;
+        internal static ConfigEntry<string> CfgRevealCaseKey;
         internal static ConfigEntry<bool> CfgTraceBreak;
         internal static ConfigEntry<string> CfgAutoTest, CfgAutoTestJobs;
         internal static ConfigEntry<string> CfgTypeRegex;
@@ -289,6 +290,8 @@ namespace SodCoop
             CfgSocialAmount = Config.Bind("Cheats", "SocialCreditAmount", 10, "How much social credit the F10 key adds");
             CfgRevealPrintsKey = Config.Bind("Cheats", "RevealAllPrintsKey", "F3",
                 "Key that reveals every citizen to you: all fingerprints get their letter and every citizen's file is fully known (name, photo, prints, address...). Empty = off");
+            CfgRevealCaseKey = Config.Bind("Cheats", "RevealCaseKey", "F2",
+                "Key that shows the answers for your taken jobs (culprit, where each job item is) and the current murderer. Press again to hide. Empty = off");
             CfgInvisible = Config.Bind("Cheats", "NpcCannotSee", false,
                 "NPCs cannot see you (no spotting, no illegal-activity witnesses). F11 toggles");
             CfgAvatarLightFix = Config.Bind("Poses", "AvatarLightFix", true,
@@ -371,7 +374,7 @@ namespace SodCoop
             Harmony.CreateAndPatchAll(typeof(PlayerPatch));
             Harmony.CreateAndPatchAll(typeof(MeleePatch));
             Harmony.CreateAndPatchAll(typeof(BlockPatch));
-            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SelfTripFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch), typeof(ProfileEventPatch), typeof(KnockPatch), typeof(BargePatch), typeof(JobCreationPatch), typeof(JobAcceptPatch), typeof(CaseResolvePatch), typeof(PinnedMenuPatch), typeof(ShareCommandPatch), typeof(PhoneCallLogPatch), typeof(PhoneCallLogPatch2), typeof(JobInfoPatch), typeof(ObjectiveCompletePatch), typeof(ObjectiveAddPatch), typeof(MurderClientBlockPatch), typeof(MurderCaseNotifyPatch), typeof(MurderDiscoveryPatch), typeof(BuildingAlarmPatch), typeof(AddressAlarmPatch), typeof(ComputerPatch), typeof(PagePatch), typeof(CaseStatusPatch), typeof(RestrainPatch), typeof(TickRatePatch), typeof(GooseChasePatch), typeof(WorldAlivePatch), typeof(KeepInvokesPatch), typeof(PauseReentryPatch), typeof(LookAroundPatch), typeof(CctvCapturePatch) })
+            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SelfTripFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch), typeof(ProfileEventPatch), typeof(KnockPatch), typeof(BargePatch), typeof(JobCreationPatch), typeof(JobAcceptPatch), typeof(CaseResolvePatch), typeof(PinnedMenuPatch), typeof(ShareCommandPatch), typeof(PhoneCallLogPatch), typeof(PhoneCallLogPatch2), typeof(JobInfoPatch), typeof(ObjectiveCompletePatch), typeof(ObjectiveAddPatch), typeof(MurderClientBlockPatch), typeof(MurderCaseNotifyPatch), typeof(MurderDiscoveryPatch), typeof(BuildingAlarmPatch), typeof(AddressAlarmPatch), typeof(ComputerPatch), typeof(PagePatch), typeof(CaseStatusPatch), typeof(RestrainPatch), typeof(TickRatePatch), typeof(GooseChasePatch), typeof(WorldAlivePatch), typeof(KeepInvokesPatch), typeof(PauseReentryPatch), typeof(LookAroundPatch), typeof(CctvCapturePatch), typeof(KeyringPatch) })
             {
                 try { Harmony.CreateAndPatchAll(t); }
                 catch (Exception e) { L.LogWarning($"[PATCH] {t.Name}: {e.Message}"); }
@@ -1049,9 +1052,19 @@ namespace SodCoop
             return null;
         }
 
-        [HarmonyPostfix]
-        public static void Postfix(Case __instance, object[] __args)
+        // игра зовёт AddObjective для той же цели снова и снова (раз в несколько секунд, пока ждёт звонка о сдаче) и сама
+        // повтор не ставит. Такой повтор другим не шлём - у них он менял цель и заново ставил уже выполненные
+        [HarmonyPrefix]
+        public static void Prefix(Case __instance, object[] __args, out bool __state)
         {
+            __state = false;
+            try { __state = Net.HasObjective(__instance, __args[0] as string, false); } catch (Exception) { }
+        }
+
+        [HarmonyPostfix]
+        public static void Postfix(Case __instance, object[] __args, bool __state)
+        {
+            if (__state) return;
             try { Net.OnObjectiveAdded(__instance, __args); } catch (Exception e) { Plugin.L.LogWarning("[JOB] новая цель: " + e.Message); }
         }
     }
@@ -1111,6 +1124,18 @@ namespace SodCoop
         public static void Postfix(DialogPreset preset, Citizen saysTo, bool __result)
         {
             try { Net.AfterLookAround(preset, saysTo, __result); } catch (Exception) { }
+        }
+    }
+
+    // Ключи от адреса (двери и почтовый ящик) игра даёт игроку на шаге задания - только тому, кто этот шаг прошёл.
+    // У клиента почтовый ящик заказчика оставался заперт, и сдать украденную вещь можно было только взломав его
+    [HarmonyPatch(typeof(Actor), "AddToKeyring", new[] { typeof(NewAddress), typeof(bool) })]
+    public static class KeyringPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(Actor __instance, NewAddress __0)
+        {
+            try { Net.OnKeyringAddress(__instance, __0); } catch (Exception e) { Plugin.L.LogWarning("[JOB] ключи: " + e.Message); }
         }
     }
 
@@ -3932,6 +3957,7 @@ namespace SodCoop
 
         internal static void DrawHud()
         {
+            try { DrawCaseAnswers(); } catch (Exception) { }
             try
             {
                 if (manager == null || RtMode == NetMode.Off || xferMode || InMainMenu()) return;
@@ -5321,6 +5347,8 @@ namespace SodCoop
                 KeyCode rk;
                 string rks = Plugin.CfgRevealPrintsKey.Value ?? "";
                 if (rks.Trim() != "" && Enum.TryParse<KeyCode>(rks.Trim(), true, out rk) && KeyDown(rk)) RevealAllCitizens();
+                string cks = Plugin.CfgRevealCaseKey.Value ?? "";
+                if (cks.Trim() != "" && Enum.TryParse<KeyCode>(cks.Trim(), true, out rk) && KeyDown(rk)) ToggleCaseAnswers();
             }
             catch (Exception e)
             {
@@ -7843,6 +7871,26 @@ namespace SodCoop
             if (want == NewAIController.AITickRate.veryLow) return;
             if ((int)ai.desiredTickRate < (int)want) ai.SetDesiredTickRate(want, false);
             tickRaised.Add(h.humanID);
+        }
+
+        static bool applyingKey;
+
+        internal static void OnKeyringAddress(Actor a, NewAddress ad)
+        {
+            if (applyingKey || a == null || ad == null || !a.isPlayer || manager == null || manager.ConnectedPeersCount == 0 || !Plugin.CfgJobSync.Value) return;
+            int job = 0;
+            var ctl = SideJobController.Instance;
+            if (ctl != null && ctl.allJobsDictionary != null)
+                foreach (var kv in ctl.allJobsDictionary)
+                {
+                    var j = kv.Value;
+                    if (j == null || !j.accepted || j.state == SideJob.JobState.ended) continue;
+                    if ((j.poster != null && j.poster.home != null && j.poster.home.id == ad.id) || (j.purp != null && j.purp.home != null && j.purp.home.id == ad.id)) { job = j.jobID; break; }
+                }
+            if (job <= 0) { Plugin.L.LogInfo($"[JOB] мне дали ключи от {ad.name} - не по заданию, другим не даю"); return; }
+            var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)21); w.Put(ad.id); w.Put(job);
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+            Plugin.L.LogInfo($"[JOB] задание {job}: мне дали ключи от {ad.name} (двери, почтовый ящик) - даю всем игрокам");
         }
 
         static float lookLogAt;
@@ -11759,7 +11807,16 @@ namespace SodCoop
             bool fake = false; TelephoneController.CallSource fs = null;
             try { var tc = TelephoneController.Instance; fake = tc != null && tc.fakeTelephoneDictionary != null && tc.fakeTelephoneDictionary.TryGetValue(to, out fs); } catch (Exception) { }
             Plugin.L.LogInfo($"[PHONE] {(fromMe ? "я звоню" : "мне звонят")}: {from} -> {to}, кому: {(receiver != null ? receiver.humanID + " " + receiver.citizenName : "никому")}, " +
-                $"источник: {(src != null ? src.callType + " задание " + src.job + " диалог '" + src.dialog + "'" : "нет")}, номер задания у меня: {(fake ? "да (задание " + fs.job + ")" : "нет")}, звонок создан: {call != null}");
+                $"источник: {(src != null ? src.callType + " задание " + src.job + " диалог '" + src.dialog + "'" : "нет")}, номер задания у меня: {(fake ? "да (задание " + fs.job + ")" : "нет")}, звонок создан: {call != null}" +
+                JobStateText(src != null ? src.job : 0));
+        }
+
+        static string JobStateText(int jobId)
+        {
+            var j = jobId > 0 ? JobById(jobId) : null;
+            if (j == null) return "";
+            string cs = ""; try { if (j.thisCase != null) cs = j.thisCase.caseStatus.ToString(); } catch (Exception) { }
+            return $"; задание: этап {j.phase}, состояние {j.state}, дело {cs}, адрес сдачи известен {j.knowHandInLocation}";
         }
 
         // хост -> новый клиент: все задания и список живых номеров (что у клиента лишнее из старого сейва - закончить)
@@ -11811,7 +11868,18 @@ namespace SodCoop
                 foreach (var ft in data.fakeTelephone)
                 {
                     if (ft == null || tc == null) continue;
-                    try { if (tc.fakeTelephoneDictionary == null || !tc.fakeTelephoneDictionary.ContainsKey(ft.number)) { tc.AddFakeNumber(ft.number, ft.source); added++; } }
+                    try
+                    {
+                        TelephoneController.CallSource old = null;
+                        if (tc.fakeTelephoneDictionary == null || !tc.fakeTelephoneDictionary.TryGetValue(ft.number, out old) || old == null) { tc.AddFakeNumber(ft.number, ft.source); added++; }
+                        // номер тот же, а разговор у хоста уже другой (заказчик ждёт звонка о сдаче, а не первого): у клиента
+                        // оставался первый, и при сдаче заказчик заново говорил стартовые фразы
+                        else if (ft.source != null && ft.source.job > 0 && (old.dialog ?? "") != (ft.source.dialog ?? ""))
+                        {
+                            tc.RemoveFakeNumber(ft.number); tc.AddFakeNumber(ft.number, ft.source);
+                            Plugin.L.LogInfo($"[JOB] номер {ft.number} задания {ft.source.job}: разговор '{old.dialog}' -> '{ft.source.dialog}', как у хоста");
+                        }
+                    }
                     catch (Exception e) { Plugin.L.LogWarning($"[JOB] номер {ft.number}: {e.Message}"); }
                 }
                 if (added > 0) Plugin.L.LogInfo($"[JOB] номеров телефона добавлено: {added}" + (jobId > 0 ? $" (задание {jobId})" : ""));
@@ -12393,6 +12461,105 @@ namespace SodCoop
             finally { applyingPage = false; }
         }
 
+        // Чит: ответы по делам. По клавише - панель: по каждому взятому заданию заказчик, виновник и где сейчас предметы задания,
+        // по текущему убийству - убийца и жертва. Пока панель открыта, раз в 2 с обновляется (люди и предметы перемещаются)
+        static System.Collections.Generic.List<string> caseAnswers;
+        static float caseAnswersAt;
+        static GUIStyle caseStyle, caseShadow;
+
+        static void ToggleCaseAnswers()
+        {
+            if (caseAnswers != null) { caseAnswers = null; return; }
+            caseAnswers = BuildCaseAnswers(); caseAnswersAt = Time.unscaledTime;
+            Plugin.L.LogInfo("[CHEAT] ответы по делам:\n  " + string.Join("\n  ", caseAnswers.ToArray()));
+        }
+
+        static System.Collections.Generic.List<string> BuildCaseAnswers()
+        {
+            var lines = new System.Collections.Generic.List<string>();
+            var ctl = SideJobController.Instance;
+            if (ctl != null && ctl.allJobsDictionary != null)
+                foreach (var kv in ctl.allJobsDictionary)
+                {
+                    var j = kv.Value;
+                    if (j == null || !j.accepted || j.state == SideJob.JobState.ended) continue;
+                    lines.Add($"JOB {j.jobID} ({j.presetStr})");
+                    if (j.poster != null) lines.Add("   client: " + WhoWhere(j.poster));
+                    if (j.purp != null) lines.Add("   CULPRIT: " + WhoWhere(j.purp));
+                    if (j.activeJobItems != null)
+                        foreach (var it in j.activeJobItems)
+                            if (it.Value != null) lines.Add($"   {it.Key}: {ItemName(it.Value)} - {ItemWhere(it.Value)}");
+                }
+            try
+            {
+                var mc = MurderController.Instance;
+                if (mc != null && mc.activeMurders != null)
+                    foreach (var m in mc.activeMurders)
+                    {
+                        if (m == null) continue;
+                        lines.Add("MURDER");
+                        if (m.murderer != null) lines.Add("   MURDERER: " + WhoWhere(m.murderer));
+                        if (m.victim != null) lines.Add("   victim: " + WhoWhere(m.victim));
+                    }
+                else if (mc != null && mc.currentMurderer != null) lines.Add("MURDERER: " + WhoWhere(mc.currentMurderer));
+            }
+            catch (Exception e) { lines.Add("murder: " + e.Message); }
+            if (lines.Count == 0) lines.Add("No taken jobs and no active murder");
+            return lines;
+        }
+
+        static string WhoWhere(Human h)
+        {
+            string name = h.citizenName;
+            string home = h.home != null ? h.home.name : "homeless";
+            string now = h.currentGameLocation != null ? h.currentGameLocation.name : "?";
+            string state = h.isDead ? ", DEAD" : "";
+            return $"{name} (home {home}; now in {now}{state})";
+        }
+
+        static string ItemName(Interactable it)
+        {
+            try { var n = it.GetName(); if (!string.IsNullOrEmpty(n)) return n; } catch (Exception) { }
+            return PresetNameOf(it);
+        }
+
+        static string ItemWhere(Interactable it)
+        {
+            try { var a = it.inInventory; if (a != null) { var h = a.TryCast<Human>(); return h != null ? "carried by " + (h.isPlayer ? "a player" : h.citizenName) : "in someone's inventory"; } } catch (Exception) { }
+            var n = it.node;
+            string where = "?";
+            if (n != null)
+            {
+                string loc = n.gameLocation != null ? n.gameLocation.name : "";
+                string room = n.room != null ? n.room.name : "";
+                int fl = 0; try { if (n.room != null && n.room.floor != null) fl = n.room.floor.floor; } catch (Exception) { }
+                where = loc + (room != "" && room != loc ? ", " + room : "") + $", floor {fl}";
+            }
+            try { var me = Player.Instance; if (me != null) where += $", {Vector3.Distance(me.transform.position, it.GetWorldPosition(true)):F0} m from you"; } catch (Exception) { }
+            return where;
+        }
+
+        static void DrawCaseAnswers()
+        {
+            if (caseAnswers == null) return;
+            if (Time.unscaledTime - caseAnswersAt > 2f) { caseAnswersAt = Time.unscaledTime; try { caseAnswers = BuildCaseAnswers(); } catch (Exception) { } }
+            if (caseStyle == null)
+            {
+                caseStyle = new GUIStyle(GUI.skin.label) { fontSize = 17, alignment = TextAnchor.UpperLeft };
+                caseStyle.normal.textColor = new Color(1f, 0.85f, 0.4f, 1f);
+                caseShadow = new GUIStyle(caseStyle); caseShadow.normal.textColor = new Color(0f, 0f, 0f, 0.95f);
+            }
+            float sc = Screen.height / 1080f;
+            var old = GUI.matrix; GUI.matrix = Matrix4x4.Scale(new Vector3(sc, sc, 1f));
+            float y = 180f;
+            foreach (var l in caseAnswers)
+            {
+                GUI.Label(new Rect(21f, y + 1f, 1300f, 26f), l, caseShadow);
+                GUI.Label(new Rect(20f, y, 1300f, 26f), l, caseStyle); y += 24f;
+            }
+            GUI.matrix = old;
+        }
+
         // Чит: все жители известны. Отпечаткам каждого - буква (у клиента её выдаёт хост, как при находке), в досье жителя все сведения
         // связаны с именем: найденный отпечаток, фото или адрес сразу показывают, чьи они, и всё остальное о нём
         internal static void RevealAllCitizens()
@@ -12530,6 +12697,23 @@ namespace SodCoop
             Plugin.L.LogInfo($"[JOB] задание {jobId}: новая цель '{a[0]}', сообщаю другим");
         }
 
+        // есть ли в деле цель с этим entryRef: открытая, а с done - и уже выполненная
+        internal static bool HasObjective(Case c, string entry, bool done)
+        {
+            if (c == null || string.IsNullOrEmpty(entry)) return false;
+            foreach (var lst in new[] { c.currentActiveObjectives, c.inactiveCurrentObjectives, c.waitForObjectives, c.endedObjectives })
+            {
+                if (lst == null) continue;
+                foreach (var o in lst)
+                {
+                    if (o == null || o.queueElement == null || o.queueElement.entryRef != entry) continue;
+                    if (o.isComplete) { if (done) return true; }
+                    else if (!o.isCancelled) return true;
+                }
+            }
+            return false;
+        }
+
         static void AddObjectiveHere(RP rp, NetDataReader r)
         {
             int jobId = r.GetInt();
@@ -12551,6 +12735,9 @@ namespace SodCoop
             bool removePrev = r.GetBool(); string chapter = r.GetString(); bool silent = r.GetBool(); bool crouch = r.GetBool(); bool bottom = r.GetBool(); bool parsing = r.GetBool();
             var c = j != null ? j.thisCase : null;
             if (c == null) { Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{entry}' от игрока {pid} - у меня задание не взято"); return; }
+            // у меня эта цель уже выполнена: заново не ставлю (иначе после сдачи предмета возвращались «Кто меня обокрал?» и т.п. с галочками)
+            bool doneHere = false; try { doneHere = HasObjective(c, entry, true) && !HasObjective(c, entry, false); } catch (Exception) { }
+            if (doneHere) { Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{entry}' от игрока {pid} - у меня уже выполнена, заново не ставлю"); return; }
             // цель хоста указывает на его предмет (ящик с наградой и т.п.): у меня он может быть под другим номером или ещё не пришёл.
             // Нет его у меня, а своя такая же цель есть - оставляю свою: на хостовой у клиента не было значка на карте
             if (t != null && t.interactableID != 0 && t.interactableID != -1 && !IsHost && pid == 0)
@@ -12697,6 +12884,15 @@ namespace SodCoop
             // этап задания (phase) у каждого игрока свой: ObjectiveStateLoop по нему ставит цели («позвони заказчику» и т.д.) и
             // регистрирует номер. Если копировать этап хоста, клиент перепрыгивал свои цели, и его звонок заданию не засчитывался
             if (nj.knowHandInLocation && !cur.knowHandInLocation) QueueJobInfo(cur.jobID, nj.jobInfoDialogMsg, 0);
+            // Этап задания у каждого свой, но после того как заказчик выслушан, шаги (встреча, поиск вещи, ящик) проходит кто-то один,
+            // а у остальных этап застревал: при звонке для сдачи заказчик отвечал им по первому этапу - снова просил о помощи.
+            // Догоняю этап хоста: игра сама поставит цели и разговор этого этапа (повторы целей она не ставит)
+            if (!IsHost && nj.phase > cur.phase && cur.accepted && cur.knowHandInLocation && nj.knowHandInLocation && cur.state != SideJob.JobState.ended)
+            {
+                Plugin.L.LogInfo($"[JOB] задание {cur.jobID}: этап у хоста {nj.phase}, у меня {cur.phase} - догоняю");
+                cur.phase = nj.phase;
+            }
+            else if (nj.phase != cur.phase) Plugin.L.LogInfo($"[JOB] задание {cur.jobID}: этап у хоста {nj.phase}, у меня {cur.phase}");
             try { SyncJobDialogs(cur, nj); } catch (Exception e) { Plugin.L.LogWarning($"[JOB] фразы задания {cur.jobID}: {e.Message}"); }
             if (nj.state != cur.state)
             {
@@ -13009,6 +13205,18 @@ namespace SodCoop
             }
             else if (op == 18) { OnCaseStatusMsg(rp, r); }
             else if (op == 19 && IsHost) { OnRestrainMsg(r); }
+            else if (op == 21)
+            {
+                int adId = r.GetInt(), job = r.GetInt();
+                NewAddress ad = null;
+                CityData.Instance.addressDictionary.TryGetValue(adId, out ad);
+                var me = Player.Instance;
+                if (ad == null || me == null) { Plugin.L.LogWarning($"[JOB] ключи от адреса {adId} (задание {job}): адрес не найден"); return; }
+                applyingKey = true;
+                try { me.AddToKeyring(ad, true); }
+                finally { applyingKey = false; }
+                Plugin.L.LogInfo($"[JOB] задание {job}: игрок {(rp != null ? rp.pid : 0)} получил ключи от {ad.name} - у меня они теперь тоже");
+            }
             else if (op == 20 && IsHost)
             {
                 int id = r.GetInt(); var j = JobById(id);
