@@ -29,23 +29,14 @@ namespace SodCoop
             if (cheatKeysBroken || !Plugin.CfgCheatKeys.Value) return;
             try
             {
-                if (KeyDown(KeyCode.F6)) GiveMoney(Plugin.CfgMoneyAmount.Value);
-                if (KeyDown(KeyCode.F12)) SpawnNextWeapon();
-                if (KeyDown(KeyCode.F7)) SpawnItem(Plugin.CfgItemPreset.Value);
-                if (KeyDown(KeyCode.F8)) { Plugin.CfgPauseNpc.Value = !Plugin.CfgPauseNpc.Value; ApplyPause(); Plugin.L.LogInfo($"[CHEAT] пауза ИИ NPC: {Plugin.CfgPauseNpc.Value}"); }
-                if (KeyDown(KeyCode.F10)) GiveSocial(Plugin.CfgSocialAmount.Value);
-                if (KeyDown(KeyCode.F11)) { Plugin.CfgInvisible.Value = !Plugin.CfgInvisible.Value; Plugin.L.LogInfo($"[CHEAT] NPC не видят меня: {Plugin.CfgInvisible.Value}"); }
-                if (KeyDown(KeyCode.F9)) { Plugin.CfgGod.Value = !Plugin.CfgGod.Value; Plugin.L.LogInfo($"[CHEAT] бессмертие: {Plugin.CfgGod.Value}"); }
-                KeyCode rk;
-                string rks = Plugin.CfgRevealPrintsKey.Value ?? "";
-                if (rks.Trim() != "" && Enum.TryParse<KeyCode>(rks.Trim(), true, out rk) && KeyDown(rk)) RevealAllCitizens();
-                string cks = Plugin.CfgRevealCaseKey.Value ?? "";
-                if (cks.Trim() != "" && Enum.TryParse<KeyCode>(cks.Trim(), true, out rk) && KeyDown(rk)) ToggleCaseAnswers();
+                KeyCode mk;
+                string ks = (Plugin.CfgCheatMenuKey.Value ?? "").Trim();
+                if (ks != "" && Enum.TryParse<KeyCode>(ks, true, out mk) && KeyDown(mk)) ToggleCheatMenu();
             }
             catch (Exception e)
             {
                 cheatKeysBroken = true;
-                Plugin.L.LogWarning($"[CHEAT] горячие клавиши недоступны ({e.GetType().Name}); используйте значения в конфиге");
+                Plugin.L.LogWarning($"[CHEAT] клавиша меню читов недоступна ({e.GetType().Name}); используйте значения в конфиге");
             }
         }
 

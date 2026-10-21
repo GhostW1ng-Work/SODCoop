@@ -65,8 +65,7 @@ if ($Cheats) {
 @"
 [Cheats]
 Hotkeys = true
-RevealAllPrintsKey = F3
-RevealCaseKey = F2
+MenuKey = F2
 "@ | Set-Content -Path (Join-Path $stage "BepInEx\config\com.flyingfrogs.sodcoop.cfg") -Encoding UTF8
 }
 

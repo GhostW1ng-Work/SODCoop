@@ -87,6 +87,7 @@ namespace SodCoop
         internal static ConfigEntry<bool> CfgTimeSync;
         internal static ConfigEntry<bool> CfgDoorSync;
         internal static ConfigEntry<bool> CfgCheatKeys;
+        internal static ConfigEntry<string> CfgCheatMenuKey;
         internal static ConfigEntry<int> CfgAddMoney;
         internal static ConfigEntry<int> CfgMoneyAmount;
         internal static ConfigEntry<string> CfgItemPreset;
@@ -97,8 +98,6 @@ namespace SodCoop
         internal static ConfigEntry<int> CfgAddSocial;
         internal static ConfigEntry<int> CfgSocialAmount;
         internal static ConfigEntry<bool> CfgInvisible;
-        internal static ConfigEntry<string> CfgRevealPrintsKey;
-        internal static ConfigEntry<string> CfgRevealCaseKey;
         internal static ConfigEntry<bool> CfgTraceBreak;
         internal static ConfigEntry<string> CfgAutoTest, CfgAutoTestJobs;
         internal static ConfigEntry<string> CfgTypeRegex;
@@ -276,29 +275,26 @@ namespace SodCoop
             CfgObjSync = Config.Bind("Objects", "Sync", true,
                 "Sync world objects the player carries (garbage bags, boxes...) and drops/throws: the other player sees them move");
             CfgCheatKeys = Config.Bind("Cheats", "Hotkeys", false,
-                "F6 = add money (MoneyAmount), F7 = spawn item ItemPreset in front of you, F8 = toggle NPC AI pause, F9 = toggle god mode, F12 = spawn next weapon (press repeatedly to cycle), F10 = add social credit (SocialCreditAmount), F11 = toggle NPCs-cannot-see-me");
+                "Cheat menu: MenuKey (F2 by default) opens a window with all cheats while you play");
+            CfgCheatMenuKey = Config.Bind("Cheats", "MenuKey", "F2", "Key that opens the cheat menu (name from UnityEngine.KeyCode) when Hotkeys = true");
             CfgAddMoney = Config.Bind("Cheats", "AddMoney", 0,
                 "Set to a number while the game runs: that much money is added once, then it resets to 0");
-            CfgMoneyAmount = Config.Bind("Cheats", "MoneyAmount", 1000, "How much money the F6 key adds");
+            CfgMoneyAmount = Config.Bind("Cheats", "MoneyAmount", 1000, "Money amount in the cheat menu");
             CfgItemPreset = Config.Bind("Cheats", "ItemPreset", "StarchKola",
-                "Item preset name spawned by F7 (see SearchPreset to find names)");
+                "Item preset name spawned from the cheat menu (see SearchPreset to find names)");
             CfgSpawnNow = Config.Bind("Cheats", "SpawnNow", false,
                 "Set to true while the game runs: spawns ItemPreset in front of you, then resets to false");
             CfgSearchPreset = Config.Bind("Cheats", "SearchPreset", "",
                 "Type part of a name (e.g. kola): matching item preset names are written to the log, then this resets");
             CfgPauseNpc = Config.Bind("Cheats", "PauseNpcAI", false,
-                "Pause NPC AI (they freeze and stop reacting to you). F8 toggles");
+                "Pause NPC AI (they freeze and stop reacting to you). Toggle in the cheat menu");
             CfgGod = Config.Bind("Cheats", "GodMode", false,
-                "The local player takes no damage. F9 toggles");
+                "The local player takes no damage. Toggle in the cheat menu");
             CfgAddSocial = Config.Bind("Cheats", "AddSocialCredit", 0,
                 "Set to a number while the game runs: that much social credit is added once, then it resets to 0");
-            CfgSocialAmount = Config.Bind("Cheats", "SocialCreditAmount", 10, "How much social credit the F10 key adds");
-            CfgRevealPrintsKey = Config.Bind("Cheats", "RevealAllPrintsKey", "",
-                "Key that reveals every citizen to you: all fingerprints get their letter and every citizen's file is fully known (name, photo, prints, address...). Empty = off");
-            CfgRevealCaseKey = Config.Bind("Cheats", "RevealCaseKey", "",
-                "Key that shows the answers for your taken jobs (culprit, where each job item is) and the current murderer. Press again to hide. Empty = off");
+            CfgSocialAmount = Config.Bind("Cheats", "SocialCreditAmount", 10, "Social credit amount in the cheat menu");
             CfgInvisible = Config.Bind("Cheats", "NpcCannotSee", false,
-                "NPCs cannot see you (no spotting, no illegal-activity witnesses). F11 toggles");
+                "NPCs cannot see you (no spotting, no illegal-activity witnesses). Toggle in the cheat menu");
             CfgAvatarLightFix = Config.Bind("Poses", "AvatarLightFix", true,
                 "Keep the other player's model lit after room lights are switched off and on (sets the renderers' light layer mask to all layers)");
             CfgTypeRegex = Config.Bind("Debug", "TypeRegex", "apartment|residen|purchas|forsale|realestate|estate|landlord|lease|ownership|sale",
@@ -382,7 +378,7 @@ namespace SodCoop
             Harmony.CreateAndPatchAll(typeof(PlayerPatch));
             Harmony.CreateAndPatchAll(typeof(MeleePatch));
             Harmony.CreateAndPatchAll(typeof(BlockPatch));
-            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SelfTripFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch), typeof(ProfileEventPatch), typeof(KnockPatch), typeof(BargePatch), typeof(JobCreationPatch), typeof(JobAcceptPatch), typeof(CaseResolvePatch), typeof(PinnedMenuPatch), typeof(ShareCommandPatch), typeof(PhoneCallLogPatch), typeof(PhoneCallLogPatch2), typeof(JobInfoPatch), typeof(ObjectiveCompletePatch), typeof(ObjectiveAddPatch), typeof(MurderClientBlockPatch), typeof(MurderCaseNotifyPatch), typeof(MurderDiscoveryPatch), typeof(BuildingAlarmPatch), typeof(AddressAlarmPatch), typeof(ComputerPatch), typeof(PagePatch), typeof(CaseStatusPatch), typeof(RestrainPatch), typeof(TickRatePatch), typeof(GooseChasePatch), typeof(WorldAlivePatch), typeof(KeepInvokesPatch), typeof(PauseReentryPatch), typeof(LookAroundPatch), typeof(CctvCapturePatch), typeof(KeyringPatch), typeof(JobDialogAddPatch), typeof(ObjectiveCancelPatch), typeof(RewardPatch), typeof(PuppetVisiblePatch), typeof(MenuComponentPatch), typeof(MenuComponentIntPatch) })
+            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SelfTripFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch), typeof(ProfileEventPatch), typeof(KnockPatch), typeof(BargePatch), typeof(JobCreationPatch), typeof(JobAcceptPatch), typeof(CaseResolvePatch), typeof(PinnedMenuPatch), typeof(ShareCommandPatch), typeof(PhoneCallLogPatch), typeof(PhoneCallLogPatch2), typeof(JobInfoPatch), typeof(ObjectiveCompletePatch), typeof(ObjectiveAddPatch), typeof(MurderClientBlockPatch), typeof(MurderCaseNotifyPatch), typeof(MurderDiscoveryPatch), typeof(BuildingAlarmPatch), typeof(AddressAlarmPatch), typeof(ComputerPatch), typeof(PagePatch), typeof(CaseStatusPatch), typeof(RestrainPatch), typeof(TickRatePatch), typeof(GooseChasePatch), typeof(WorldAlivePatch), typeof(KeepInvokesPatch), typeof(PauseReentryPatch), typeof(LookAroundPatch), typeof(CctvCapturePatch), typeof(KeyringPatch), typeof(JobDialogAddPatch), typeof(ObjectiveCancelPatch), typeof(RewardPatch), typeof(PuppetVisiblePatch), typeof(MenuComponentPatch), typeof(MenuComponentIntPatch), typeof(CheatMenuInteractionBlockPatch), typeof(CheatMenuItemBlockPatch) })
             {
                 try { Harmony.CreateAndPatchAll(t); }
                 catch (Exception e) { L.LogWarning($"[PATCH] {t.Name}: {e.Message}"); }

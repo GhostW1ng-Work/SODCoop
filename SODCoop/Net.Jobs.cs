@@ -344,7 +344,7 @@ namespace SodCoop
             var hostIds = new System.Collections.Generic.HashSet<int>();
             foreach (var it in items)
             {
-                if (it == null || !HasJobId(it, j.jobID)) continue;
+                if (it == null) continue;
                 Interactable loc;
                 if (!idMap.TryGetValue(it.id | SideOf(0), out loc) || loc == null) loc = FindById(it.id);
                 if (loc == null) continue;
@@ -358,8 +358,9 @@ namespace SodCoop
                 var mine = kv.Value; if (mine == null || hostPtr.Contains(mine.Pointer) || hostIds.Contains(mine.id) || rewardLocal.Contains(mine.id)) continue;
                 Interactable theirs;
                 if (!host.TryGetValue(PresetNameOf(mine), out theirs) || theirs.id == mine.id || theirs.Pointer == mine.Pointer) continue;
-                if (mine.id < RuntimeIdStart) continue;
-                try { if (mine.inInventory != null) continue; } catch (Exception __e) { Err.Swallow(__e); }
+                if (mine.id < RuntimeIdStart) { Plugin.L.LogInfo($"[JOB] задание {j.jobID}: мой '{PresetNameOf(mine)}' (id {mine.id}) из сейва, у хоста такой же id {theirs.id} - не трогаю"); continue; }
+                bool held = false; try { held = mine.inInventory != null; } catch (Exception __e) { Err.Swallow(__e); }
+                if (held) { Plugin.L.LogInfo($"[JOB] задание {j.jobID}: мой '{PresetNameOf(mine)}' (id {mine.id}) у меня в руках - не убираю"); continue; }
                 drop.Add((kv.Key, mine, theirs));
             }
             foreach (var d in drop)

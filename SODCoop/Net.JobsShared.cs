@@ -307,11 +307,37 @@ namespace SodCoop
             manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
         }
 
-        static void CompleteObjectiveHere(int jobId, string name, int pid)
+        static readonly System.Collections.Generic.List<(int job, string name, int pid, float until)> pendingCompletes = new System.Collections.Generic.List<(int, string, int, float)>();
+
+        static void PendingCompletesTick()
+        {
+            if (pendingCompletes.Count == 0) return;
+            float now = Time.realtimeSinceStartup;
+            for (int i = pendingCompletes.Count - 1; i >= 0; i--)
+            {
+                var x = pendingCompletes[i];
+                var j = JobById(x.job);
+                if (j == null || j.state == SideJob.JobState.ended) { pendingCompletes.RemoveAt(i); continue; }
+                if (CompleteObjectiveHere(x.job, x.name, x.pid, true)) { pendingCompletes.RemoveAt(i); continue; }
+                if (now > x.until)
+                {
+                    pendingCompletes.RemoveAt(i);
+                    Plugin.L.LogWarning($"[JOB] задание {x.job}: цель '{x.name}' игрока {x.pid} так и не появилась у меня за 15 с");
+                }
+            }
+        }
+
+        static bool CompleteObjectiveHere(int jobId, string name, int pid, bool retry = false)
         {
             var j = JobById(jobId);
             var c = j != null ? j.thisCase : null;
-            if (c == null) { Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{name}' игрока {pid} - у меня задание не взято"); return; }
+            if (c == null)
+            {
+                if (retry) return false;
+                pendingCompletes.Add((jobId, name, pid, Time.realtimeSinceStartup + 15f));
+                Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{name}' игрока {pid} - у меня задание не взято, жду");
+                return false;
+            }
             var found = new System.Collections.Generic.List<Objective>();
             foreach (var lst in new[] { c.currentActiveObjectives, c.inactiveCurrentObjectives })
                 if (lst != null) foreach (var o in lst) if (o != null && !o.isComplete && !o.isCancelled && o.name == name) found.Add(o);
@@ -321,12 +347,25 @@ namespace SodCoop
                 foreach (var lst in new[] { c.currentActiveObjectives, c.inactiveCurrentObjectives })
                     if (lst != null) foreach (var o in lst) if (o != null && !o.isComplete && !o.isCancelled && o.name == name) found.Add(o);
             }
-            if (found.Count == 0) { Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{name}' игрока {pid} - у меня такой открытой цели нет"); return; }
+            if (found.Count == 0)
+            {
+                bool doneAlready = false;
+                foreach (var lst in new[] { c.currentActiveObjectives, c.inactiveCurrentObjectives, c.endedObjectives })
+                    if (lst != null) foreach (var o in lst) if (o != null && o.isComplete && o.name == name) doneAlready = true;
+                if (doneAlready) return true;
+                if (!retry)
+                {
+                    pendingCompletes.Add((jobId, name, pid, Time.realtimeSinceStartup + 15f));
+                    Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{name}' игрока {pid} - у меня её ещё нет, выполню, когда появится");
+                }
+                return false;
+            }
             applyingJob = true;
             try { foreach (var o in found) o.Complete(); }
             catch (Exception e) { Plugin.L.LogWarning($"[JOB] цель {jobId}: {e.Message}"); }
             finally { applyingJob = false; }
-            Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{name}' выполнена (её выполнил игрок {pid})");
+            Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{name}' выполнена (её выполнил игрок {pid}){(retry ? " - дождался её у себя" : "")}");
+            return true;
         }
 
         internal static void OnJobInfoAcquired(SideJob j, string msg)
@@ -342,7 +381,7 @@ namespace SodCoop
         static void QueueJobInfo(int jobId, string msg, int pid)
         {
             if (!pendingJobInfo.ContainsKey(jobId)) Plugin.L.LogInfo($"[JOB] задание {jobId}: сведения от игрока {pid} - дам, если сам не выслушаю заказчика");
-            pendingJobInfo[jobId] = (msg, pid, Time.realtimeSinceStartup + 10f);
+            pendingJobInfo[jobId] = (msg, pid, Time.realtimeSinceStartup + (PlayerOnPhone() ? 10f : 1.5f));
         }
 
         static bool PlayerOnPhone()
@@ -1070,6 +1109,7 @@ namespace SodCoop
             EvidenceShareTick();
             PendingJobInfoTick();
             try { PendingObjectivesTick(); } catch (Exception e) { Plugin.L.LogWarning("[JOB] отложенные цели: " + e.Message); }
+            try { PendingCompletesTick(); } catch (Exception e) { Plugin.L.LogWarning("[JOB] отложенные выполнения целей: " + e.Message); }
             try { ObjectiveHudTick(); } catch (Exception e) { Plugin.L.LogWarning("[HUD] цели: " + e.Message); }
             try { JobPhaseReportTick(); } catch (Exception e) { Plugin.L.LogWarning("[JOB] этап: " + e.Message); }
             if (Time.realtimeSinceStartup >= printAt) { printAt = Time.realtimeSinceStartup + 1f; try { PrintLettersTick(); } catch (Exception e) { Plugin.L.LogWarning("[PRINTS] " + e.Message); } }

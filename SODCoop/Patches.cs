@@ -726,6 +726,20 @@ namespace SodCoop
         }
     }
 
+    [HarmonyPatch(typeof(InteractionController), "Update")]
+    public static class CheatMenuInteractionBlockPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix() { return !Net.CheatMenuOpen; }
+    }
+
+    [HarmonyPatch(typeof(FirstPersonItemController), "Update")]
+    public static class CheatMenuItemBlockPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix() { return !Net.CheatMenuOpen; }
+    }
+
     [HarmonyPatch(typeof(SideJob), "OnGooseChaseSuccess")]
     public static class GooseChasePatch
     {

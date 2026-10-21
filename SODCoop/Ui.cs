@@ -1152,8 +1152,14 @@ namespace SodCoop
             initAt = now + 1f;
             try
             {
-                var mc = GameObject.Find("MenuCanvas"); if (mc == null) return false;
-                menuRoot = mc.transform.Find("MainMenu"); if (menuRoot == null) return false;
+                var mc = GameObject.Find("MenuCanvas");
+                if (mc != null) menuRoot = mc.transform.Find("MainMenu");
+                else
+                {
+                    var mmc = MainMenuController.Instance;
+                    menuRoot = mmc != null && mmc.mainMenuContainer != null ? mmc.mainMenuContainer.transform : null;
+                }
+                if (menuRoot == null) return false;
                 mainPanel = menuRoot.Find("MainMenuPanel");
                 var settings = mainPanel != null ? mainPanel.Find("Settings") : null;
                 var sgp = menuRoot.Find("SaveGamePanel");
@@ -1176,7 +1182,7 @@ namespace SodCoop
         {
             bool vis = false;
             try { var mm = MainMenuController.Instance; vis = mm != null && mm.mainMenuActive; } catch (Exception __e) { Err.Swallow(__e); }
-            if (!vis && !NetMenu.Open && !CharEditor.Open) return;
+            if (!vis && !NetMenu.Open && !CharEditor.Open && !Net.CheatMenuOpen) return;
             if (!Init()) return;
             if (mpBtn == null || chBtn == null) AddMainButtons();
             JuiceTick();
@@ -1192,6 +1198,7 @@ namespace SodCoop
                 if (statusLabel != null) { string st = Net.StatusLine(); if (statusLabel.text != st) statusLabel.text = st; }
             }
             try { MessageTick(); } catch (Exception e) { Plugin.L.LogWarning("[UI] сообщение: " + e.Message); }
+            try { Net.CheatMenuUiTick(); } catch (Exception e) { Plugin.L.LogWarning("[UI] читы: " + e.Message); }
             try { NetMenu.UiTick(); } catch (Exception e) { Plugin.L.LogWarning("[UI] мультиплеер: " + e.Message); }
             try { CharEditor.UiTick(); } catch (Exception e) { Plugin.L.LogWarning("[UI] персонаж: " + e.Message); }
         }
@@ -1304,7 +1311,7 @@ namespace SodCoop
                 if (MainPanelShown) Show(msgWin, false);
                 return;
             }
-            if (msgText == null || NetMenu.Open || CharEditor.Open) return;
+            if (msgText == null || NetMenu.Open || CharEditor.Open || Net.CheatMenuOpen) return;
             if (msgWin == null || !msgWin.Alive) msgWin = MakeWindow("SodCoop MessagePanel", "", 1000f, 480f);
             msgWin.Title.text = msgTitle ?? "";
             Clear(msgWin.Content); Clear(msgWin.Buttons);
@@ -1332,8 +1339,14 @@ namespace SodCoop
             var b = go.GetComponent<UnityEngine.UI.Button>();
             if (b != null)
             {
+                int lastFrame = -1;
                 b.onClick = new UnityEngine.UI.Button.ButtonClickedEvent();
-                b.onClick.AddListener((UnityEngine.Events.UnityAction)(() => { try { click(); } catch (Exception e) { Plugin.L.LogWarning("[UI] кнопка '" + label + "': " + e); } }));
+                b.onClick.AddListener((UnityEngine.Events.UnityAction)(() =>
+                {
+                    if (Time.frameCount == lastFrame) return;
+                    lastFrame = Time.frameCount;
+                    try { click(); } catch (Exception e) { Plugin.L.LogWarning("[UI] кнопка '" + label + "': " + e); }
+                }));
                 b.interactable = true;
             }
             juiceFix.Add(go);
@@ -1342,16 +1355,31 @@ namespace SodCoop
 
         internal sealed class Win
         {
-            internal GameObject Root; internal RectTransform Content; internal Transform Buttons; internal TMPro.TextMeshProUGUI Title;
+            internal GameObject Root; internal RectTransform Content; internal Transform Buttons; internal TMPro.TextMeshProUGUI Title; internal bool Overlay;
             internal bool Alive { get { return Root != null && Content != null && Buttons != null; } }
         }
 
-        internal static Win MakeWindow(string name, string title, float w, float h)
+        static GameObject overlay;
+
+        static Transform Overlay()
         {
-            var go = UnityEngine.Object.Instantiate(panelTpl, menuRoot, false);
+            if (overlay != null) return overlay.transform;
+            overlay = new GameObject("SodCoop Overlay");
+            UnityEngine.Object.DontDestroyOnLoad(overlay);
+            var cv = overlay.AddComponent<Canvas>(); cv.renderMode = RenderMode.ScreenSpaceOverlay; cv.sortingOrder = 5000;
+            var cs = overlay.AddComponent<UnityEngine.UI.CanvasScaler>();
+            cs.uiScaleMode = UnityEngine.UI.CanvasScaler.ScaleMode.ScaleWithScreenSize; cs.referenceResolution = new Vector2(1920f, 1080f); cs.matchWidthOrHeight = 0f;
+            overlay.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+            return overlay.transform;
+        }
+
+        internal static Win MakeWindow(string name, string title, float w, float h, bool inGame = false)
+        {
+            var go = UnityEngine.Object.Instantiate(panelTpl, inGame ? Overlay() : menuRoot, false);
             go.name = name; go.SetActive(false);
-            var rt = go.GetComponent<RectTransform>(); rt.sizeDelta = new Vector2(w, h); rt.anchoredPosition = new Vector2(0f, -20f);
-            var win = new Win { Root = go };
+            var rt = go.GetComponent<RectTransform>(); rt.sizeDelta = new Vector2(w, h); rt.anchoredPosition = new Vector2(0f, inGame ? 0f : -20f);
+            if (inGame) { rt.anchorMin = new Vector2(0.5f, 0.5f); rt.anchorMax = new Vector2(0.5f, 0.5f); rt.pivot = new Vector2(0.5f, 0.5f); }
+            var win = new Win { Root = go, Overlay = inGame };
             var pt = go.transform.Find("Header/PanelTitle");
             var auto = pt.GetComponent<MenuAutoTextController>(); if (auto != null) UnityEngine.Object.DestroyImmediate(auto);
             win.Title = pt.GetComponent<TMPro.TextMeshProUGUI>(); win.Title.text = title;
@@ -1367,7 +1395,7 @@ namespace SodCoop
         {
             if (w == null || w.Root == null) return;
             w.Root.SetActive(on);
-            if (mainPanel != null) mainPanel.gameObject.SetActive(!on);
+            if (!w.Overlay && mainPanel != null) mainPanel.gameObject.SetActive(!on);
         }
 
         internal static bool MainPanelShown { get { return mainPanel != null && mainPanel.gameObject.activeSelf; } }
