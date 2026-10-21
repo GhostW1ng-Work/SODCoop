@@ -31,6 +31,7 @@ namespace SodCoop
         internal static ConfigEntry<string> CfgPassword, CfgServerName;
         internal static ConfigEntry<bool> CfgDebugAvatar;
         internal static ConfigEntry<bool> CfgDumpCitizen;
+        internal static ConfigEntry<bool> CfgDevCommands;
         internal static ConfigEntry<bool> CfgUseCitizenModel;
         internal static ConfigEntry<float> CfgAvatarYOffset;
         internal static ConfigEntry<float> CfgAvatarScale, CfgAvatarHeight;
@@ -363,6 +364,8 @@ namespace SodCoop
                 "Empty = off. Weights for layers 1,2,.. e.g. \"1,0\" or \"1,1\" (layer 0 is always on)");
             CfgDebugAvatar = Config.Bind("Debug", "ShowAvatarInFront", false,
                 "Test: show the avatar 3 m in front of the camera (no network needed)");
+            CfgDevCommands = Config.Bind("Debug", "DevCommands", false,
+                "Test: read commands from BepInEx/sodcoop_cmd.txt (shot NAME, mp, char, close) - for UI checks");
             CfgDumpCitizen = Config.Bind("Debug", "DumpCitizen", false,
                 "Test: log the animator parameters of some NPCs once after the world is loaded");
 
@@ -2351,13 +2354,15 @@ namespace SodCoop
             if (Open) return;
             cur = Load() ?? new Appearance();
             poolsDirty = true; Open = true; status = "";
-            try { menuCanvas = GameObject.Find("MenuCanvas"); if (menuCanvas != null) menuCanvas.SetActive(false); } catch (Exception) { }
+            if (UiKit.Init()) UiOpen();
+            else { try { menuCanvas = GameObject.Find("MenuCanvas"); if (menuCanvas != null) menuCanvas.SetActive(false); } catch (Exception) { } }
             BuildPools(); EnsureCamera(); dirty = true; applyAt = 0f;
         }
 
         internal static void CloseEditor()
         {
             Open = false;
+            UiClose();
             try { if (menuCanvas != null) menuCanvas.SetActive(true); } catch (Exception) { }
             menuCanvas = null;
             DestroyDonor();
@@ -2463,6 +2468,141 @@ namespace SodCoop
             catch (Exception) { return null; }
         }
 
+        // ---------- окно в стиле игры (UiKit) ----------
+        static UiKit.Win win;
+        static bool uiDirty;
+        static RectTransform previewRt;
+        static TMPro.TextMeshProUGUI uiStatus;
+        static int dragBtn = -1; static Vector3 lastMouse;
+
+        static bool UiOn { get { return win != null && win.Alive; } }
+
+        static void UiOpen()
+        {
+            if (!UiKit.Init()) return;
+            if (!UiOn) win = UiKit.MakeWindow("SodCoop CharacterPanel", UiKit.T("Character", "Персонаж"), 1800f, 980f);
+            UiKit.Show(win, true);
+            uiDirty = true;
+        }
+
+        static void UiClose() { if (UiOn) UiKit.Show(win, false); previewRt = null; dragBtn = -1; }
+
+        static string[] Names(string[] en, string[] r) { return UiKit.Ru ? r : en; }
+
+        internal static void UiTick()
+        {
+            if (!Open || !UiOn) return;
+            if (UiKit.MainPanelShown) { CloseEditor(); return; }
+            if (uiDirty) { uiDirty = false; Rebuild(); }
+            string shownStatus = status != null && !status.StartsWith("Parts:") ? status : "";   // «Parts: …» - отладка, в окне не показываем
+            if (uiStatus != null && uiStatus.text != shownStatus) uiStatus.text = shownStatus;
+            // предпросмотр: ЛКМ - вращать, СКМ - вверх/вниз, колесо - приблизить
+            if (previewRt == null) return;
+            Vector3 mp = UnityEngine.Input.mousePosition;
+            bool over = RectTransformUtility.RectangleContainsScreenPoint(previewRt, new Vector2(mp.x, mp.y), null);
+            if (over)
+            {
+                float sc = UnityEngine.Input.mouseScrollDelta.y;
+                if (sc != 0f) zoom = Mathf.Clamp(zoom - sc * 0.15f, 0.5f, 6f);
+                if (UnityEngine.Input.GetMouseButtonDown(0)) dragBtn = 0;
+                else if (UnityEngine.Input.GetMouseButtonDown(2)) dragBtn = 2;
+            }
+            if (dragBtn >= 0 && !UnityEngine.Input.GetMouseButton(dragBtn)) dragBtn = -1;
+            if (dragBtn >= 0)
+            {
+                var d = mp - lastMouse;
+                if (dragBtn == 2) camY = Mathf.Clamp(camY + d.y * 0.004f * zoom, -0.9f, 0.9f);
+                else yaw += d.x * 0.6f;
+            }
+            lastMouse = mp;
+        }
+
+        static void Changed(bool pools) { if (pools) poolsDirty = true; dirty = true; uiDirty = true; }
+
+        static void Rebuild()
+        {
+            var c = win.Content; UiKit.Clear(c); UiKit.Clear(win.Buttons);
+            float W = c.rect.width, H = c.rect.height;
+            if (W < 100f) { W = 1672f; H = 724f; }
+            if (poolsDirty) BuildPools();
+            float y = 6f, rh = 46f;
+            Action<string> label = s => UiKit.Label(c, s, 0f, y, 200f, 40f, 21f, TMPro.TextAlignmentOptions.MidlineRight);
+            var genders = Names(GenderNames, new[] { "Мужчина", "Женщина", "Небинарный" });
+            var builds = Names(BuildNames, new[] { "Худое", "Среднее", "Полное", "Мускулистое" });
+            var eyes = Names(EyeNames, new[] { "Голубые", "Карие", "Зелёные", "Серые" });
+            label(UiKit.T("Gender", "Пол")); ChoiceRow(c, y, genders, cur.Gender, v => { cur.Gender = v; Changed(true); }); y += rh;
+            label(UiKit.T("Build", "Телосложение")); ChoiceRow(c, y, builds, cur.Build, v => { cur.Build = v; Changed(true); }); y += rh;
+            label(UiKit.T("Eyes", "Глаза")); ChoiceRow(c, y, eyes, cur.Eyes, v => { cur.Eyes = v; Changed(false); }); y += rh;
+            label(UiKit.T("Skin tone", "Кожа")); SwatchRow(c, y, Skins, cur.Skin, v => { cur.Skin = v; Changed(true); }); y += rh;
+            label(UiKit.T("Hair colour", "Цвет волос")); SwatchRow(c, y, HairCols, cur.HairCol, v => { cur.HairCol = v; Changed(true); }); y += rh;
+            label(UiKit.T("Face", "Лицо")); PickRow(c, y, heads, cur.Head, v => cur.Head = v, false); y += rh;
+            label(UiKit.T("Hair", "Причёска")); PickRow(c, y, hairs, cur.Hair, v => cur.Hair = v, true); y += rh;
+            label(UiKit.T("Top", "Верх")); PickRow(c, y, tops, cur.Top, v => cur.Top = v, true); y += rh;
+            label(UiKit.T("Top colour", "Цвет верха")); SwatchRow(c, y, Cloth, cur.TopCol, v => { cur.TopCol = v; Changed(true); }); y += rh;
+            label(UiKit.T("Bottom", "Низ")); PickRow(c, y, bottoms, cur.Bottom, v => cur.Bottom = v, true); y += rh;
+            label(UiKit.T("Bottom colour", "Цвет низа")); SwatchRow(c, y, Cloth, cur.BottomCol, v => { cur.BottomCol = v; Changed(true); }); y += rh;
+            label(UiKit.T("Shoes", "Обувь")); PickRow(c, y, shoes, cur.Shoes, v => cur.Shoes = v, true); y += rh;
+            label(UiKit.T("Shoes colour", "Цвет обуви")); SwatchRow(c, y, Cloth, cur.ShoesCol, v => { cur.ShoesCol = v; Changed(true); }); y += rh;
+            label(UiKit.T("Hat", "Шляпа")); PickRow(c, y, hats, cur.Hat, v => cur.Hat = v, true); y += rh;
+            label(UiKit.T("Glasses", "Очки")); PickRow(c, y, glasses, cur.Glasses, v => cur.Glasses = v, true); y += rh;
+
+            // предпросмотр (RenderTexture 640x960)
+            float ph = H - 12f, pw = ph * 640f / 960f, px = 820f;
+            var ri = UiKit.Raw(c, px, 6f, pw, ph, rt);
+            previewRt = ri.GetComponent<RectTransform>();
+
+            float rx = px + pw + 30f, rw = W - rx - 20f;
+            uiStatus = UiKit.Label(c, "", rx, 10f, rw, 60f, 22f, TMPro.TextAlignmentOptions.TopLeft, UiKit.HeadColor);
+            UiKit.Label(c, UiKit.T("Left mouse: rotate\nMiddle mouse: up / down\nWheel: zoom", "ЛКМ - вращать\nСКМ - вверх / вниз\nКолесо - приблизить"), rx, 90f, rw, 110f, 20f, TMPro.TextAlignmentOptions.TopLeft);
+            var fill = UiKit.Button(c, UiKit.T("Fill bare body parts", "Закрывать голое тело"), rx, 230f, rw, 50f, () => { fillNaked = !fillNaked; Changed(false); }, 20f);
+            UiKit.SetSelected(fill, fillNaked);
+
+            UiKit.BarButton(win, UiKit.T("Back", "Назад"), 260f, () => CloseEditor());
+            UiKit.BarButton(win, UiKit.T("Random", "Случайно"), 260f, () => { Randomize(); uiDirty = true; });
+            UiKit.BarButton(win, UiKit.T("Save", "Сохранить"), 260f, () => { Save(); uiDirty = true; });
+        }
+
+        const float RowX = 212f, RowW = 580f;
+
+        static void ChoiceRow(Transform c, float y, string[] names, int v, Action<int> set)
+        {
+            float gap = 6f, bw = (RowW - gap * (names.Length - 1)) / names.Length;
+            for (int i = 0; i < names.Length; i++)
+            {
+                int k = i;
+                var b = UiKit.Button(c, names[i], RowX + i * (bw + gap), y, bw, 40f, () => { if (k != v) set(k); }, 20f);
+                UiKit.SetSelected(b, i == v);
+            }
+        }
+
+        static void SwatchRow(Transform c, float y, Color[] cols, int v, Action<int> set)
+        {
+            float gap = 4f, bw = (RowW - gap * (cols.Length - 1)) / cols.Length;
+            for (int i = 0; i < cols.Length; i++)
+            {
+                int k = i;
+                UiKit.Swatch(c, RowX + i * (bw + gap), y, bw, 40f, cols[i], i == v, () => { if (k != v) set(k); });
+            }
+        }
+
+        static void PickRow(Transform c, float y, List<ClothesPreset> pool, string curName, Action<string> set, bool allowNone)
+        {
+            int idx = -1; for (int i = 0; i < pool.Count; i++) if (pool[i].name == curName) { idx = i; break; }
+            string shown = idx >= 0 ? pool[idx].name : (allowNone ? UiKit.T("(none)", "(нет)") : "-");
+            int count = pool.Count + (allowNone ? 1 : 0);
+            int pos = allowNone ? idx + 1 : Mathf.Max(0, idx);
+            Action<int> go = np =>
+            {
+                if (count <= 0) return;
+                np = (np % count + count) % count; if (np == pos) return;
+                int pi = allowNone ? np - 1 : np;
+                set(pi < 0 ? "" : pool[pi].name); Changed(false);
+            };
+            UiKit.Button(c, "<", RowX, y, 52f, 40f, () => go(pos - 1), 22f);
+            UiKit.Label(c, shown, RowX + 62f, y, RowW - 124f, 40f, 20f, TMPro.TextAlignmentOptions.Midline, Color.white);
+            UiKit.Button(c, ">", RowX + RowW - 52f, y, 52f, 40f, () => go(pos + 1), 22f);
+        }
+
         // ---------- IMGUI ----------
         static GUIStyle btnStyle, labelStyle, titleStyle;
 
@@ -2494,9 +2634,10 @@ namespace SodCoop
                 float s = Screen.height / 1080f;
                 var old = GUI.matrix;
                 GUI.matrix = Matrix4x4.Scale(new Vector3(s, s, 1f));
+                if (Open && UiOn) { GUI.matrix = old; return; }
                 if (!Open)
                 {
-                    if (MenuVisible() && !NetMenu.Open && GUI.Button(new Rect(278f, 940f, 297f, 48f), "CHARACTER CREATE", btnStyle)) OpenEditor();
+                    if (MenuVisible() && !NetMenu.Open && !UiKit.MainButtons && GUI.Button(new Rect(278f, 940f, 297f, 48f), "CHARACTER CREATE", btnStyle)) OpenEditor();
                     GUI.matrix = old; return;
                 }
                 float W = Screen.width / s, H = Screen.height / s;
@@ -2850,6 +2991,398 @@ namespace SodCoop
     }
 
     // Меню «Мультиплеер» (IMGUI поверх главного меню): категория LAN, список серверов, HOST / CONNECT / DIRECT
+    // Интерфейс мода в стиле игры: кнопки - клоны кнопки «Настройки» главного меню (с её подсветкой, звуком и шрифтом),
+    // окна - клоны окна «Сохранить игру» (рамка, заголовок, полоса кнопок внизу), внутри - элементы из спрайтов и шрифтов игры.
+    // Если шаблоны не нашлись (другая версия игры), окна мода рисуются по-старому (IMGUI)
+    internal static class UiKit
+    {
+        internal static bool Ok;
+        static Transform menuRoot, mainPanel;
+        static GameObject btnTpl, panelTpl;
+        static TMPro.TMP_FontAsset font; static Material fontMat;
+        static Sprite frame2;
+        static bool ru;
+        static float initAt, statusAt;
+        static GameObject mpBtn, chBtn;
+        static TMPro.TextMeshProUGUI statusLabel;
+        internal static readonly Color BtnColor = new Color(0.251f, 0.212f, 0.529f, 1f);
+        internal static readonly Color SelColor = new Color(0.62f, 0.18f, 0.30f, 1f);
+        internal static readonly Color TextColor = new Color(0.835f, 0.816f, 0.906f, 1f);
+        internal static readonly Color HeadColor = new Color(1f, 0.643f, 0.718f, 1f);
+
+        internal static string T(string en, string r) { return ru ? r : en; }
+        static TMPro.TextMeshProUGUI settingsText;
+        static bool IsRu(string s) { foreach (char ch in s ?? "") if (ch >= 'Ѐ' && ch <= 'ӿ') return true; return false; }
+
+        // игра переводит меню не сразу после загрузки: язык берём по тексту кнопки «Настройки» и переподписываем свои кнопки
+        static void LanguageCheck()
+        {
+            if (settingsText == null) return;
+            bool r = IsRu(settingsText.text);
+            if (r == ru) return;
+            ru = r;
+            SetText(mpBtn, T("Multiplayer", "Мультиплеер")); SetText(chBtn, T("Character", "Персонаж"));
+            Plugin.L.LogInfo("[UI] язык меню: " + (ru ? "русский" : "английский"));
+        }
+
+        static void SetText(GameObject b, string text)
+        {
+            if (b == null) return;
+            var t = b.GetComponentInChildren<TMPro.TextMeshProUGUI>(true); if (t != null) t.text = text;
+        }
+        internal static bool Ru { get { return ru; } }
+        internal static bool MainButtons { get { return Ok && mpBtn != null && chBtn != null; } }
+
+        internal static bool Init()
+        {
+            if (Ok && btnTpl != null && panelTpl != null && menuRoot != null && mainPanel != null) return true;
+            Ok = false; mpBtn = null; chBtn = null; statusLabel = null;
+            float now = Time.realtimeSinceStartup;
+            if (now < initAt) return false;
+            initAt = now + 1f;
+            try
+            {
+                var mc = GameObject.Find("MenuCanvas"); if (mc == null) return false;
+                menuRoot = mc.transform.Find("MainMenu"); if (menuRoot == null) return false;
+                mainPanel = menuRoot.Find("MainMenuPanel");
+                var settings = mainPanel != null ? mainPanel.Find("Settings") : null;
+                var sgp = menuRoot.Find("SaveGamePanel");
+                if (settings == null || sgp == null || sgp.Find("Components") == null || sgp.Find("ButtonArea") == null || sgp.Find("Header/PanelTitle") == null) return false;
+                btnTpl = settings.gameObject; panelTpl = sgp.gameObject;
+                var t = settings.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+                if (t == null) return false;
+                font = t.font; fontMat = t.fontSharedMaterial;
+                var ci = sgp.Find("Components").GetComponent<UnityEngine.UI.Image>(); frame2 = ci != null ? ci.sprite : null;
+                settingsText = t;
+                ru = IsRu(t.text);
+                Ok = true;
+                Plugin.L.LogInfo("[UI] шаблоны меню найдены, язык: " + (ru ? "русский" : "английский"));
+                return true;
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[UI] шаблоны меню: " + e.Message); return false; }
+        }
+
+        // каждый кадр из драйвера
+        internal static void Tick()
+        {
+            bool vis = false;
+            try { var mm = MainMenuController.Instance; vis = mm != null && mm.mainMenuActive; } catch (Exception) { }
+            if (!vis && !NetMenu.Open && !CharEditor.Open) return;
+            if (!Init()) return;
+            if (mpBtn == null || chBtn == null) AddMainButtons();
+            JuiceTick();
+            float now = Time.realtimeSinceStartup;
+            if (now >= statusAt)
+            {
+                statusAt = now + 0.5f;
+                LanguageCheck();
+                FitPanel();
+                Canvas.ForceUpdateCanvases();
+                RefreshJuicePos(mainPanel);
+                if (NetMenu.Open || CharEditor.Open) RefreshJuicePos(menuRoot);
+                if (statusLabel != null) { string st = Net.StatusLine(); if (statusLabel.text != st) statusLabel.text = st; }
+            }
+            try { NetMenu.UiTick(); } catch (Exception e) { Plugin.L.LogWarning("[UI] мультиплеер: " + e.Message); }
+            try { CharEditor.UiTick(); } catch (Exception e) { Plugin.L.LogWarning("[UI] персонаж: " + e.Message); }
+        }
+
+        static void AddMainButtons()
+        {
+            try
+            {
+                if (mpBtn != null) UnityEngine.Object.Destroy(mpBtn);
+                if (chBtn != null) UnityEngine.Object.Destroy(chBtn);
+                var load = mainPanel.Find("Load Game");
+                int idx = load != null ? load.GetSiblingIndex() + 1 : btnTpl.transform.GetSiblingIndex();
+                mpBtn = CloneButton(btnTpl, mainPanel, T("Multiplayer", "Мультиплеер"), () => NetMenu.OpenMenu());
+                mpBtn.transform.SetSiblingIndex(idx);
+                chBtn = CloneButton(btnTpl, mainPanel, T("Character", "Персонаж"), () => CharEditor.OpenEditor());
+                chBtn.transform.SetSiblingIndex(idx + 1);
+                // строка состояния сети - под столбцом кнопок
+                var go = new GameObject("SodCoop Status"); go.AddComponent<RectTransform>();
+                go.transform.SetParent(mainPanel, false);
+                go.AddComponent<UnityEngine.UI.LayoutElement>().ignoreLayout = true;
+                var rt = go.GetComponent<RectTransform>();
+                rt.anchorMin = new Vector2(0f, 0f); rt.anchorMax = new Vector2(0f, 0f); rt.pivot = new Vector2(0f, 1f);
+                rt.anchoredPosition = new Vector2(0f, -54f); rt.sizeDelta = new Vector2(1400f, 34f);
+                statusLabel = MakeText(go, "", 20f, TMPro.TextAlignmentOptions.TopLeft, TextColor);
+                FitPanel();
+                Plugin.L.LogInfo("[UI] кнопки мультиплеера и персонажа добавлены в главное меню");
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[UI] кнопки главного меню: " + e.Message); }
+        }
+
+        // столбец кнопок фиксированной высоты: если наши кнопки не влезли - растим его
+        static void FitPanel()
+        {
+            try
+            {
+                var rt = mainPanel.GetComponent<RectTransform>(); var vl = mainPanel.GetComponent<UnityEngine.UI.VerticalLayoutGroup>();
+                if (rt == null || vl == null) return;
+                float need = vl.padding.top + vl.padding.bottom; int n = 0;
+                for (int i = 0; i < mainPanel.childCount; i++)
+                {
+                    var c = mainPanel.GetChild(i); if (!c.gameObject.activeSelf) continue;
+                    var le = c.GetComponent<UnityEngine.UI.LayoutElement>(); if (le != null && le.ignoreLayout) continue;
+                    var crt = c.GetComponent<RectTransform>(); if (crt == null) continue;
+                    need += crt.sizeDelta.y; n++;
+                }
+                if (n > 1) need += vl.spacing * (n - 1);
+                if (need > rt.sizeDelta.y + 0.5f) rt.sizeDelta = new Vector2(rt.sizeDelta.x, need + 2f);
+            }
+            catch (Exception) { }
+        }
+
+        // JuiceController кнопки при наведении возвращает её на «исходное» место и в исходный цвет, а у клона они остались
+        // от кнопки «Настройки»: в окнах кнопки при наведении уезжали туда или пропадали. Когда кнопки расставлены (кадр спустя,
+        // после раскладки), записываем им их настоящие место и цвет
+        static readonly List<GameObject> juiceFix = new List<GameObject>();
+
+        static void JuiceTick()
+        {
+            if (juiceFix.Count == 0) return;
+            Canvas.ForceUpdateCanvases();
+            foreach (var go in juiceFix) FixJuice(go);
+            juiceFix.Clear();
+        }
+
+        static void FixJuice(GameObject go)
+        {
+            if (go == null) return;
+            var j = go.GetComponent<JuiceController>();
+            if (j == null || j.elements == null) return;
+            foreach (var e in j.elements)
+            {
+                if (e == null) continue;
+                try
+                {
+                    if (e.transformElement != null) { e.originalLocalPos = e.transformElement.localPosition; e.originalLocalRot = e.transformElement.localEulerAngles; e.originalLocalScale = e.transformElement.localScale; }
+                    if (e.imageElement != null) e.originalColour = e.imageElement.color;
+                    e.getNormalTransformAtStart = false; e.getNormalColourAtStart = false;
+                }
+                catch (Exception) { }
+            }
+        }
+
+        // Место кнопок в столбце меню меняется после нашей вставки (столбец растёт, кнопки съезжают), и у кнопок игры тоже:
+        // запомненное «исходное» место JuiceController устаревало, и кнопка при наведении прыгала на старое. Обновляем только
+        // место (встряхивание меняет масштаб и поворот, но не место)
+        static void RefreshJuicePos(Transform root)
+        {
+            if (root == null || !root.gameObject.activeInHierarchy) return;
+            foreach (var j in root.GetComponentsInChildren<JuiceController>(false))
+            {
+                if (j == null || j.elements == null) continue;
+                foreach (var e in j.elements)
+                {
+                    if (e == null || e.transformElement == null) continue;
+                    try { e.originalLocalPos = e.transformElement.localPosition; e.getNormalTransformAtStart = false; } catch (Exception) { }
+                }
+            }
+        }
+
+        // для проверки: «встряхнуть» все кнопки окон мода, как при наведении
+        internal static void NudgeAll()
+        {
+            if (menuRoot == null) return;
+            int n = 0;
+            foreach (var j in menuRoot.GetComponentsInChildren<JuiceController>(false))
+                if (j != null && j.GetComponent<ButtonController>() != null) { try { j.Nudge(); n++; } catch (Exception) { } }
+            Plugin.L.LogInfo("[UI] встряхнул кнопок: " + n);
+        }
+
+        internal static GameObject CloneButton(GameObject tpl, Transform parent, string label, Action click)
+        {
+            var go = UnityEngine.Object.Instantiate(tpl, parent, false);
+            go.name = "SodCoop " + label; go.SetActive(true);
+            var bc = go.GetComponent<ButtonController>();
+            if (bc != null) { bc.useAutomaticText = false; bc.textReference = ""; bc.menuMouseoverReference = ""; bc.interactable = true; bc.baseColour = BtnColor; }
+            var img = go.GetComponent<UnityEngine.UI.Image>(); if (img != null) img.color = BtnColor;
+            for (int i = go.transform.childCount - 1; i >= 0; i--)
+            {
+                var ch = go.transform.GetChild(i);
+                if (ch.name.StartsWith("ButtonAdditionalHighlight")) UnityEngine.Object.Destroy(ch.gameObject);
+            }
+            var tmp = go.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+            if (tmp != null) { tmp.text = label; var c = tmp.color; c.a = 1f; tmp.color = c; }
+            var b = go.GetComponent<UnityEngine.UI.Button>();
+            if (b != null)
+            {
+                b.onClick = new UnityEngine.UI.Button.ButtonClickedEvent();
+                b.onClick.AddListener((UnityEngine.Events.UnityAction)(() => { try { click(); } catch (Exception e) { Plugin.L.LogWarning("[UI] кнопка '" + label + "': " + e); } }));
+                b.interactable = true;
+            }
+            juiceFix.Add(go);
+            return go;
+        }
+
+        // ---------- окна ----------
+        internal sealed class Win
+        {
+            internal GameObject Root; internal RectTransform Content; internal Transform Buttons; internal TMPro.TextMeshProUGUI Title;
+            internal bool Alive { get { return Root != null && Content != null && Buttons != null; } }
+        }
+
+        internal static Win MakeWindow(string name, string title, float w, float h)
+        {
+            var go = UnityEngine.Object.Instantiate(panelTpl, menuRoot, false);
+            go.name = name; go.SetActive(false);
+            var rt = go.GetComponent<RectTransform>(); rt.sizeDelta = new Vector2(w, h); rt.anchoredPosition = new Vector2(0f, -20f);
+            var win = new Win { Root = go };
+            var pt = go.transform.Find("Header/PanelTitle");
+            var auto = pt.GetComponent<MenuAutoTextController>(); if (auto != null) UnityEngine.Object.DestroyImmediate(auto);
+            win.Title = pt.GetComponent<TMPro.TextMeshProUGUI>(); win.Title.text = title;
+            var comps = go.transform.Find("Components");
+            Clear(comps);
+            win.Content = comps.GetComponent<RectTransform>();
+            win.Buttons = go.transform.Find("ButtonArea");
+            Clear(win.Buttons);
+            return win;
+        }
+
+        internal static void Show(Win w, bool on)
+        {
+            if (w == null || w.Root == null) return;
+            w.Root.SetActive(on);
+            if (mainPanel != null) mainPanel.gameObject.SetActive(!on);
+        }
+
+        // окно открыто, а игра вернула главное меню (Esc и т.п.) - значит, окно пора закрыть
+        internal static bool MainPanelShown { get { return mainPanel != null && mainPanel.gameObject.activeSelf; } }
+
+        internal static void Clear(Transform t)
+        {
+            if (t == null) return;
+            for (int i = t.childCount - 1; i >= 0; i--) UnityEngine.Object.DestroyImmediate(t.GetChild(i).gameObject);
+        }
+
+        // ---------- элементы (координаты от левого верхнего угла родителя) ----------
+        static RectTransform Place(GameObject go, Transform parent, float x, float y, float w, float h)
+        {
+            go.transform.SetParent(parent, false);
+            var rt = go.GetComponent<RectTransform>(); if (rt == null) rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0f, 1f); rt.anchorMax = new Vector2(0f, 1f); rt.pivot = new Vector2(0f, 1f);
+            rt.anchoredPosition = new Vector2(x, -y); rt.sizeDelta = new Vector2(w, h);
+            return rt;
+        }
+
+        static void Stretch(RectTransform rt, float l, float b, float r, float t)
+        {
+            rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one; rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.offsetMin = new Vector2(l, b); rt.offsetMax = new Vector2(-r, -t);
+        }
+
+        static TMPro.TextMeshProUGUI MakeText(GameObject go, string text, float size, TMPro.TextAlignmentOptions al, Color col)
+        {
+            var t = go.AddComponent<TMPro.TextMeshProUGUI>();
+            t.font = font; t.fontSharedMaterial = fontMat; t.fontSize = size; t.color = col; t.alignment = al;
+            t.overflowMode = TMPro.TextOverflowModes.Ellipsis; t.raycastTarget = false; t.text = text ?? "";
+            return t;
+        }
+
+        internal static TMPro.TextMeshProUGUI Label(Transform p, string text, float x, float y, float w, float h, float size = 22f, TMPro.TextAlignmentOptions al = TMPro.TextAlignmentOptions.MidlineLeft, Color? col = null)
+        {
+            var go = new GameObject("Label"); go.AddComponent<RectTransform>();
+            Place(go, p, x, y, w, h);
+            return MakeText(go, text, size, al, col ?? TextColor);
+        }
+
+        internal static GameObject Button(Transform p, string label, float x, float y, float w, float h, Action click, float size = 22f)
+        {
+            var go = CloneButton(btnTpl, p, label, click);
+            var le = go.GetComponent<UnityEngine.UI.LayoutElement>(); if (le != null) le.ignoreLayout = true;
+            Place(go, p, x, y, w, h);
+            var tmp = go.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+            if (tmp != null)
+            {
+                tmp.enableAutoSizing = false; tmp.fontSize = size;
+                // кириллица у шрифта игры - из запасного шрифта с более высокой строкой: в низкой кнопке (поле текста 24 px)
+                // такая строка не влезала и подпись обрезалась целиком. Текст - на всю кнопку и без обрезки по высоте
+                tmp.overflowMode = TMPro.TextOverflowModes.Overflow;
+                var trt = tmp.GetComponent<RectTransform>();
+                if (trt != null) { trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one; trt.offsetMin = new Vector2(4f, 0f); trt.offsetMax = new Vector2(-4f, 0f); }
+            }
+            return go;
+        }
+
+        // кнопка в полосе кнопок внизу окна
+        internal static GameObject BarButton(Win w, string label, float width, Action click, bool enabled = true)
+        {
+            var go = CloneButton(btnTpl, w.Buttons, label, click);
+            var le = go.GetComponent<UnityEngine.UI.LayoutElement>(); if (le == null) le = go.AddComponent<UnityEngine.UI.LayoutElement>();
+            le.ignoreLayout = false; le.preferredWidth = width; le.minWidth = width;
+            var rt = go.GetComponent<RectTransform>(); rt.sizeDelta = new Vector2(width, 52f);
+            if (!enabled) SetEnabled(go, false);
+            return go;
+        }
+
+        internal static void SetSelected(GameObject btn, bool sel)
+        {
+            if (btn == null) return;
+            var c = sel ? SelColor : BtnColor;
+            var img = btn.GetComponent<UnityEngine.UI.Image>(); if (img != null) img.color = c;
+            var bc = btn.GetComponent<ButtonController>(); if (bc != null) bc.baseColour = c;
+            if (!juiceFix.Contains(btn)) juiceFix.Add(btn);
+        }
+
+        internal static void SetEnabled(GameObject btn, bool on)
+        {
+            if (btn == null) return;
+            var b = btn.GetComponent<UnityEngine.UI.Button>(); if (b != null) b.interactable = on;
+            var bc = btn.GetComponent<ButtonController>(); if (bc != null) bc.interactable = on;
+            var tmp = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+            if (tmp != null) { var c = tmp.color; c.a = on ? 1f : 0.25f; tmp.color = c; }
+        }
+
+        internal static TMPro.TMP_InputField Input(Transform p, float x, float y, float w, float h, string value, int max, bool password)
+        {
+            var go = new GameObject("Input"); go.SetActive(false); go.AddComponent<RectTransform>();
+            Place(go, p, x, y, w, h);
+            var bg = go.AddComponent<UnityEngine.UI.Image>(); bg.sprite = frame2; bg.type = UnityEngine.UI.Image.Type.Sliced; bg.color = new Color(0.10f, 0.08f, 0.22f, 0.95f);
+            // рамка - как у кнопок игры
+            var tb = btnTpl.transform.Find("Border"); var tbi = tb != null ? tb.GetComponent<UnityEngine.UI.Image>() : null;
+            if (tbi != null)
+            {
+                var bo = new GameObject("Border"); bo.AddComponent<RectTransform>(); bo.transform.SetParent(go.transform, false);
+                Stretch(bo.GetComponent<RectTransform>(), 0f, 0f, 0f, 0f);
+                var bi = bo.AddComponent<UnityEngine.UI.Image>(); bi.sprite = tbi.sprite; bi.type = tbi.type; bi.material = tbi.material; bi.color = tbi.color; bi.raycastTarget = false;
+            }
+            var area = new GameObject("Text Area"); area.AddComponent<RectTransform>(); area.transform.SetParent(go.transform, false);
+            var art = area.GetComponent<RectTransform>(); Stretch(art, 12f, 4f, 12f, 4f);
+            area.AddComponent<UnityEngine.UI.RectMask2D>();
+            var tgo = new GameObject("Text"); tgo.AddComponent<RectTransform>(); tgo.transform.SetParent(area.transform, false);
+            Stretch(tgo.GetComponent<RectTransform>(), 0f, 0f, 0f, 0f);
+            var txt = MakeText(tgo, "", 22f, TMPro.TextAlignmentOptions.MidlineLeft, Color.white);
+            txt.overflowMode = TMPro.TextOverflowModes.Overflow;
+            var f = go.AddComponent<TMPro.TMP_InputField>();
+            f.targetGraphic = bg; f.textViewport = art; f.textComponent = txt;
+            f.characterLimit = max; f.richText = false;
+            if (password) { f.contentType = TMPro.TMP_InputField.ContentType.Password; f.inputType = TMPro.TMP_InputField.InputType.Password; }
+            f.customCaretColor = true; f.caretColor = Color.white; f.selectionColor = new Color(0.858f, 0.312f, 0.384f, 0.5f);
+            go.SetActive(true);
+            f.text = value ?? "";
+            return f;
+        }
+
+        internal static GameObject Swatch(Transform p, float x, float y, float w, float h, Color c, bool sel, Action click)
+        {
+            var go = Button(p, "", x, y, w, h, click);
+            var tone = new GameObject("Tone"); tone.AddComponent<RectTransform>(); tone.transform.SetParent(go.transform, false);
+            Stretch(tone.GetComponent<RectTransform>(), 7f, 7f, 7f, 7f);
+            var img = tone.AddComponent<UnityEngine.UI.Image>(); img.color = c; img.raycastTarget = false;
+            SetSelected(go, sel);
+            return go;
+        }
+
+        internal static UnityEngine.UI.RawImage Raw(Transform p, float x, float y, float w, float h, Texture tex)
+        {
+            var go = new GameObject("Preview"); go.AddComponent<RectTransform>();
+            Place(go, p, x, y, w, h);
+            var ri = go.AddComponent<UnityEngine.UI.RawImage>(); ri.texture = tex; ri.raycastTarget = true;
+            return ri;
+        }
+    }
+
     internal static class NetMenu
     {
         internal static bool Open;
@@ -2858,6 +3391,184 @@ namespace SodCoop
         static string fName = "", fPass = "", fPort = "9050", fAddr = "127.0.0.1", fAPort = "9050", fAPass = "";
         static string selIp = ""; static int selPort; static string msg = "";
         static GUIStyle btn, lab, title, field, rowBtn;
+
+        // ---------- окно в стиле игры (UiKit) ----------
+        static UiKit.Win win;
+        static string builtSig = "";
+        static TMPro.TextMeshProUGUI uiStatus, uiMsg;
+        static TMPro.TMP_InputField inName, inPass, inPort, inAddr, inAPort, inAPass;
+        static float uiAt;
+
+        static bool UiOn { get { return win != null && win.Alive; } }
+
+        static void UiOpen()
+        {
+            if (!UiKit.Init()) return;
+            if (!UiOn) win = UiKit.MakeWindow("SodCoop MultiplayerPanel", "", 1500f, 860f);
+            builtSig = "";
+            UiKit.Show(win, true);
+        }
+
+        static void UiClose() { if (UiOn) UiKit.Show(win, false); }
+
+        // введённое в поля - в переменные (перед перестройкой окна и по кнопкам)
+        static void Harvest()
+        {
+            if (inName != null) fName = inName.text; if (inPass != null) fPass = inPass.text; if (inPort != null) fPort = inPort.text;
+            if (inAddr != null) fAddr = inAddr.text; if (inAPort != null) fAPort = inAPort.text; if (inAPass != null) fAPass = inAPass.text;
+        }
+
+        static string Sig()
+        {
+            var sb = new StringBuilder();
+            sb.Append(page).Append('|').Append(selIp).Append(':').Append(selPort).Append('|').Append(hostSel).Append('|').Append(hostTop).Append('|').Append(hostSaves.Count);
+            if (page == 0 || page == 3) foreach (var s in Lan.Servers) sb.Append('|').Append(s.Ip).Append(':').Append(s.Port).Append(s.Name).Append(s.Players).Append(s.Seed);
+            return sb.ToString();
+        }
+
+        internal static void UiTick()
+        {
+            if (!Open || !UiOn) return;
+            if (UiKit.MainPanelShown) { CloseMenu(); return; }   // игра сама вернула главное меню (Esc)
+            string sig = Sig();
+            if (sig != builtSig) { Harvest(); Rebuild(); builtSig = sig; }
+            if (Time.realtimeSinceStartup >= uiAt)
+            {
+                uiAt = Time.realtimeSinceStartup + 0.3f;
+                string st = Net.StatusLine();
+                if (uiStatus != null) uiStatus.text = st != "" ? UiKit.T("Now: ", "Сейчас: ") + st : "";
+                if (uiMsg != null) uiMsg.text = msg ?? "";
+            }
+        }
+
+        static void Rebuild()
+        {
+            var c = win.Content; UiKit.Clear(c); UiKit.Clear(win.Buttons);
+            inName = inPass = inPort = inAddr = inAPort = inAPass = null;
+            win.Title.text = page == 1 ? UiKit.T("Host a game", "Создать игру") : page == 2 ? UiKit.T("Direct connect", "Подключение по адресу") : page == 3 ? UiKit.T("Password", "Пароль") : UiKit.T("Multiplayer", "Мультиплеер");
+            float W = c.rect.width, H = c.rect.height;
+            if (W < 100f) { W = 1372f; H = 604f; }
+            if (page == 0) UiList(c, W);
+            else if (page == 1) UiHost(c, W);
+            else if (page == 2) UiDirect(c);
+            else UiPass(c);
+            uiMsg = UiKit.Label(c, msg ?? "", 24f, H - 84f, W - 48f, 36f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, UiKit.HeadColor);
+            uiStatus = UiKit.Label(c, "", 24f, H - 48f, W - 48f, 36f, 20f);
+            uiAt = 0f;
+        }
+
+        static void UiList(Transform c, float W)
+        {
+            float y = 18f;
+            UiKit.Label(c, UiKit.T("Server", "Сервер"), 36f, y, 500f, 32f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, UiKit.HeadColor);
+            UiKit.Label(c, UiKit.T("Players", "Игроки"), 560f, y, 160f, 32f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, UiKit.HeadColor);
+            UiKit.Label(c, UiKit.T("Address", "Адрес"), 740f, y, 300f, 32f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, UiKit.HeadColor);
+            UiKit.Label(c, UiKit.T("City seed", "Сид города"), 1060f, y, 300f, 32f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, UiKit.HeadColor);
+            y += 44f;
+            var list = Lan.Servers;
+            if (list.Count == 0)
+                UiKit.Label(c, UiKit.T("No servers found yet. The host must have loaded a city. Use Direct connect to type an address.",
+                    "Серверов пока нет. Хост должен загрузить город. Можно подключиться по адресу."), 36f, y + 6f, W - 72f, 40f, 22f);
+            for (int i = 0; i < list.Count && i < 8; i++)
+            {
+                var sv = list[i];
+                string ip = sv.Ip; int port = sv.Port;
+                var row = UiKit.Button(c, "", 24f, y, W - 48f, 50f, () => { selIp = ip; selPort = port; });
+                UiKit.SetSelected(row, sv.Ip == selIp && sv.Port == selPort);
+                UiKit.Label(row.transform, (sv.Pw ? "[" + UiKit.T("password", "пароль") + "] " : "") + sv.Name, 12f, 0f, 510f, 50f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, Color.white);
+                UiKit.Label(row.transform, sv.Players + " / " + sv.Max, 536f, 0f, 160f, 50f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, Color.white);
+                UiKit.Label(row.transform, sv.Ip + ":" + sv.Port, 716f, 0f, 300f, 50f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, Color.white);
+                UiKit.Label(row.transform, sv.Seed, 1036f, 0f, W - 1100f, 50f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, Color.white);
+                y += 56f;
+            }
+            Lan.Server sel = null;
+            foreach (var x in list) if (x.Ip == selIp && x.Port == selPort) sel = x;
+            UiKit.BarButton(win, UiKit.T("Host", "Создать"), 200f, () => { page = 1; msg = ""; hostSaves = MenuAuto.SaveNames(); hostSel = 0; hostTop = 0; });
+            UiKit.BarButton(win, UiKit.T("Connect", "Подключиться"), 220f, () => ConnectTo(sel), sel != null);
+            UiKit.BarButton(win, UiKit.T("Direct", "По адресу"), 200f, () => { page = 2; msg = ""; });
+            UiKit.BarButton(win, UiKit.T("Refresh", "Обновить"), 200f, () => { Lan.Servers.Clear(); Lan.Scan(); builtSig = ""; });
+            UiKit.BarButton(win, UiKit.T("Disable", "Выключить"), 200f, () => { Net.ApplyOff(); msg = UiKit.T("Multiplayer disabled.", "Мультиплеер выключен."); });
+            UiKit.BarButton(win, UiKit.T("Back", "Назад"), 200f, () => CloseMenu());
+        }
+
+        internal static void DevPage(int p) { if (p == 1) { hostSaves = MenuAuto.SaveNames(); hostSel = 0; hostTop = 0; } page = p; }
+
+        static void ConnectTo(Lan.Server sv)
+        {
+            if (sv == null) return;
+            if (sv.Pw) { fAPass = ""; page = 3; msg = ""; }
+            else { Net.ApplyClient(sv.Ip, sv.Port, ""); Net.StartTransfer(); Done(""); }
+        }
+
+        static void UiHost(Transform c, float W)
+        {
+            float x = 36f, y = 16f;
+            UiKit.Label(c, UiKit.T("Server name", "Название сервера"), x, y, 560f, 32f); y += 34f;
+            inName = UiKit.Input(c, x, y, 560f, 46f, fName, 32, false); y += 62f;
+            UiKit.Label(c, UiKit.T("Password (empty = no password)", "Пароль (пусто = без пароля)"), x, y, 560f, 32f); y += 34f;
+            inPass = UiKit.Input(c, x, y, 560f, 46f, fPass, 32, true); y += 62f;
+            UiKit.Label(c, UiKit.T("Port", "Порт"), x, y, 560f, 32f); y += 34f;
+            inPort = UiKit.Input(c, x, y, 200f, 46f, fPort, 5, false); y += 62f;
+            UiKit.Label(c, UiKit.T("Max players: ", "Игроков максимум: ") + Mathf.Clamp(Plugin.CfgMaxPlayers.Value, 2, 4) + UiKit.T(" (Network/MaxPlayers in the config)", " (Network/MaxPlayers в конфиге)"), x, y, 600f, 32f, 20f); y += 40f;
+            UiKit.Label(c, UiKit.T("Load save starts the selected save at once. New game: set it up yourself. The server starts when the city has loaded.",
+                "«Загрузить сейв» сразу запускает выбранный сейв. «Новая игра» - настрой её сам. Сервер запустится, когда город загрузится."), x, y, 600f, 90f, 20f, TMPro.TextAlignmentOptions.TopLeft);
+
+            float lx = 680f, ly = 16f; const int per = 8;
+            UiKit.Label(c, hostSaves.Count > 0 ? UiKit.T("Save to load", "Какой сейв загрузить") : UiKit.T("No saves found", "Сейвов нет"), lx, ly, W - lx - 36f, 32f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, UiKit.HeadColor); ly += 40f;
+            hostTop = Mathf.Clamp(hostTop, 0, Mathf.Max(0, hostSaves.Count - per));
+            for (int i = hostTop; i < hostSaves.Count && i < hostTop + per; i++)
+            {
+                int k = i;
+                var row = UiKit.Button(c, Path.GetFileNameWithoutExtension(hostSaves[i]), lx, ly, W - lx - 36f, 46f, () => hostSel = k);
+                var t = row.GetComponentInChildren<TMPro.TextMeshProUGUI>(true); if (t != null) t.alignment = TMPro.TextAlignmentOptions.MidlineLeft;
+                UiKit.SetSelected(row, i == hostSel);
+                ly += 52f;
+            }
+            if (hostSaves.Count > per)
+            {
+                UiKit.Button(c, UiKit.T("Up", "Выше"), lx, ly, 160f, 44f, () => hostTop -= per);
+                UiKit.Button(c, UiKit.T("Down", "Ниже"), lx + 172f, ly, 160f, 44f, () => hostTop += per);
+            }
+            UiKit.BarButton(win, UiKit.T("Host: load save", "Загрузить сейв"), 300f, () => { Harvest(); StartHost(false); }, hostSaves.Count > 0);
+            UiKit.BarButton(win, UiKit.T("Host: new game", "Новая игра"), 300f, () => { Harvest(); StartHost(true); });
+            UiKit.BarButton(win, UiKit.T("Back", "Назад"), 240f, () => { Harvest(); page = 0; msg = ""; });
+        }
+
+        static void UiDirect(Transform c)
+        {
+            float x = 36f, y = 16f;
+            UiKit.Label(c, UiKit.T("Host IP address", "IP-адрес хоста"), x, y, 560f, 32f); y += 34f;
+            inAddr = UiKit.Input(c, x, y, 460f, 46f, fAddr, 40, false); y += 62f;
+            UiKit.Label(c, UiKit.T("Port", "Порт"), x, y, 560f, 32f); y += 34f;
+            inAPort = UiKit.Input(c, x, y, 200f, 46f, fAPort, 5, false); y += 62f;
+            UiKit.Label(c, UiKit.T("Password (if the server has one)", "Пароль (если есть)"), x, y, 560f, 32f); y += 34f;
+            inAPass = UiKit.Input(c, x, y, 560f, 46f, fAPass, 32, true);
+            UiKit.BarButton(win, UiKit.T("Connect", "Подключиться"), 300f, () =>
+            {
+                Harvest(); int p;
+                if (string.IsNullOrWhiteSpace(fAddr)) msg = UiKit.T("Enter the host IP address.", "Введи IP-адрес хоста.");
+                else if (!Port(fAPort, out p)) msg = UiKit.T("Port must be a number from 1024 to 65535.", "Порт - число от 1024 до 65535.");
+                else { Net.ApplyClient(fAddr.Trim(), p, fAPass ?? ""); Net.StartTransfer(); Done(""); }
+            });
+            UiKit.BarButton(win, UiKit.T("Back", "Назад"), 240f, () => { Harvest(); page = 0; msg = ""; });
+        }
+
+        static void UiPass(Transform c)
+        {
+            Lan.Server sv = null;
+            foreach (var x in Lan.Servers) if (x.Ip == selIp && x.Port == selPort) sv = x;
+            float px = 36f, y = 16f;
+            UiKit.Label(c, sv != null ? UiKit.T("Server: ", "Сервер: ") + sv.Name + "  (" + sv.Ip + ":" + sv.Port + ")" : UiKit.T("Server is gone", "Сервер пропал"), px, y, 900f, 32f); y += 50f;
+            UiKit.Label(c, UiKit.T("Password", "Пароль"), px, y, 560f, 32f); y += 34f;
+            inAPass = UiKit.Input(c, px, y, 560f, 46f, fAPass, 32, true);
+            UiKit.BarButton(win, UiKit.T("Connect", "Подключиться"), 300f, () =>
+            {
+                Harvest();
+                if (sv == null) return;
+                Net.ApplyClient(sv.Ip, sv.Port, fAPass ?? ""); Net.StartTransfer(); Done("");
+            }, sv != null);
+            UiKit.BarButton(win, UiKit.T("Back", "Назад"), 240f, () => { Harvest(); page = 0; msg = ""; });
+        }
 
         static void Styles()
         {
@@ -2876,18 +3587,20 @@ namespace SodCoop
             try { var mm = MainMenuController.Instance; return mm != null && mm.mainMenuActive; } catch (Exception) { return false; }
         }
 
-        static void OpenMenu()
+        internal static void OpenMenu()
         {
             Net.EnsureRt(); MenuAuto.Notice = "";
             Open = true; page = 0; msg = ""; selIp = ""; selPort = 0;
             fName = Net.RtName; fPass = Net.RtPassword; fPort = "" + Net.RtPort; fAddr = Net.RtAddress; fAPort = "" + Net.RtPort; fAPass = "";
-            try { menuCanvas = GameObject.Find("MenuCanvas"); if (menuCanvas != null) menuCanvas.SetActive(false); } catch (Exception) { }
+            if (UiKit.Init()) UiOpen();
+            else { try { menuCanvas = GameObject.Find("MenuCanvas"); if (menuCanvas != null) menuCanvas.SetActive(false); } catch (Exception) { } }
             Lan.Servers.Clear(); Lan.Scan();
         }
 
-        static void CloseMenu()
+        internal static void CloseMenu()
         {
             Open = false;
+            UiClose();
             try { if (menuCanvas != null) menuCanvas.SetActive(true); } catch (Exception) { }
             menuCanvas = null;
         }
@@ -2903,9 +3616,10 @@ namespace SodCoop
                 float s = Screen.height / 1080f;
                 var old = GUI.matrix;
                 GUI.matrix = Matrix4x4.Scale(new Vector3(s, s, 1f));
+                if (Open && UiOn) { GUI.matrix = old; return; }
                 if (!Open)
                 {
-                    if (MenuVisible())
+                    if (MenuVisible() && !UiKit.MainButtons)
                     {
                         if (GUI.Button(new Rect(585f, 940f, 297f, 48f), "MULTIPLAYER", btn)) OpenMenu();
                         string st = Net.StatusLine();
@@ -3161,6 +3875,8 @@ namespace SodCoop
             try
             {
                 CrashLog.Beat();
+                try { UiDev.Tick(); } catch (Exception e) { Plugin.L.LogWarning("[UI] " + e.Message); }
+                try { UiKit.Tick(); } catch (Exception e) { Plugin.L.LogWarning("[UI] " + e.Message); }
                 CharEditor.Tick();
                 Lan.Tick();
                 Net.Poll();
@@ -3187,6 +3903,150 @@ namespace SodCoop
             {
                 if (Time.realtimeSinceStartup > nextLog) { nextLog = Time.realtimeSinceStartup + 30f; Plugin.L.LogWarning("[DRV] " + e); }
             }
+        }
+    }
+
+    // Разведка интерфейса меню (раз за запуск, когда меню на экране) и тестовые команды из файла - для настройки вида окон мода
+    internal static class UiDev
+    {
+        static bool probed;
+        static float cmdAt;
+
+        static string PathOf(Transform t)
+        {
+            string p = t.name;
+            for (int i = 0; i < 10 && t.parent != null; i++) { t = t.parent; p = t.name + "/" + p; }
+            return p;
+        }
+
+        internal static void Tick()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (!probed)
+            {
+                var mm = MainMenuController.Instance;
+                bool vis = false; try { vis = mm != null && mm.mainMenuActive && GameObject.Find("MenuCanvas") != null; } catch (Exception) { }
+                if (vis && now > 8f) { probed = true; try { Probe(); } catch (Exception e) { Plugin.L.LogWarning("[UI] разведка: " + e); } }
+            }
+            if (!Plugin.CfgDevCommands.Value || now < cmdAt) return;
+            cmdAt = now + 0.5f;
+            string f = Path.Combine(Paths.BepInExRootPath, "sodcoop_cmd.txt");
+            if (!File.Exists(f)) return;
+            string[] lines; try { lines = File.ReadAllLines(f); File.Delete(f); } catch (Exception) { return; }
+            foreach (var raw in lines)
+            {
+                var l = (raw ?? "").Trim(); if (l == "") continue;
+                Plugin.L.LogInfo("[UI] команда: " + l);
+                var parts = l.Split(new[] { ' ' }, 2);
+                switch (parts[0])
+                {
+                    case "shot": ScreenCapture.CaptureScreenshot(Path.Combine(Paths.BepInExRootPath, (parts.Length > 1 ? parts[1] : "shot") + ".png")); break;
+                    case "mp": NetMenu.OpenMenu(); break;
+                    case "char": CharEditor.OpenEditor(); break;
+                    case "close": NetMenu.CloseMenu(); if (CharEditor.Open) CharEditor.CloseEditor(); break;
+                    case "probe": Probe(); break;
+                    case "nudge": UiKit.NudgeAll(); break;
+                    case "page": { int n; if (parts.Length > 1 && int.TryParse(parts[1], out n)) NetMenu.DevPage(n); } break;
+                    case "click":
+                        {
+                            var mp = GameObject.Find("MenuCanvas/MainMenu/MainMenuPanel/" + (parts.Length > 1 ? parts[1] : ""));
+                            var b = mp != null ? mp.GetComponent<UnityEngine.UI.Button>() : null;
+                            if (b != null) b.onClick.Invoke(); else Plugin.L.LogWarning("[UI] нет кнопки " + (parts.Length > 1 ? parts[1] : ""));
+                        }
+                        break;
+                    case "comp": { int n; if (parts.Length > 1 && int.TryParse(parts[1], out n)) MainMenuController.Instance.SetMenuComponent((MainMenuController.Component)n); } break;
+                }
+            }
+        }
+
+        static void Line(StringBuilder sb, Transform t, int depth)
+        {
+            RectTransform rt = null; try { rt = t.TryCast<RectTransform>(); } catch (Exception) { }
+            sb.Append(new string(' ', depth * 2)).Append(t.name).Append(t.gameObject.activeSelf ? "" : " (off)");
+            if (rt != null) sb.Append($" pos={rt.anchoredPosition} size={rt.sizeDelta} amin={rt.anchorMin} amax={rt.anchorMax} piv={rt.pivot} scale={rt.localScale}");
+            var comps = t.GetComponents<Component>();
+            foreach (var c in comps)
+            {
+                if (c == null) continue;
+                string tn = c.GetIl2CppType().Name;
+                if (tn == "RectTransform" || tn == "Transform" || tn == "CanvasRenderer") continue;
+                sb.Append(" [").Append(tn);
+                try
+                {
+                    var img = c.TryCast<UnityEngine.UI.Image>();
+                    if (img != null)
+                    {
+                        var sp = img.sprite;
+                        sb.Append($" sprite={(sp != null ? sp.name : "null")}");
+                        if (sp != null) sb.Append($" tex={(sp.texture != null ? sp.texture.name + " " + sp.texture.width + "x" + sp.texture.height : "null")} rect={sp.rect} border={sp.border}");
+                        sb.Append($" col={img.color} type={img.type} mat={(img.material != null ? img.material.name : "null")}");
+                    }
+                    var tmp = c.TryCast<TMPro.TextMeshProUGUI>();
+                    if (tmp != null)
+                    {
+                        var fa = tmp.font;
+                        sb.Append($" font={(fa != null ? fa.name : "null")} src={(fa != null && fa.sourceFontFile != null ? fa.sourceFontFile.name : "null")} size={tmp.fontSize} col={tmp.color} style={tmp.fontStyle} align={tmp.alignment} cs={tmp.characterSpacing} text='{(tmp.text ?? "").Replace("\n", " ")}'");
+                        try { var fm = tmp.fontSharedMaterial; if (fm != null) sb.Append($" fmat={fm.name}"); } catch (Exception) { }
+                    }
+                    var vl = c.TryCast<UnityEngine.UI.VerticalLayoutGroup>();
+                    if (vl != null) sb.Append($" spacing={vl.spacing} pad={vl.padding} ctrlH={vl.childControlHeight} forceH={vl.childForceExpandHeight}");
+                    var hl = c.TryCast<UnityEngine.UI.HorizontalLayoutGroup>();
+                    if (hl != null) sb.Append($" spacing={hl.spacing}");
+                    var le = c.TryCast<UnityEngine.UI.LayoutElement>();
+                    if (le != null) sb.Append($" pref={le.preferredWidth}x{le.preferredHeight} min={le.minWidth}x{le.minHeight} ignore={le.ignoreLayout}");
+                    var bc = c.TryCast<ButtonController>();
+                    if (bc != null) sb.Append($" auto={bc.useAutomaticText} dict={bc.textDictionary}/{bc.textReference} base={bc.baseColour}");
+                }
+                catch (Exception e) { sb.Append(" !" + e.Message); }
+                sb.Append("]");
+            }
+            sb.AppendLine();
+        }
+
+        static void Tree(StringBuilder sb, Transform t, int depth, int maxDepth)
+        {
+            if (t == null) return;
+            Line(sb, t, depth);
+            if (depth >= maxDepth) return;
+            for (int i = 0; i < t.childCount; i++) Tree(sb, t.GetChild(i), depth + 1, maxDepth);
+        }
+
+        internal static void Probe()
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("=== UI PROBE " + DateTime.Now + " screen " + Screen.width + "x" + Screen.height);
+            var root = GameObject.Find("MenuCanvas");
+            if (root != null)
+            {
+                var cv = root.GetComponent<Canvas>(); var cs = root.GetComponent<UnityEngine.UI.CanvasScaler>();
+                sb.AppendLine($"MenuCanvas canvas scale={(cv != null ? cv.scaleFactor : 0f)} mode={(cv != null ? cv.renderMode.ToString() : "")} scaler={(cs != null ? cs.uiScaleMode + " ref=" + cs.referenceResolution + " match=" + cs.matchWidthOrHeight : "none")}");
+                var mm = root.transform.Find("MainMenu");
+                if (mm != null)
+                {
+                    for (int i = 0; i < mm.childCount; i++)
+                    {
+                        var ch = mm.GetChild(i);
+                        int depth = ch.name == "MainMenuPanel" || ch.name == "SaveGamePanel" || ch.name == "SettingsPanel" ? 3 : ch.name == "CharacterSetupPanel" || ch.name == "GenerateCityPanel" ? 6 : 1;
+                        Tree(sb, ch, 1, depth);
+                    }
+                }
+            }
+            try
+            {
+                var pm = PopupMessageController.Instance;
+                if (pm != null) { sb.AppendLine("=== Popup"); Tree(sb, pm.transform, 0, 5); }
+            }
+            catch (Exception e) { sb.AppendLine("popup: " + e.Message); }
+            try
+            {
+                sb.AppendLine("=== Fonts");
+                foreach (var f in Resources.FindObjectsOfTypeAll<Font>()) if (f != null) sb.AppendLine("Font " + f.name + " dynamic=" + f.dynamic);
+                foreach (var f in Resources.FindObjectsOfTypeAll<TMPro.TMP_FontAsset>()) if (f != null) sb.AppendLine("TMP " + f.name + " src=" + (f.sourceFontFile != null ? f.sourceFontFile.name : "null") + " atlas=" + (f.atlasTexture != null ? f.atlasTexture.width + "x" + f.atlasTexture.height : "null"));
+            }
+            catch (Exception e) { sb.AppendLine("fonts: " + e.Message); }
+            string path = Path.Combine(Paths.BepInExRootPath, "SodCoop_ui_probe.txt");
+            File.WriteAllText(path, sb.ToString());
+            Plugin.L.LogInfo("[UI] разведка меню записана: " + path);
         }
     }
 
@@ -4206,15 +5066,15 @@ namespace SodCoop
         internal static string StatusLine()
         {
             EnsureRt();
-            if (xferMode) return "CLIENT: " + xferText;
+            if (xferMode) return UiKit.T("CLIENT: ", "КЛИЕНТ: ") + xferText;
             if (MenuAuto.Notice != "") return MenuAuto.Notice;
             if (RtMode == NetMode.Off) return "";
-            if (RtMode == NetMode.Host && sendStage != 0) return "HOSTING: sending the save to a player...";
-            if (RtMode == NetMode.Host) return (manager != null ? "HOSTING" : "HOST (starts when the city has loaded)") + ": " + RtName + " : " + RtPort + (manager != null ? "   [" + (players.Count + 1) + "/" + Mathf.Clamp(Plugin.CfgMaxPlayers.Value, 2, 4) + " players" + (players.Count == 0 ? ", waiting" : "") + "]   (End = stop)" : "");
-            if (connectRejected) return "REJECTED by " + RtAddress + ":" + RtPort + " (wrong password?)";
-            if (serverPeer != null) return "CONNECTED to " + RtAddress + ":" + RtPort + "   (End = leave multiplayer)";
-            if (lostAt >= 0f && manager != null) return "CONNECTION LOST, reconnecting to " + RtAddress + ":" + RtPort + " ...   (End = leave multiplayer)";
-            return (manager != null ? "CONNECTING" : "CLIENT (connects when the city has loaded; load the same save as the host)") + ": " + RtAddress + ":" + RtPort;
+            if (RtMode == NetMode.Host && sendStage != 0) return UiKit.T("HOSTING: sending the save to a player...", "ХОСТ: отправляю сейв игроку...");
+            if (RtMode == NetMode.Host) return (manager != null ? UiKit.T("HOSTING", "ХОСТ") : UiKit.T("HOST (starts when the city has loaded)", "ХОСТ (запустится, когда город загрузится)")) + ": " + RtName + " : " + RtPort + (manager != null ? "   [" + (players.Count + 1) + "/" + Mathf.Clamp(Plugin.CfgMaxPlayers.Value, 2, 4) + UiKit.T(" players", " игроков") + (players.Count == 0 ? UiKit.T(", waiting", ", жду") : "") + "]   " + UiKit.T("(End = stop)", "(End - остановить)") : "");
+            if (connectRejected) return UiKit.T("REJECTED by ", "ОТКАЗ от ") + RtAddress + ":" + RtPort + UiKit.T(" (wrong password?)", " (неверный пароль?)");
+            if (serverPeer != null) return UiKit.T("CONNECTED to ", "ПОДКЛЮЧЁН к ") + RtAddress + ":" + RtPort + "   " + UiKit.T("(End = leave multiplayer)", "(End - выйти из мультиплеера)");
+            if (lostAt >= 0f && manager != null) return UiKit.T("CONNECTION LOST, reconnecting to ", "СВЯЗЬ ПОТЕРЯНА, переподключаюсь к ") + RtAddress + ":" + RtPort + " ...   " + UiKit.T("(End = leave multiplayer)", "(End - выйти из мультиплеера)");
+            return (manager != null ? UiKit.T("CONNECTING", "ПОДКЛЮЧАЮСЬ") : UiKit.T("CLIENT (connects when the city has loaded; load the same save as the host)", "КЛИЕНТ (подключусь, когда город загрузится; загрузи тот же сейв, что у хоста)")) + ": " + RtAddress + ":" + RtPort;
         }
 
 
