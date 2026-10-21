@@ -2554,8 +2554,6 @@ namespace SodCoop
             float rx = px + pw + 30f, rw = W - rx - 20f;
             uiStatus = UiKit.Label(c, "", rx, 10f, rw, 60f, 22f, TMPro.TextAlignmentOptions.TopLeft, UiKit.HeadColor);
             UiKit.Label(c, UiKit.T("Left mouse: rotate\nMiddle mouse: up / down\nWheel: zoom", "ЛКМ - вращать\nСКМ - вверх / вниз\nКолесо - приблизить"), rx, 90f, rw, 110f, 20f, TMPro.TextAlignmentOptions.TopLeft);
-            var fill = UiKit.Button(c, UiKit.T("Fill bare body parts", "Закрывать голое тело"), rx, 230f, rw, 50f, () => { fillNaked = !fillNaked; Changed(false); }, 20f);
-            UiKit.SetSelected(fill, fillNaked);
 
             UiKit.BarButton(win, UiKit.T("Back", "Назад"), 260f, () => CloseEditor());
             UiKit.BarButton(win, UiKit.T("Random", "Случайно"), 260f, () => { Randomize(); uiDirty = true; });
@@ -2687,8 +2685,6 @@ namespace SodCoop
                 if (GUI.Button(new Rect(1320f, 950f, 240f, 56f), "CLOSE", btnStyle)) CloseEditor();
                 if (GUI.Button(new Rect(1320f, 810f, 240f, 56f), "RANDOM", btnStyle)) Randomize();
                 GUI.Label(new Rect(1320f, 90f, 560f, 120f), status, labelStyle);
-                bool fn = GUI.Toggle(new Rect(1320f, 740f, 400f, 36f), fillNaked, " Fill bare body parts myself", btnStyle);
-                if (fn != fillNaked) { fillNaked = fn; dirty = true; }
                 GUI.matrix = old;
             }
             catch (Exception e) { Plugin.L.LogWarning("[CHAR] GUI: " + e.Message); }
