@@ -20,9 +20,11 @@ namespace SodCoop
 {
     public enum NetMode { Off, Host, Client }
 
-    [BepInPlugin("com.yourname.sodcoop", "SodCoop", "0.11.3")]
+    [BepInPlugin("com.flyingfrogs.sodcoop", "SodCoop", Plugin.ModVersion)]
     public class Plugin : BasePlugin
     {
+        // версия мода: у хоста и клиентов должна совпадать (проверяется при подключении)
+        internal const string ModVersion = "0.12.0";
         internal static ManualLogSource L;
         internal static void Dbg(string m) { try { if (CfgDebugLog != null && CfgDebugLog.Value) L.LogInfo(m); } catch (System.Exception) { } }
         internal static ConfigEntry<NetMode> CfgMode;
@@ -2763,7 +2765,11 @@ namespace SodCoop
     {
         const int DiscPort = 47777;
         const string Q = "SODCOOP?1", A = "SODCOOP!1";
-        internal class Server { public string Name = "", Seed = "", Build = "", Ip = ""; public bool Pw; public int Players, Max = 2, Port; public float Seen; }
+        internal class Server
+        {
+            public string Name = "", Seed = "", Build = "", Ip = "", Version = ""; public bool Pw; public int Players, Max = 2, Port; public float Seen;
+            public bool Compatible { get { return Version == Plugin.ModVersion; } }
+        }
         internal static readonly List<Server> Servers = new List<Server>();
         static UdpClient hostSock, scanSock;
         static float nextScan;
@@ -2851,6 +2857,7 @@ namespace SodCoop
                             {
                                 bw.Write(A); bw.Write(Net.RtName ?? ""); bw.Write(!string.IsNullOrEmpty(Net.RtPassword));
                                 bw.Write(Net.PlayerCount); bw.Write(Net.MaxPlayersPublic); bw.Write(Net.RtPort); bw.Write(Net.SeedInfo()); bw.Write(Net.BuildInfo());
+                                bw.Write(Plugin.ModVersion);
                             }
                             var rb = ms.ToArray();
                             hostSock.Send(rb, rb.Length, ep);
@@ -2873,6 +2880,7 @@ namespace SodCoop
                                 var sv = new Server();
                                 sv.Name = br.ReadString(); sv.Pw = br.ReadBoolean(); sv.Players = br.ReadInt32(); sv.Max = br.ReadInt32();
                                 sv.Port = br.ReadInt32(); sv.Seed = br.ReadString(); sv.Build = br.ReadString();
+                                sv.Version = br.BaseStream.Position < br.BaseStream.Length ? br.ReadString() : "";
                                 sv.Ip = ep.Address.ToString(); sv.Seen = Time.realtimeSinceStartup;
                                 int idx = Servers.FindIndex(x => x.Ip == sv.Ip && x.Port == sv.Port);
                                 if (idx >= 0) Servers[idx] = sv; else Servers.Add(sv);
@@ -3078,6 +3086,7 @@ namespace SodCoop
                 if (NetMenu.Open || CharEditor.Open) RefreshJuicePos(menuRoot);
                 if (statusLabel != null) { string st = Net.StatusLine(); if (statusLabel.text != st) statusLabel.text = st; }
             }
+            try { MessageTick(); } catch (Exception e) { Plugin.L.LogWarning("[UI] сообщение: " + e.Message); }
             try { NetMenu.UiTick(); } catch (Exception e) { Plugin.L.LogWarning("[UI] мультиплеер: " + e.Message); }
             try { CharEditor.UiTick(); } catch (Exception e) { Plugin.L.LogWarning("[UI] персонаж: " + e.Message); }
         }
@@ -3185,6 +3194,30 @@ namespace SodCoop
             foreach (var j in menuRoot.GetComponentsInChildren<JuiceController>(false))
                 if (j != null && j.GetComponent<ButtonController>() != null) { try { j.Nudge(); n++; } catch (Exception) { } }
             Plugin.L.LogInfo("[UI] встряхнул кнопок: " + n);
+        }
+
+        // ---------- окно сообщения (показывается, когда меню на экране) ----------
+        static string msgTitle, msgText;
+        static Win msgWin;
+
+        internal static void ShowMessage(string title, string text) { msgTitle = title; msgText = text; }
+
+        static void MessageTick()
+        {
+            if (msgWin != null && msgWin.Alive && msgWin.Root.activeSelf)
+            {
+                if (MainPanelShown) Show(msgWin, false);   // игра сама вернула главное меню
+                return;
+            }
+            if (msgText == null || NetMenu.Open || CharEditor.Open) return;
+            if (msgWin == null || !msgWin.Alive) msgWin = MakeWindow("SodCoop MessagePanel", "", 1000f, 480f);
+            msgWin.Title.text = msgTitle ?? "";
+            Clear(msgWin.Content); Clear(msgWin.Buttons);
+            var c = msgWin.Content; float W = c.rect.width > 100f ? c.rect.width : 872f;
+            Label(c, msgText, 30f, 30f, W - 60f, 150f, 24f, TMPro.TextAlignmentOptions.Center, Color.white);
+            BarButton(msgWin, "OK", 260f, () => Show(msgWin, false));
+            msgText = null;
+            Show(msgWin, true);
         }
 
         internal static GameObject CloneButton(GameObject tpl, Transform parent, string label, Action click)
@@ -3418,7 +3451,7 @@ namespace SodCoop
         {
             var sb = new StringBuilder();
             sb.Append(page).Append('|').Append(selIp).Append(':').Append(selPort).Append('|').Append(hostSel).Append('|').Append(hostTop).Append('|').Append(hostSaves.Count);
-            if (page == 0 || page == 3) foreach (var s in Lan.Servers) sb.Append('|').Append(s.Ip).Append(':').Append(s.Port).Append(s.Name).Append(s.Players).Append(s.Seed);
+            if (page == 0 || page == 3) foreach (var s in Lan.Servers) sb.Append('|').Append(s.Ip).Append(':').Append(s.Port).Append(s.Name).Append(s.Players).Append(s.Seed).Append(s.Version);
             return sb.ToString();
         }
 
@@ -3471,7 +3504,9 @@ namespace SodCoop
                 string ip = sv.Ip; int port = sv.Port;
                 var row = UiKit.Button(c, "", 24f, y, W - 48f, 50f, () => { selIp = ip; selPort = port; });
                 UiKit.SetSelected(row, sv.Ip == selIp && sv.Port == selPort);
-                UiKit.Label(row.transform, (sv.Pw ? "[" + UiKit.T("password", "пароль") + "] " : "") + sv.Name, 12f, 0f, 510f, 50f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, Color.white);
+                string nm = (sv.Pw ? "[" + UiKit.T("password", "пароль") + "] " : "") + sv.Name;
+                if (!sv.Compatible) nm += "  (" + UiKit.T("mod ", "мод ") + (sv.Version != "" ? sv.Version : UiKit.T("older than 0.12.0", "старее 0.12.0")) + UiKit.T(", incompatible)", ", несовместим)");
+                UiKit.Label(row.transform, nm, 12f, 0f, 510f, 50f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, sv.Compatible ? Color.white : UiKit.HeadColor);
                 UiKit.Label(row.transform, sv.Players + " / " + sv.Max, 536f, 0f, 160f, 50f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, Color.white);
                 UiKit.Label(row.transform, sv.Ip + ":" + sv.Port, 716f, 0f, 300f, 50f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, Color.white);
                 UiKit.Label(row.transform, sv.Seed, 1036f, 0f, W - 1100f, 50f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, Color.white);
@@ -3480,7 +3515,7 @@ namespace SodCoop
             Lan.Server sel = null;
             foreach (var x in list) if (x.Ip == selIp && x.Port == selPort) sel = x;
             UiKit.BarButton(win, UiKit.T("Host", "Создать"), 200f, () => { page = 1; msg = ""; hostSaves = MenuAuto.SaveNames(); hostSel = 0; hostTop = 0; });
-            UiKit.BarButton(win, UiKit.T("Connect", "Подключиться"), 220f, () => ConnectTo(sel), sel != null);
+            UiKit.BarButton(win, UiKit.T("Connect", "Подключиться"), 220f, () => ConnectTo(sel), sel != null && sel.Compatible);
             UiKit.BarButton(win, UiKit.T("Direct", "По адресу"), 200f, () => { page = 2; msg = ""; });
             UiKit.BarButton(win, UiKit.T("Refresh", "Обновить"), 200f, () => { Lan.Servers.Clear(); Lan.Scan(); builtSig = ""; });
             UiKit.BarButton(win, UiKit.T("Disable", "Выключить"), 200f, () => { Net.ApplyOff(); msg = UiKit.T("Multiplayer disabled.", "Мультиплеер выключен."); });
@@ -5227,6 +5262,7 @@ namespace SodCoop
         static void ReloadTick()
         {
             float now = Time.realtimeSinceStartup;
+            if (versionMismatchHost != null) { var hv = versionMismatchHost; versionMismatchHost = null; VersionMismatchApply(hv); }
             if (hostReloadAt >= 0f && now >= hostReloadAt)
             {
                 hostReloadAt = -1f;
@@ -5257,6 +5293,37 @@ namespace SodCoop
         }
 
         static void ClientFollowHostReload() { followPending = true; }
+
+        // версии мода у хоста и у меня разные: подключаться нельзя - объясняем, кому обновиться
+        // из обработчика сети - только запоминаем: сеть останавливаем уже вне PollEvents (ReloadTick)
+        static string versionMismatchHost;
+
+        static void VersionMismatch(string hostVer) { connectRejected = true; versionMismatchHost = hostVer ?? ""; }
+
+        static void VersionMismatchApply(string hostVer)
+        {
+            string mine = Plugin.ModVersion;
+            int cmp = hostVer == "" ? -1 : CompareVersions(hostVer, mine);
+            string hv = hostVer != "" ? hostVer : UiKit.T("older than 0.12.0", "старее 0.12.0");
+            string text = cmp < 0
+                ? UiKit.T($"The host has an older mod version ({hv}), you have {mine}.\nThe host needs to update the mod.", $"У хоста более старая версия мода ({hv}), у тебя {mine}.\nХосту нужно обновить мод.")
+                : UiKit.T($"The host has a newer mod version ({hv}), you have {mine}.\nUpdate the mod to play together.", $"У хоста более новая версия мода ({hv}), у тебя {mine}.\nОбнови мод, чтобы играть вместе.");
+            Plugin.L.LogWarning($"[NET] версия мода у хоста {hv}, у меня {mine} - подключение невозможно");
+            if (xferMode) { xferMode = false; xferFinish = false; xferText = ""; }
+            followHost = false; followAt = -1f;
+            Shutdown();
+            ClientReleaseWorld();
+            RtMode = NetMode.Off;
+            Toast(text.Replace("\n", " "));
+            UiKit.ShowMessage(UiKit.T("Can't connect", "Подключиться нельзя"), text);
+        }
+
+        static int CompareVersions(string a, string b)
+        {
+            Version va, vb;
+            if (Version.TryParse(a, out va) && Version.TryParse(b, out vb)) return va.CompareTo(vb);
+            return string.CompareOrdinal(a, b);
+        }
 
         static void OpenMenuForLoad()
         {
@@ -5498,7 +5565,17 @@ namespace SodCoop
                         if (!IsHost) { request.Reject(); return; }
                         string k = request.Data.GetString();
                         string pw = request.Data.AvailableBytes > 0 ? request.Data.GetString() : "";
+                        string ver = request.Data.AvailableBytes > 0 ? request.Data.GetString() : "";
                         if (k != Key) { request.Reject(); return; }
+                        if (ver != Plugin.ModVersion)
+                        {
+                            // клиент до 0.12.0 версию не присылает
+                            string shown = ver != "" ? ver : UiKit.T("older than 0.12.0", "старее 0.12.0");
+                            Plugin.L.LogWarning($"[NET] клиент с версией мода {shown} (у меня {Plugin.ModVersion}) - отклоняю");
+                            Toast(UiKit.T($"A player with mod version {shown} tried to join (yours is {Plugin.ModVersion}).", $"Игрок с версией мода {shown} пытался подключиться (у тебя {Plugin.ModVersion})."));
+                            var rw = new NetDataWriter(); rw.Put("VERSION"); rw.Put(Plugin.ModVersion);
+                            request.Reject(rw); return;
+                        }
                         if (!string.IsNullOrEmpty(RtPassword) && pw != RtPassword)
                         {
                             Plugin.L.LogWarning("[NET] Неверный пароль при подключении, отклоняю");
@@ -5566,6 +5643,18 @@ namespace SodCoop
                         }
                         connecting = false;
                         nextAttempt = Time.realtimeSinceStartup + 3f;
+                        if (info.Reason == DisconnectReason.ConnectionRejected && info.AdditionalData != null)
+                        {
+                            try
+                            {
+                                if (info.AdditionalData.AvailableBytes > 0 && info.AdditionalData.GetString() == "VERSION")
+                                {
+                                    VersionMismatch(info.AdditionalData.AvailableBytes > 0 ? info.AdditionalData.GetString() : "");
+                                    return;
+                                }
+                            }
+                            catch (Exception) { }
+                        }
                         if (xferMode && xferFailMsg == null && !xferFinish && !(followHost && info.Reason != DisconnectReason.ConnectionRejected))
                             xferFailMsg = info.Reason == DisconnectReason.ConnectionRejected ? "Rejected by the host (wrong password?)" : "Connection to the host failed: " + info.Reason;
                         if (info.Reason == DisconnectReason.ConnectionRejected)
@@ -5620,7 +5709,7 @@ namespace SodCoop
                 {
                     connecting = true;
                     var cw = new NetDataWriter();
-                    cw.Put(Key); cw.Put(RtPassword ?? "");
+                    cw.Put(Key); cw.Put(RtPassword ?? ""); cw.Put(Plugin.ModVersion);
                     manager.Connect(RtAddress, RtPort, cw);
                 }
             }
@@ -15654,6 +15743,7 @@ namespace SodCoop
                 w.Put(MyAppearanceJson());
                 w.Put((byte)me.pid);
                 w.Put(false);
+                w.Put(Plugin.ModVersion);
                 peer.Send(w, DeliveryMethod.ReliableOrdered);
                 if (ok)
                 {
@@ -15680,6 +15770,13 @@ namespace SodCoop
                 string hostApp = reader.AvailableBytes > 0 ? reader.GetString() : "";
                 int pid = reader.AvailableBytes > 0 ? reader.GetByte() : 0;
                 bool full = reader.AvailableBytes > 0 && reader.GetBool();
+                string hostVer = reader.AvailableBytes > 0 ? reader.GetString() : "";
+                if (!full && hostVer != Plugin.ModVersion)
+                {
+                    try { peer.Disconnect(); } catch (Exception) { }
+                    VersionMismatch(hostVer);
+                    return;
+                }
                 if (full)
                 {
                     Toast("The server is full.");
