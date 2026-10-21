@@ -38,6 +38,7 @@ namespace SodCoop
         internal static ConfigEntry<bool> CfgProfiles, CfgNewPlayerClean;
         internal static ConfigEntry<float> CfgProfileInterval;
         internal static ConfigEntry<int> CfgNewPlayerMoney;
+        internal static ConfigEntry<int> CfgNewPlayerLockpicks;
         internal static ConfigEntry<bool> CfgKoNoTimeSkip;
         internal static ConfigEntry<float> CfgHospitalSeconds;
         internal static ConfigEntry<bool> CfgKoInstantGetUp;
@@ -150,8 +151,10 @@ namespace SodCoop
                 "How often (seconds) a client sends his profile to the host");
             CfgNewPlayerClean = Config.Bind("Profiles", "NewPlayerCleanStart", true,
                 "A player who joins for the first time starts with an empty inventory and no bad statuses instead of a copy of the host's items");
-            CfgNewPlayerMoney = Config.Bind("Profiles", "NewPlayerMoney", 500,
+            CfgNewPlayerMoney = Config.Bind("Profiles", "NewPlayerMoney", 100,
                 "Money of a player who joins for the first time (-1 = keep what the host's save gives)");
+            CfgNewPlayerLockpicks = Config.Bind("Profiles", "NewPlayerLockpicks", 5,
+                "Lockpicks of a player who joins for the first time (-1 = keep what the host's save gives)");
             CfgKoNoTimeSkip = Config.Bind("Hospital", "NoTimeSkip", true,
                 "In multiplayer the game does not fast-forward time while a player is knocked out or in hospital (time is shared by all players). The player heals in real time instead");
             CfgHospitalSeconds = Config.Bind("Hospital", "HospitalSeconds", 60f,
@@ -375,7 +378,7 @@ namespace SodCoop
             Harmony.CreateAndPatchAll(typeof(PlayerPatch));
             Harmony.CreateAndPatchAll(typeof(MeleePatch));
             Harmony.CreateAndPatchAll(typeof(BlockPatch));
-            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SelfTripFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch), typeof(ProfileEventPatch), typeof(KnockPatch), typeof(BargePatch), typeof(JobCreationPatch), typeof(JobAcceptPatch), typeof(CaseResolvePatch), typeof(PinnedMenuPatch), typeof(ShareCommandPatch), typeof(PhoneCallLogPatch), typeof(PhoneCallLogPatch2), typeof(JobInfoPatch), typeof(ObjectiveCompletePatch), typeof(ObjectiveAddPatch), typeof(MurderClientBlockPatch), typeof(MurderCaseNotifyPatch), typeof(MurderDiscoveryPatch), typeof(BuildingAlarmPatch), typeof(AddressAlarmPatch), typeof(ComputerPatch), typeof(PagePatch), typeof(CaseStatusPatch), typeof(RestrainPatch), typeof(TickRatePatch), typeof(GooseChasePatch), typeof(WorldAlivePatch), typeof(KeepInvokesPatch), typeof(PauseReentryPatch), typeof(LookAroundPatch), typeof(CctvCapturePatch), typeof(KeyringPatch), typeof(JobDialogAddPatch), typeof(ObjectiveCancelPatch), typeof(RewardPatch), typeof(PuppetVisiblePatch) })
+            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SelfTripFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch), typeof(ProfileEventPatch), typeof(KnockPatch), typeof(BargePatch), typeof(JobCreationPatch), typeof(JobAcceptPatch), typeof(CaseResolvePatch), typeof(PinnedMenuPatch), typeof(ShareCommandPatch), typeof(PhoneCallLogPatch), typeof(PhoneCallLogPatch2), typeof(JobInfoPatch), typeof(ObjectiveCompletePatch), typeof(ObjectiveAddPatch), typeof(MurderClientBlockPatch), typeof(MurderCaseNotifyPatch), typeof(MurderDiscoveryPatch), typeof(BuildingAlarmPatch), typeof(AddressAlarmPatch), typeof(ComputerPatch), typeof(PagePatch), typeof(CaseStatusPatch), typeof(RestrainPatch), typeof(TickRatePatch), typeof(GooseChasePatch), typeof(WorldAlivePatch), typeof(KeepInvokesPatch), typeof(PauseReentryPatch), typeof(LookAroundPatch), typeof(CctvCapturePatch), typeof(KeyringPatch), typeof(JobDialogAddPatch), typeof(ObjectiveCancelPatch), typeof(RewardPatch), typeof(PuppetVisiblePatch), typeof(MenuComponentPatch), typeof(MenuComponentIntPatch) })
             {
                 try { Harmony.CreateAndPatchAll(t); }
                 catch (Exception e) { L.LogWarning($"[PATCH] {t.Name}: {e.Message}"); }
@@ -1097,6 +1100,27 @@ namespace SodCoop
         }
     }
 
+    // Хост открыл экран загрузки города (загрузка сейва или новая игра) - клиенты загрузят его мир следом
+    [HarmonyPatch(typeof(MainMenuController), "SetMenuComponent", new[] { typeof(MainMenuController.Component) })]
+    public static class MenuComponentPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(MainMenuController.Component newComponent)
+        {
+            try { Net.OnMenuComponent((int)newComponent); } catch (Exception e) { Plugin.L.LogWarning("[RELOAD] " + e.Message); }
+        }
+    }
+
+    [HarmonyPatch(typeof(MainMenuController), "SetMenuComponent", new[] { typeof(int) })]
+    public static class MenuComponentIntPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(int newComponent)
+        {
+            try { Net.OnMenuComponent(newComponent); } catch (Exception e) { Plugin.L.LogWarning("[RELOAD] " + e.Message); }
+        }
+    }
+
     // Отмена цели задания: в лог (цель пропадает с экрана - видно, кто её отменил)
     [HarmonyPatch(typeof(Objective), "Cancel")]
     public static class ObjectiveCancelPatch
@@ -1715,7 +1739,7 @@ namespace SodCoop
             bool worldReady = npc > 0 && doors > 0 &&
                               Time.realtimeSinceStartup - lastChange >= 5f;
 
-            if (!Net.Started && worldReady)
+            if (!Net.Started && worldReady && !Net.MenuOpen() && !Net.Following())
             {
                 Net.Start();
             }
@@ -3703,6 +3727,7 @@ namespace SodCoop
         const byte MsgRelay = 26;       // хост -> клиент: [pid отправителя][тип][данные] - сообщение другого клиента
         const byte MsgPlayerInfo = 27;  // хост -> клиент: [pid][внешний вид] - сведения о другом игроке
         const byte MsgPlayerLeft = 28;  // хост -> клиент: [pid] - игрок вышел
+        const byte MsgHostReload = 37;  // хост -> клиент: хост загружает сейв / новую игру - клиенты потом скачают и загрузят его мир
         const byte MsgJob = 34;         // задания: [1][номер][json] хост->клиент задание с предметами; [2][номер] убрано; [3][номер] взял; [4][номер][награда] сдал; [5] улика; [6][n][номера] живые задания; [7][номер][текст] выслушал заказчика; [9][номер][цель] цель выполнена; [10][номер][выбор][цель...] новая цель; [11][номер][выбор] случайный выбор задания (место встречи, таксофон...); [12][n]{[житель][буква]} хост: буквы отпечатков; [13][житель] клиент: нашёл отпечатки; [14] компьютер; [15] страница папки; [16] тревога; [17] тревоги у хоста (снимок)
         const byte MsgCorpse = 36;      // игрок -> все: [житель][n]{[хеш имени кости][позиция][поворот]} - позы костей мёртвого тела
         const byte MsgMurder = 35;      // хост -> клиент: [1][активно][номер][json] убийство с его предметами; [2][n][номера] какие убийства есть у хоста; [3][вид][номер] новое дело об убийстве (место)
@@ -4086,6 +4111,9 @@ namespace SodCoop
             Plugin.L.LogInfo("[HUD] " + text);
         }
 
+        internal static bool MenuOpen() { return InMainMenu(); }
+        internal static bool Following() { return followHost; }
+
         static bool InMainMenu() { try { var mm = MainMenuController.Instance; return mm != null && mm.mainMenuActive; } catch (Exception) { return false; } }
 
         internal static void DrawHud()
@@ -4137,6 +4165,7 @@ namespace SodCoop
         internal static void LeaveSession()
         {
             bool wasClient = RtMode == NetMode.Client;
+            followHost = false; followPending = false; followAt = -1f; hostReloadAt = -1f; helloWasOk = false;
             Plugin.L.LogInfo("[NET] End: выход из мультиплеера");
             ApplyOff();
             if (wasClient) ClientReleaseWorld();
@@ -4239,6 +4268,13 @@ namespace SodCoop
             Plugin.L.LogInfo("[XFER] сохранение получено: " + name);
             xferMode = false; xferFinish = false; xferText = "";
             Shutdown();   // на время загрузки города сеть выключаем; клиент подключится снова, когда мир загрузится
+            if (followHost)
+            {
+                followHost = false;
+                // загрузка идёт через меню (в игре это меню паузы): открываем его, если игрок закрыл
+                OpenMenuForLoad();
+                Toast("Loading the host's save...");
+            }
             MenuAuto.LoadSave(name);
         }
 
@@ -4247,7 +4283,7 @@ namespace SodCoop
             HostSendTick();
             if (xferFailMsg != null) { var m = xferFailMsg; xferFailMsg = null; XferFail(m); return; }
             if (xferFinish) { XferFinish(); return; }
-            if (xferMode && Time.realtimeSinceStartup - xferAt > 90f) XferFail("timed out waiting for the host (is the host in a loaded city?)");
+            if (xferMode && Time.realtimeSinceStartup - xferAt > (followHost ? 900f : 90f)) XferFail("timed out waiting for the host (is the host in a loaded city?)");
         }
 
         // ---- клиент ----
@@ -4302,11 +4338,88 @@ namespace SodCoop
         {
             try { if (sendFiles != null) foreach (var f in sendFiles) { if (f.Fs != null) f.Fs.Close(); f.Fs = null; } } catch (Exception) { }
             sendStage = 0; sendPeer = null; sendFiles = null; snapTask = null;
+            while (sendQueue.Count > 0)
+            {
+                var next = sendQueue[0]; sendQueue.RemoveAt(0);
+                if (next != null && next.ConnectionState == ConnectionState.Connected) { HostBeginSend(next); break; }
+            }
+        }
+
+        static readonly List<NetPeer> sendQueue = new List<NetPeer>();
+
+        // ================= Хост загружает сейв - клиенты следом =================
+        // Раньше клиенты при загрузке у хоста теряли связь по таймауту, а потом получали «мир не совпадает» и шли в меню
+        // за сейвом вручную. Теперь хост перед загрузкой сообщает клиентам и закрывает сервер; сервер поднимается сам, когда
+        // город загружен (и меню закрыто). Клиенты открывают меню, ждут хоста, скачивают его мир и загружают его
+        static float hostReloadAt = -1f;
+        static bool followHost, followPending, helloWasOk;
+        static float followAt = -1f;
+
+        internal static void OnMenuComponent(int comp)
+        {
+            if (comp != (int)MainMenuController.Component.loadingCity || !IsHost || manager == null || hostReloadAt >= 0f) return;
+            int n = manager.ConnectedPeersCount;
+            Plugin.L.LogInfo($"[RELOAD] хост загружает сейв/город - сообщаю клиентам ({n}) и закрываю сервер до конца загрузки");
+            if (n > 0)
+            {
+                var w = new NetDataWriter(); w.Put(MsgHostReload);
+                manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+            }
+            hostReloadAt = Time.realtimeSinceStartup + (n > 0 ? 0.7f : 0f);   // даём сообщению уйти
+        }
+
+        static void ReloadTick()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (hostReloadAt >= 0f && now >= hostReloadAt)
+            {
+                hostReloadAt = -1f;
+                Shutdown();   // Started = false: сервер снова запустится, когда новый город загрузится
+                Plugin.L.LogInfo("[RELOAD] сервер закрыт на время загрузки");
+            }
+            if (followPending)
+            {
+                // не из обработчика сообщения: сеть останавливаем уже вне PollEvents
+                followPending = false;
+                Plugin.L.LogInfo("[RELOAD] хост загружает другой сейв - ухожу в меню, потом скачаю и загружу его мир");
+                try { ProfileOnShutdown(); } catch (Exception) { }
+                Shutdown();
+                ClientReleaseWorld();
+                followHost = true;
+                followAt = now + 3f;
+                OpenMenuForLoad();
+                MenuAuto.Notice = "The host is loading a save. You will follow automatically.";
+            }
+            if (followAt >= 0f && now >= followAt && RtMode == NetMode.Client)
+            {
+                followAt = -1f;
+                Plugin.L.LogInfo("[RELOAD] жду хоста и прошу его новый мир");
+                Shutdown();
+                StartTransfer();
+                xferText = "The host is loading a save. Waiting for the host...";
+            }
+        }
+
+        static void ClientFollowHostReload() { followPending = true; }
+
+        static void OpenMenuForLoad()
+        {
+            try
+            {
+                var mm = MainMenuController.Instance;
+                if (mm != null && !mm.mainMenuActive) mm.EnableMainMenu(true, false, false, MainMenuController.Component.mainMenuButtons);
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[RELOAD] открыть меню: " + e.Message); }
         }
 
         static void HostBeginSend(NetPeer peer)
         {
-            if (sendStage != 0) { try { var w = new NetDataWriter(); w.Put(MsgSaveFail); w.Put("host is busy sending to another player"); peer.Send(w, DeliveryMethod.ReliableOrdered); } catch (Exception) { } return; }
+            // уже отправляю другому (после загрузки сейва хостом просят все клиенты сразу) - в очередь
+            if (sendStage != 0)
+            {
+                if (peer != sendPeer && !sendQueue.Contains(peer)) { sendQueue.Add(peer); Plugin.L.LogInfo($"[XFER] клиент просит сохранение - в очереди {sendQueue.Count}"); }
+                return;
+            }
             sendPeer = peer; sendFiles = new List<XFile>(); snapTask = null; sendIdx = 0; snapVariant = 0;
             Plugin.L.LogInfo("[XFER] клиент просит сохранение");
             SnapStart();
@@ -4597,7 +4710,7 @@ namespace SodCoop
                         }
                         connecting = false;
                         nextAttempt = Time.realtimeSinceStartup + 3f;
-                        if (xferMode && xferFailMsg == null && !xferFinish)
+                        if (xferMode && xferFailMsg == null && !xferFinish && !(followHost && info.Reason != DisconnectReason.ConnectionRejected))
                             xferFailMsg = info.Reason == DisconnectReason.ConnectionRejected ? "Rejected by the host (wrong password?)" : "Connection to the host failed: " + info.Reason;
                         if (info.Reason == DisconnectReason.ConnectionRejected)
                         {
@@ -4637,6 +4750,7 @@ namespace SodCoop
 
         internal static void Poll()
         {
+            try { ReloadTick(); } catch (Exception e) { Plugin.L.LogWarning("[RELOAD] " + e.Message); }
             if (manager == null) return;
             try
             {
@@ -11150,6 +11264,7 @@ namespace SodCoop
                 var p = Player.Instance;
                 try { RestoreInventory(null); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] инвентарь: " + e.Message); }
                 if (Plugin.CfgNewPlayerMoney.Value >= 0) GcSet("money", "SetMoney", Plugin.CfgNewPlayerMoney.Value);
+                if (Plugin.CfgNewPlayerLockpicks.Value >= 0) { try { GcSet("lockPicks", "SetLockpicks", Plugin.CfgNewPlayerLockpicks.Value); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] отмычки: " + e.Message); } }
                 GcSet("socialCredit", "SetSocialCredit", 0);
                 if (p != null)
                 {
@@ -11231,7 +11346,7 @@ namespace SodCoop
                     if (Plugin.CfgNewPlayerClean.Value)
                     {
                         NewPlayerStart();
-                        var nt = new ProfileData(); nt.money = Plugin.CfgNewPlayerMoney.Value; nt.social = 0; nt.valid = true;
+                        var nt = new ProfileData(); nt.money = Plugin.CfgNewPlayerMoney.Value; nt.social = 0; nt.valid = true; nt.lockpicks = Plugin.CfgNewPlayerLockpicks.Value;
                         profTarget = nt; profVerifyAt = Time.realtimeSinceStartup + 2f; profVerifyEnd = Time.realtimeSinceStartup + 25f;
                     }
                     if (pd != null && pd.apts.Count > 0) { profileApplying = true; try { RestoreResidence(pd.apts, pd.residence); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] квартира: " + e.Message); } finally { profileApplying = false; } }
@@ -11265,6 +11380,19 @@ namespace SodCoop
         static string SnapPathFor(string savePath)
         {
             return Path.Combine(Path.GetDirectoryName(savePath) ?? SaveDir(), Path.GetFileNameWithoutExtension(savePath) + ".sodcoop.json");
+        }
+
+        // сейв сохранён раньше, чем последний раз записаны профили (минута запаса - профили пишутся и при самом сохранении)
+        static bool SaveOlderThanProfiles(string save, string prof)
+        {
+            try
+            {
+                if (!File.Exists(save) || !File.Exists(prof)) return false;
+                var ts = File.GetLastWriteTimeUtc(save); var tp = File.GetLastWriteTimeUtc(prof);
+                Plugin.L.LogInfo($"[PROFILE] сейв {Path.GetFileName(save)} от {ts.ToLocalTime():dd.MM HH:mm}, последние профили от {tp.ToLocalTime():dd.MM HH:mm}");
+                return ts < tp.AddMinutes(-1);
+            }
+            catch (Exception) { return false; }
         }
 
         static string LoadedSavePath()
@@ -11314,7 +11442,14 @@ namespace SodCoop
                 string snap = save != "" ? SnapPathFor(save) : "";
                 if (snap != "" && ReadProfilesFile(snap)) { src = "снимок сейва " + Path.GetFileName(save); profDirty = true; }
                 else if (save == "" && worldGen > 0) { src = "новая игра, профилей нет"; profDirty = true; }
-                else { ReadProfilesFile(profFile); src = save != "" ? "у сейва " + Path.GetFileName(save) + " нет снимка, взял последние профили города" : "последние профили города"; }
+                else if (save != "" && SaveOlderThanProfiles(save, profFile))
+                {
+                    // У сейва нет снимка профилей (сохранён до того, как мод их писал), и он старше последних профилей: они «из будущего»
+                    // (деньги, вещи, место клиента уже после этого сейва). Игроки начинают в этом мире как новые
+                    src = "у сейва " + Path.GetFileName(save) + " нет снимка, а последние профили новее сейва - игроки начнут заново";
+                    profDirty = true;
+                }
+                else { ReadProfilesFile(profFile); src = save != "" ? "у сейва " + Path.GetFileName(save) + " нет снимка, взял последние профили города (они не новее сейва)" : "последние профили города"; }
             }
             else src = "профили этой сессии";   // сеть перезапущена в том же мире
             int n = 0;
@@ -14702,7 +14837,10 @@ namespace SodCoop
                 var hostRp = RpByPid(0) ?? NewRp(0);
                 Enter(hostRp); SetRemoteAppearance(hostApp); Leave();
                 Plugin.L.LogInfo($"[NET] Ответ хоста: ok={ok}, мой номер {pid}");
-                if (!ok) Toast("Your world does not match the host's (different city or build). Leave to the main menu and use CONNECT to download the host's save.");
+                // мы уже играли с этим хостом, а теперь мир другой: хост загрузил сейв, пока связи не было - скачиваем его мир сами
+                if (!ok && helloWasOk) { Plugin.L.LogInfo("[RELOAD] у хоста теперь другой мир - скачаю и загружу его"); ClientFollowHostReload(); }
+                else if (!ok) Toast("Your world does not match the host's (different city or build). Leave to the main menu and use CONNECT to download the host's save.");
+                if (ok) helloWasOk = true;
                 Plugin.L.LogInfo($"[NET]   хост:   {hostInfo}");
                 Plugin.L.LogInfo($"[NET]   клиент: {Describe()}");
                 if (ok) SendFurnSnapshot(null);
@@ -14723,6 +14861,11 @@ namespace SodCoop
                     Enter(o); SetRemoteAppearance(app); Leave();
                     Plugin.L.LogInfo($"[NET] в игре ещё один игрок: номер {pid}");
                 }
+            }
+            else if (type == MsgHostReload && !IsHost)
+            {
+                ClientFollowHostReload();
+                return;
             }
             else if (type == MsgPlayerLeft && !IsHost)
             {
