@@ -374,7 +374,7 @@ namespace SodCoop
             Harmony.CreateAndPatchAll(typeof(PlayerPatch));
             Harmony.CreateAndPatchAll(typeof(MeleePatch));
             Harmony.CreateAndPatchAll(typeof(BlockPatch));
-            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SelfTripFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch), typeof(ProfileEventPatch), typeof(KnockPatch), typeof(BargePatch), typeof(JobCreationPatch), typeof(JobAcceptPatch), typeof(CaseResolvePatch), typeof(PinnedMenuPatch), typeof(ShareCommandPatch), typeof(PhoneCallLogPatch), typeof(PhoneCallLogPatch2), typeof(JobInfoPatch), typeof(ObjectiveCompletePatch), typeof(ObjectiveAddPatch), typeof(MurderClientBlockPatch), typeof(MurderCaseNotifyPatch), typeof(MurderDiscoveryPatch), typeof(BuildingAlarmPatch), typeof(AddressAlarmPatch), typeof(ComputerPatch), typeof(PagePatch), typeof(CaseStatusPatch), typeof(RestrainPatch), typeof(TickRatePatch), typeof(GooseChasePatch), typeof(WorldAlivePatch), typeof(KeepInvokesPatch), typeof(PauseReentryPatch), typeof(LookAroundPatch), typeof(CctvCapturePatch), typeof(KeyringPatch) })
+            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SelfTripFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch), typeof(ProfileEventPatch), typeof(KnockPatch), typeof(BargePatch), typeof(JobCreationPatch), typeof(JobAcceptPatch), typeof(CaseResolvePatch), typeof(PinnedMenuPatch), typeof(ShareCommandPatch), typeof(PhoneCallLogPatch), typeof(PhoneCallLogPatch2), typeof(JobInfoPatch), typeof(ObjectiveCompletePatch), typeof(ObjectiveAddPatch), typeof(MurderClientBlockPatch), typeof(MurderCaseNotifyPatch), typeof(MurderDiscoveryPatch), typeof(BuildingAlarmPatch), typeof(AddressAlarmPatch), typeof(ComputerPatch), typeof(PagePatch), typeof(CaseStatusPatch), typeof(RestrainPatch), typeof(TickRatePatch), typeof(GooseChasePatch), typeof(WorldAlivePatch), typeof(KeepInvokesPatch), typeof(PauseReentryPatch), typeof(LookAroundPatch), typeof(CctvCapturePatch), typeof(KeyringPatch), typeof(JobDialogAddPatch), typeof(ObjectiveCancelPatch) })
             {
                 try { Harmony.CreateAndPatchAll(t); }
                 catch (Exception e) { L.LogWarning($"[PATCH] {t.Name}: {e.Message}"); }
@@ -1064,8 +1064,20 @@ namespace SodCoop
         [HarmonyPostfix]
         public static void Postfix(Case __instance, object[] __args, bool __state)
         {
+            try { Net.NoteJobObjective(__instance); } catch (Exception) { }
             if (__state) return;
             try { Net.OnObjectiveAdded(__instance, __args); } catch (Exception e) { Plugin.L.LogWarning("[JOB] новая цель: " + e.Message); }
+        }
+    }
+
+    // Отмена цели задания: в лог (цель пропадает с экрана - видно, кто её отменил)
+    [HarmonyPatch(typeof(Objective), "Cancel")]
+    public static class ObjectiveCancelPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(Objective __instance)
+        {
+            try { Net.OnObjectiveCancel(__instance); } catch (Exception) { }
         }
     }
 
@@ -1136,6 +1148,17 @@ namespace SodCoop
         public static void Postfix(Actor __instance, NewAddress __0)
         {
             try { Net.OnKeyringAddress(__instance, __0); } catch (Exception e) { Plugin.L.LogWarning("[JOB] ключи: " + e.Message); }
+        }
+    }
+
+    // Фраза, которую задание дало жителю у клиента (его этап ушёл вперёд) - хосту, а от него всем
+    [HarmonyPatch(typeof(SideJob), "AddDialogOption")]
+    public static class JobDialogAddPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(SideJob __instance, Human person, Evidence.DataKey key, DialogPreset newPreset, NewRoom roomRef)
+        {
+            try { Net.OnJobDialogAdded(__instance, person, key, newPreset, roomRef); } catch (Exception e) { Plugin.L.LogWarning("[JOB] фраза задания: " + e.Message); }
         }
     }
 
@@ -12735,8 +12758,116 @@ namespace SodCoop
             bool removePrev = r.GetBool(); string chapter = r.GetString(); bool silent = r.GetBool(); bool crouch = r.GetBool(); bool bottom = r.GetBool(); bool parsing = r.GetBool();
             var c = j != null ? j.thisCase : null;
             if (c == null) { Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{entry}' от игрока {pid} - у меня задание не взято"); return; }
+            // Чужая цель указывает на предметы и улики игрока, который её поставил (кейс с досье, созданный его игрой, у меня другой),
+            // а моя игра, поставив цель сама, ждёт выполнения именно своей. Пришедшая раньше чужая занимала её место (дубль игра не ставит):
+            // открывал свой кейс - цель не выполнялась и задание стояло. Поэтому сначала даю своей игре несколько секунд поставить свою
+            bool haveOpen = false; try { haveOpen = HasObjective(c, entry, false); } catch (Exception) { }
+            if (!haveOpen)
+            {
+                pendingObjectives.RemoveAll(x => x.job == jobId && x.entry == entry);
+                pendingObjectives.Add((jobId, entry, Time.realtimeSinceStartup + 4f, () => ApplyRemoteObjective(j, c, pid, entry, t, usePointer, pp, icon, act, delay, removePrev, chapter, silent, crouch, bottom, parsing)));
+                Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{entry}' от игрока {pid} - жду, не поставит ли её моя игра");
+                return;
+            }
+            ApplyRemoteObjective(j, c, pid, entry, t, usePointer, pp, icon, act, delay, removePrev, chapter, silent, crouch, bottom, parsing);
+        }
+
+        // Цели сбоку игра каждый кадр показывает только у активного дела (InterfaceController.Update берёт CasePanelController.activeCase).
+        // Дело задания у игрока, который не взял его сам (взял другой, сменил активное дело, пришло дело об убийстве), было не активным -
+        // этап шёл, а целей на экране не было. Появилась новая цель у дела задания - делаем это дело активным
+        static readonly System.Collections.Generic.HashSet<int> hudNoted = new System.Collections.Generic.HashSet<int>();
+        static float hudAt;
+        static string hudLast = "";
+
+        internal static void NoteJobObjective(Case c)
+        {
+            if (c != null && c.jobReference > 0 && RtMode != NetMode.Off) hudNoted.Add(c.jobReference);
+        }
+
+        internal static void OnObjectiveCancel(Objective o)
+        {
+            if (o == null || o.isCancelled || o.isComplete || RtMode == NetMode.Off) return;
+            var c = o.thisCase;
+            if (c == null || c.jobReference <= 0) return;
+            Plugin.L.LogInfo($"[HUD] задание {c.jobReference}: цель '{o.name}' отменена{(applyingJob ? " (при передаче от другого игрока)" : " игрой")}");
+        }
+
+        static int OpenObjectives(Case c, System.Text.StringBuilder names)
+        {
+            int n = 0;
+            if (c == null) return 0;
+            foreach (var lst in new[] { c.currentActiveObjectives, c.inactiveCurrentObjectives })
+            {
+                if (lst == null) continue;
+                foreach (var o in lst)
+                    if (o != null && !o.isComplete && !o.isCancelled) { n++; if (names != null) names.Append(names.Length > 0 ? ", " : "").Append(o.name); }
+            }
+            return n;
+        }
+
+        static void ObjectiveHudTick()
+        {
+            if (Time.realtimeSinceStartup < hudAt) return;
+            hudAt = Time.realtimeSinceStartup + 1f;
+            var cp = CasePanelController.Instance;
+            if (cp == null || cp.activeCases == null) return;
+            if (hudNoted.Count > 0)
+            {
+                var ids = new System.Collections.Generic.List<int>(hudNoted); hudNoted.Clear();
+                foreach (int id in ids)
+                {
+                    var j = JobById(id); var c = j != null ? j.thisCase : null;
+                    if (c == null || !j.accepted || j.state == SideJob.JobState.ended || cp.activeCase == c || OpenObjectives(c, null) == 0) continue;
+                    bool listed = false; foreach (var x in cp.activeCases) if (x != null && x.Pointer == c.Pointer) { listed = true; break; }
+                    if (!listed) continue;
+                    string was = cp.activeCase != null ? cp.activeCase.name : "нет";
+                    cp.SetActiveCase(c);
+                    Plugin.L.LogInfo($"[HUD] задание {id}: новая цель, а активным было дело '{was}' - делаю активным дело задания '{c.name}', чтобы цели были на экране");
+                }
+            }
+            // состояние целей - в лог при изменении
+            var sb = new System.Text.StringBuilder();
+            var ac = cp.activeCase;
+            sb.Append("активное дело '").Append(ac != null ? ac.name : "нет").Append("' (задание ").Append(ac != null ? ac.jobReference : 0).Append(")");
+            var ctl = SideJobController.Instance;
+            if (ctl != null && ctl.allJobsDictionary != null)
+                foreach (var kv in ctl.allJobsDictionary)
+                {
+                    var j = kv.Value;
+                    if (j == null || !j.accepted || j.state == SideJob.JobState.ended || j.thisCase == null) continue;
+                    var names = new System.Text.StringBuilder();
+                    int n = OpenObjectives(j.thisCase, names);
+                    sb.Append("; задание ").Append(j.jobID).Append(" этап ").Append(j.phase).Append(": целей ").Append(n).Append(" [").Append(names).Append("]");
+                }
+            string st = sb.ToString();
+            if (st != hudLast) { hudLast = st; Plugin.L.LogInfo("[HUD] " + st); }
+        }
+
+        static readonly System.Collections.Generic.List<(int job, string entry, float at, Action apply)> pendingObjectives = new System.Collections.Generic.List<(int, string, float, Action)>();
+
+        static void PendingObjectivesTick(int flushJob = 0)
+        {
+            if (pendingObjectives.Count == 0) return;
+            float now = Time.realtimeSinceStartup;
+            var due = pendingObjectives.FindAll(x => x.at <= now || x.job == flushJob);
+            if (due.Count == 0) return;
+            pendingObjectives.RemoveAll(x => x.at <= now || x.job == flushJob);
+            foreach (var x in due)
+            {
+                try { x.apply(); } catch (Exception e) { Plugin.L.LogWarning($"[JOB] цель '{x.entry}' задания {x.job}: {e.Message}"); }
+            }
+        }
+
+        static void ApplyRemoteObjective(SideJob j, Case c, int pid, string entry, Objective.ObjectiveTrigger t, bool usePointer, Vector3 pp, InterfaceControls.Icon icon,
+            Objective.OnCompleteAction act, float delay, bool removePrev, string chapter, bool silent, bool crouch, bool bottom, bool parsing)
+        {
+            int jobId = j.jobID;
+            if (j.thisCase != c || j.state == SideJob.JobState.ended) return;
+            bool mineOpen = false; try { mineOpen = HasObjective(c, entry, false); } catch (Exception) { }
+            // моя игра за это время поставила свою - её и оставляю (у клиента цель хоста всё же главнее, см. ниже)
+            if (mineOpen && (IsHost || pid != 0)) { Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{entry}' от игрока {pid} - моя игра поставила свою, оставляю её"); return; }
             // у меня эта цель уже выполнена: заново не ставлю (иначе после сдачи предмета возвращались «Кто меня обокрал?» и т.п. с галочками)
-            bool doneHere = false; try { doneHere = HasObjective(c, entry, true) && !HasObjective(c, entry, false); } catch (Exception) { }
+            bool doneHere = false; try { doneHere = HasObjective(c, entry, true) && !mineOpen; } catch (Exception) { }
             if (doneHere) { Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{entry}' от игрока {pid} - у меня уже выполнена, заново не ставлю"); return; }
             // цель хоста указывает на его предмет (ящик с наградой и т.п.): у меня он может быть под другим номером или ещё не пришёл.
             // Нет его у меня, а своя такая же цель есть - оставляю свою: на хостовой у клиента не было значка на карте
@@ -12799,6 +12930,13 @@ namespace SodCoop
             var found = new System.Collections.Generic.List<Objective>();
             foreach (var lst in new[] { c.currentActiveObjectives, c.inactiveCurrentObjectives })
                 if (lst != null) foreach (var o in lst) if (o != null && !o.isComplete && !o.isCancelled && o.name == name) found.Add(o);
+            if (found.Count == 0 && pendingObjectives.Exists(x => x.job == jobId))
+            {
+                // её чужая цель ещё ждёт своей очереди - ставлю чужие цели задания сейчас и выполняю
+                PendingObjectivesTick(jobId);
+                foreach (var lst in new[] { c.currentActiveObjectives, c.inactiveCurrentObjectives })
+                    if (lst != null) foreach (var o in lst) if (o != null && !o.isComplete && !o.isCancelled && o.name == name) found.Add(o);
+            }
             if (found.Count == 0) { Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{name}' игрока {pid} - у меня такой открытой цели нет"); return; }
             applyingJob = true;
             try { foreach (var o in found) o.Complete(); }
@@ -12887,12 +13025,7 @@ namespace SodCoop
             // Этап задания у каждого свой, но после того как заказчик выслушан, шаги (встреча, поиск вещи, ящик) проходит кто-то один,
             // а у остальных этап застревал: при звонке для сдачи заказчик отвечал им по первому этапу - снова просил о помощи.
             // Догоняю этап хоста: игра сама поставит цели и разговор этого этапа (повторы целей она не ставит)
-            if (!IsHost && nj.phase > cur.phase && cur.accepted && cur.knowHandInLocation && nj.knowHandInLocation && cur.state != SideJob.JobState.ended)
-            {
-                Plugin.L.LogInfo($"[JOB] задание {cur.jobID}: этап у хоста {nj.phase}, у меня {cur.phase} - догоняю");
-                cur.phase = nj.phase;
-            }
-            else if (nj.phase != cur.phase) Plugin.L.LogInfo($"[JOB] задание {cur.jobID}: этап у хоста {nj.phase}, у меня {cur.phase}");
+            if (!IsHost && nj.knowHandInLocation) CatchUpPhase(cur, nj.phase, "хоста");
             try { SyncJobDialogs(cur, nj); } catch (Exception e) { Plugin.L.LogWarning($"[JOB] фразы задания {cur.jobID}: {e.Message}"); }
             if (nj.state != cur.state)
             {
@@ -12913,20 +13046,63 @@ namespace SodCoop
         static void SyncJobDialogs(SideJob cur, SideJob nj)
         {
             if (IsHost || cur == null || nj == null || nj.dialog == null || cur.state == SideJob.JobState.ended) return;
-            foreach (var d in nj.dialog)
+            foreach (var d in nj.dialog) AddJobDialogHere(cur, d, "как у хоста");
+        }
+
+        static void AddJobDialogHere(SideJob cur, SideJob.AddedDialog d, string why)
+        {
+            if (cur == null || d == null || string.IsNullOrEmpty(d.dialogRef) || cur.state == SideJob.JobState.ended) return;
+            if (cur.dialog != null)
+                foreach (var m in cur.dialog) if (m != null && m.humanID == d.humanID && m.dialogRef == d.dialogRef && m.roomID == d.roomID) return;
+            var h = d.GetHuman(); var pr = d.GetDialog();
+            if (h == null || pr == null) { Plugin.L.LogWarning($"[JOB] задание {cur.jobID}: фраза '{d.dialogRef}' жителю {d.humanID} - не нашёл {(h == null ? "жителя" : "фразу")}"); return; }
+            NewRoom room = null; try { room = d.GetRoom(); } catch (Exception) { }
+            applyingJob = true;
+            try { cur.AddDialogOption(h, d.key, pr, room); }
+            finally { applyingJob = false; }
+            Plugin.L.LogInfo($"[JOB] задание {cur.jobID}: фраза '{d.dialogRef}' жителю {d.humanID} - {why}");
+        }
+
+        // клиент: фразу задания дала моя игра - хосту (он добавит себе и разошлёт с заданием остальным)
+        internal static void OnJobDialogAdded(SideJob j, Human person, Evidence.DataKey key, DialogPreset pr, NewRoom room)
+        {
+            if (IsHost || applyingJob || j == null || person == null || pr == null || manager == null || manager.ConnectedPeersCount == 0 || !Plugin.CfgJobSync.Value) return;
+            var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)23); w.Put(j.jobID); w.Put(person.humanID); w.Put(pr.name ?? ""); w.Put(room != null ? room.roomID : -1); w.Put((int)key);
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+            Plugin.L.LogInfo($"[JOB] задание {j.jobID}: моя игра дала фразу '{pr.name}' жителю {person.humanID} - сообщаю хосту");
+        }
+
+        // Этап задания у каждого игрока свой, и шаги после разговора с заказчиком проходит тот, кто успел первым: у остальных этап
+        // застревал. А по этапу игра выбирает ответы заказчика по телефону («помогите» вместо «спасибо»), фразы и ключи.
+        // После того как заказчик выслушан, этап у всех - как у самого продвинувшегося: игра сама поставит цели и разговор этого этапа
+        static void CatchUpPhase(SideJob j, int phase, string whose)
+        {
+            if (j == null || !j.accepted || j.state == SideJob.JobState.ended || !j.knowHandInLocation) return;
+            if (phase <= j.phase) return;
+            Plugin.L.LogInfo($"[JOB] задание {j.jobID}: этап у {whose} {phase}, у меня {j.phase} - догоняю");
+            j.phase = phase;
+        }
+
+        // клиент: свой этап - хосту (при изменении и раз в 5 с повтором)
+        static readonly System.Collections.Generic.Dictionary<int, (int phase, float at)> phaseSent = new System.Collections.Generic.Dictionary<int, (int, float)>();
+        static float phaseTickAt;
+
+        static void JobPhaseReportTick()
+        {
+            if (IsHost || Time.realtimeSinceStartup < phaseTickAt) return;
+            phaseTickAt = Time.realtimeSinceStartup + 1f;
+            var ctl = SideJobController.Instance;
+            if (ctl == null || ctl.allJobsDictionary == null) return;
+            foreach (var kv in ctl.allJobsDictionary)
             {
-                if (d == null || string.IsNullOrEmpty(d.dialogRef)) continue;
-                bool have = false;
-                if (cur.dialog != null)
-                    foreach (var m in cur.dialog) if (m != null && m.humanID == d.humanID && m.dialogRef == d.dialogRef && m.roomID == d.roomID) { have = true; break; }
-                if (have) continue;
-                var h = d.GetHuman(); var pr = d.GetDialog();
-                if (h == null || pr == null) { Plugin.L.LogWarning($"[JOB] задание {cur.jobID}: фраза '{d.dialogRef}' жителю {d.humanID} - не нашёл {(h == null ? "жителя" : "фразу")}"); continue; }
-                NewRoom room = null; try { room = d.GetRoom(); } catch (Exception) { }
-                applyingJob = true;
-                try { cur.AddDialogOption(h, d.key, pr, room); }
-                finally { applyingJob = false; }
-                Plugin.L.LogInfo($"[JOB] задание {cur.jobID}: фраза '{d.dialogRef}' жителю {d.humanID} - как у хоста");
+                var j = kv.Value;
+                if (j == null || !j.accepted || j.state == SideJob.JobState.ended || !j.knowHandInLocation) continue;
+                (int phase, float at) last;
+                bool known = phaseSent.TryGetValue(j.jobID, out last);
+                if (known && last.phase == j.phase && Time.realtimeSinceStartup - last.at < 5f) continue;
+                phaseSent[j.jobID] = (j.phase, Time.realtimeSinceStartup);
+                var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)22); w.Put(j.jobID); w.Put(j.phase);
+                manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
             }
         }
 
@@ -13205,6 +13381,18 @@ namespace SodCoop
             }
             else if (op == 18) { OnCaseStatusMsg(rp, r); }
             else if (op == 19 && IsHost) { OnRestrainMsg(r); }
+            else if (op == 22 && IsHost)
+            {
+                int id = r.GetInt(), phase = r.GetInt();
+                CatchUpPhase(JobById(id), phase, "игрока " + (rp != null ? rp.pid : 0));
+            }
+            else if (op == 23 && IsHost)
+            {
+                int id = r.GetInt(); var j = JobById(id);
+                var d = new SideJob.AddedDialog();
+                d.humanID = r.GetInt(); d.dialogRef = r.GetString(); d.roomID = r.GetInt(); d.key = (Evidence.DataKey)r.GetInt();
+                if (j != null) AddJobDialogHere(j, d, "от игрока " + (rp != null ? rp.pid : 0));
+            }
             else if (op == 21)
             {
                 int adId = r.GetInt(), job = r.GetInt();
@@ -13533,6 +13721,9 @@ namespace SodCoop
             }
             EvidenceShareTick();
             PendingJobInfoTick();
+            try { PendingObjectivesTick(); } catch (Exception e) { Plugin.L.LogWarning("[JOB] отложенные цели: " + e.Message); }
+            try { ObjectiveHudTick(); } catch (Exception e) { Plugin.L.LogWarning("[HUD] цели: " + e.Message); }
+            try { JobPhaseReportTick(); } catch (Exception e) { Plugin.L.LogWarning("[JOB] этап: " + e.Message); }
             if (Time.realtimeSinceStartup >= printAt) { printAt = Time.realtimeSinceStartup + 1f; try { PrintLettersTick(); } catch (Exception e) { Plugin.L.LogWarning("[PRINTS] " + e.Message); } }
             if (Time.realtimeSinceStartup >= jobChoiceAt) { jobChoiceAt = Time.realtimeSinceStartup + 1f; try { JobChoicesTick(); } catch (Exception e) { Plugin.L.LogWarning("[JOB] выбор: " + e.Message); } }
         }
