@@ -14,7 +14,7 @@ param(
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-$src = Join-Path $PSScriptRoot "SODCoop\Class1.cs"
+$src = Join-Path $PSScriptRoot "SODCoop\Plugin.cs"
 $m = Select-String -Path $src -Pattern 'ModVersion = "([^"]+)"' | Select-Object -First 1
 if ($m -eq $null) { throw "ModVersion not found in $src" }
 $version = $m.Matches[0].Groups[1].Value
@@ -60,13 +60,13 @@ Enabled = false
 InstantFlushing = true
 "@ | Set-Content -Path (Join-Path $stage "BepInEx\config\BepInEx.cfg") -Encoding UTF8
 
-# настройки мода: читы игрокам выключены (остальное мод допишет сам при первом запуске)
-if (-not $Cheats) {
+# настройки мода: читы выключены в самом моде по умолчанию; для тестеров (-Cheats) включаем (остальное мод допишет сам)
+if ($Cheats) {
 @"
 [Cheats]
-Hotkeys = false
-RevealAllPrintsKey =
-RevealCaseKey =
+Hotkeys = true
+RevealAllPrintsKey = F3
+RevealCaseKey = F2
 "@ | Set-Content -Path (Join-Path $stage "BepInEx\config\com.flyingfrogs.sodcoop.cfg") -Encoding UTF8
 }
 
