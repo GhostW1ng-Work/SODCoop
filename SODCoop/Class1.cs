@@ -367,6 +367,7 @@ namespace SodCoop
             {
                 ClassInjector.RegisterTypeInIl2Cpp<SodCoopDriver>();
                 AddComponent<SodCoopDriver>();
+                CrashLog.Start();
                 L.LogInfo("[DRV] драйвер меню/игры запущен");
             }
             catch (Exception e) { L.LogWarning("[DRV] не удалось запустить драйвер: " + e.Message); }
@@ -374,7 +375,7 @@ namespace SodCoop
             Harmony.CreateAndPatchAll(typeof(PlayerPatch));
             Harmony.CreateAndPatchAll(typeof(MeleePatch));
             Harmony.CreateAndPatchAll(typeof(BlockPatch));
-            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SelfTripFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch), typeof(ProfileEventPatch), typeof(KnockPatch), typeof(BargePatch), typeof(JobCreationPatch), typeof(JobAcceptPatch), typeof(CaseResolvePatch), typeof(PinnedMenuPatch), typeof(ShareCommandPatch), typeof(PhoneCallLogPatch), typeof(PhoneCallLogPatch2), typeof(JobInfoPatch), typeof(ObjectiveCompletePatch), typeof(ObjectiveAddPatch), typeof(MurderClientBlockPatch), typeof(MurderCaseNotifyPatch), typeof(MurderDiscoveryPatch), typeof(BuildingAlarmPatch), typeof(AddressAlarmPatch), typeof(ComputerPatch), typeof(PagePatch), typeof(CaseStatusPatch), typeof(RestrainPatch), typeof(TickRatePatch), typeof(GooseChasePatch), typeof(WorldAlivePatch), typeof(KeepInvokesPatch), typeof(PauseReentryPatch), typeof(LookAroundPatch), typeof(CctvCapturePatch), typeof(KeyringPatch), typeof(JobDialogAddPatch), typeof(ObjectiveCancelPatch) })
+            foreach (var t in new[] { typeof(ThrowFoodPatch), typeof(ThrowGrenadePatch), typeof(ThrowCoinPatch), typeof(PutDownPatch), typeof(EmptySlotPatch), typeof(PickUpPatch), typeof(DropPatch), typeof(SafeDeletePatch), typeof(DeletePatch), typeof(BreakPatch), typeof(DoorOpenPatch), typeof(DoorLockPatch), typeof(DoorJamPatch), typeof(DoorMoveOpenPatch), typeof(DoorMoveClosePatch), typeof(DoorMoveSetOpenPatch), typeof(LockStatePatch), typeof(SwitchStatePatch), typeof(CustomState1Patch), typeof(CustomState2Patch), typeof(CustomState3Patch), typeof(BreakerSetOpenPatch), typeof(ShatterPatch), typeof(WindowBreakPatch), typeof(AptTrace), typeof(RoomClearPatch), typeof(DecorPatch), typeof(NpcDamagePatch), typeof(SelfHurtFxPatch), typeof(SelfKoFxPatch), typeof(SelfRecoverFxPatch), typeof(SelfDeathFxPatch), typeof(SelfTripFxPatch), typeof(SeatGuardPatch), typeof(WorldSoundPatch), typeof(ShootPatch), typeof(NpcActAttackPatch), typeof(NpcActThrowPatch), typeof(NpcActAbortPatch), typeof(NpcActBlockPatch), typeof(NpcActRecoilPatch), typeof(NpcActHeldPatch), typeof(NpcActDespawnRPatch), typeof(NpcActDespawnLPatch), typeof(NpcActWeaponPatch), typeof(PuppetTrackPatch), typeof(PuppetPersuePatch), typeof(PuppetAttackPatch), typeof(PuppetInvestigatePatch), typeof(OutfitSeedPatch), typeof(PhysSeedPatch), typeof(FurnAddPatch1), typeof(FurnAddPatch2), typeof(ExecPlacePatch), typeof(SellFurnPatch), typeof(StoreFurnPatch), typeof(BuyResidencePatch), typeof(WeatherChangePatch), typeof(RoomLightsPatch), typeof(InteractActionPatch), typeof(InteractKeyPatch), typeof(InvisSightPatch), typeof(InvisIllegalPatch), typeof(GodPatch), typeof(KoTimeSpeedPatch), typeof(GameSavePatch), typeof(WorldLoadPatch), typeof(DownedKoPatch), typeof(DownedDamagePatch), typeof(PuppetLookPatch), typeof(ElevatorCallPatch), typeof(ProfileEventPatch), typeof(KnockPatch), typeof(BargePatch), typeof(JobCreationPatch), typeof(JobAcceptPatch), typeof(CaseResolvePatch), typeof(PinnedMenuPatch), typeof(ShareCommandPatch), typeof(PhoneCallLogPatch), typeof(PhoneCallLogPatch2), typeof(JobInfoPatch), typeof(ObjectiveCompletePatch), typeof(ObjectiveAddPatch), typeof(MurderClientBlockPatch), typeof(MurderCaseNotifyPatch), typeof(MurderDiscoveryPatch), typeof(BuildingAlarmPatch), typeof(AddressAlarmPatch), typeof(ComputerPatch), typeof(PagePatch), typeof(CaseStatusPatch), typeof(RestrainPatch), typeof(TickRatePatch), typeof(GooseChasePatch), typeof(WorldAlivePatch), typeof(KeepInvokesPatch), typeof(PauseReentryPatch), typeof(LookAroundPatch), typeof(CctvCapturePatch), typeof(KeyringPatch), typeof(JobDialogAddPatch), typeof(ObjectiveCancelPatch), typeof(RewardPatch), typeof(PuppetVisiblePatch) })
             {
                 try { Harmony.CreateAndPatchAll(t); }
                 catch (Exception e) { L.LogWarning($"[PATCH] {t.Name}: {e.Message}"); }
@@ -1065,8 +1066,34 @@ namespace SodCoop
         public static void Postfix(Case __instance, object[] __args, bool __state)
         {
             try { Net.NoteJobObjective(__instance); } catch (Exception) { }
+            try { if (Net.IsRewardObjective(__args[0] as string)) { Net.NoteRewardItem(__args[1] as Objective.ObjectiveTrigger); return; } } catch (Exception) { }
             if (__state) return;
             try { Net.OnObjectiveAdded(__instance, __args); } catch (Exception e) { Plugin.L.LogWarning("[JOB] новая цель: " + e.Message); }
+        }
+    }
+
+    // Награда за задание (синхродиск и т.п. в почтовом ящике): игра каждого игрока кладёт свою - она только его, её подбор другим не передаётся
+    [HarmonyPatch(typeof(SideJob), "OnRewarded")]
+    public static class RewardPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(out int __state) { __state = Interactable.worldAssignID; }
+
+        [HarmonyPostfix]
+        public static void Postfix(SideJob __instance, int __state)
+        {
+            try { Net.OnRewarded(__instance, __state); } catch (Exception e) { Plugin.L.LogWarning("[JOB] награда в ящике: " + e.Message); }
+        }
+    }
+
+    // Двойник клиента у хоста: игра (и сам мод) делают его видимым - прячем модель сразу, без мелькания
+    [HarmonyPatch(typeof(Human), "SetVisible")]
+    public static class PuppetVisiblePatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(Human __instance, bool vis)
+        {
+            try { Net.OnHumanSetVisible(__instance, vis); } catch (Exception) { }
         }
     }
 
@@ -3018,6 +3045,88 @@ namespace SodCoop
         }
     }
 
+    // Для разбора вылетов: Player.log у всех копий игры один (C:/Users/.../LocalLow) и перезаписывается следующим запуском.
+    // Ошибки и исключения Unity пишем в BepInEx/UnityErrors.log своей копии (сразу на диск), а отдельный поток следит,
+    // не завис ли главный поток игры: при вылете будет видно, было ли это зависание и что было перед ним
+    internal sealed class CrashLog : ILogListener
+    {
+        static StreamWriter file;
+        static string lastMsg; static int repeats;
+        static long beat = Environment.TickCount64;
+        static readonly object sync = new object();
+
+        public LogLevel LogLevelFilter => LogLevel.Error | LogLevel.Fatal | LogLevel.Warning;
+
+        internal static void Beat() { beat = Environment.TickCount64; }
+
+        internal static void Start()
+        {
+            try
+            {
+                string path = Path.Combine(Paths.BepInExRootPath, "UnityErrors.log");
+                file = new StreamWriter(path, false, new UTF8Encoding(false)) { AutoFlush = true };
+                file.WriteLine($"=== {DateTime.Now:yyyy-MM-dd HH:mm:ss} запуск, {Paths.GameRootPath}");
+                BepInEx.Logging.Logger.Listeners.Add(new CrashLog());
+                AppDomain.CurrentDomain.UnhandledException += (s, e) => Write("FATAL", "домен", e.ExceptionObject?.ToString() ?? "");
+                var t = new System.Threading.Thread(Watch) { IsBackground = true, Name = "SODCoop hang watch" };
+                t.Start();
+                Plugin.L.LogInfo("[CRASH] ошибки Unity пишу в " + path + ", сторож зависаний запущен");
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[CRASH] журнал ошибок: " + e.Message); }
+        }
+
+        static void Write(string level, string src, string msg)
+        {
+            lock (sync)
+            {
+                try
+                {
+                    if (file == null || file.BaseStream.Length > 20 * 1024 * 1024) return;
+                    if (msg == lastMsg) { repeats++; return; }
+                    if (repeats > 0) file.WriteLine($"    (повторилось ещё {repeats} раз)");
+                    lastMsg = msg; repeats = 0;
+                    file.WriteLine($"[{DateTime.Now:HH:mm:ss}] {level} {src}: {msg}");
+                }
+                catch (Exception) { }
+            }
+        }
+
+        public void LogEvent(object sender, LogEventArgs e)
+        {
+            string src = e.Source != null ? e.Source.SourceName : "";
+            // у Unity предупреждений тысячи (коллайдеры с отрицательным масштабом и т.п.) - из Unity только ошибки
+            bool unity = src.IndexOf("Unity", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (unity && (e.Level & (LogLevel.Error | LogLevel.Fatal)) == 0) return;
+            if (!unity && src != "SodCoop") return;
+            Write(e.Level.ToString(), src, e.Data != null ? e.Data.ToString() : "");
+        }
+
+        public void Dispose() { }
+
+        // главный поток не отвечает дольше 8 с - пишем (из своего потока: ни к чему из игры не обращаемся)
+        static void Watch()
+        {
+            // (во время загрузки города и сейва игра стоит по 5-15 с - это нормально)
+            long reported = 0, since = 0;
+            while (true)
+            {
+                System.Threading.Thread.Sleep(1000);
+                long b = beat, frozen = Environment.TickCount64 - b;
+                if (frozen < 8000)
+                {
+                    if (reported > 0) { Plugin.L.LogWarning($"[HANG] главный поток ожил: стоял {(b - since) / 1000} с"); reported = 0; }
+                    continue;
+                }
+                if (reported == 0) since = b;
+                if (reported == 0 || frozen - reported >= 15000)
+                {
+                    reported = frozen;
+                    Plugin.L.LogWarning($"[HANG] главный поток игры не отвечает уже {frozen / 1000} с (сеть: {(Net.Started ? "в игре" : "нет")})");
+                }
+            }
+        }
+    }
+
     public class SodCoopDriver : MonoBehaviour
     {
         public SodCoopDriver(IntPtr ptr) : base(ptr) { }
@@ -3027,6 +3136,7 @@ namespace SodCoop
         {
             try
             {
+                CrashLog.Beat();
                 CharEditor.Tick();
                 Lan.Tick();
                 Net.Poll();
@@ -5218,6 +5328,37 @@ namespace SodCoop
 
         static Interactable ResolveId(int id)
         {
+            var r = ResolveIdRaw(id);
+            if (r != null && rewardLocal.Contains(r.id)) { Plugin.Dbg($"[ITEM] {id}: это моя награда за задание - чужие действия с ней не применяю"); return null; }
+            return r;
+        }
+
+        // Награда за задание у каждого игрока своя (его игра положила её в ящик сама): номера у копий совпадали, и подбор хостом
+        // убирал награду у всех. Такие предметы не передаём с заданием и не применяем к ним чужие действия
+        static readonly System.Collections.Generic.HashSet<int> rewardLocal = new System.Collections.Generic.HashSet<int>();
+
+        internal static bool IsRewardObjective(string entry) { return entry != null && entry.StartsWith("Pick up your reward"); }
+
+        internal static void NoteRewardItem(Objective.ObjectiveTrigger t)
+        {
+            if (t == null || t.interactableID == 0 || t.interactableID == -1) return;
+            if (rewardLocal.Add(t.interactableID)) Plugin.L.LogInfo($"[JOB] награда за задание {t.jobID}: предмет {t.interactableID} - только мой");
+        }
+
+        internal static void OnRewarded(SideJob j, int idBefore)
+        {
+            int n = 0;
+            for (int id = idBefore; id < Interactable.worldAssignID && id - idBefore < 50; id++)
+            {
+                var it = FindById(id);
+                if (it == null) { try { CityData.Instance.savableInteractableDictionary.TryGetValue(id, out it); } catch (Exception) { } }
+                if (it != null && rewardLocal.Add(it.id)) n++;
+            }
+            Plugin.L.LogInfo($"[JOB] задание {(j != null ? j.jobID : 0)}: моя игра выдала награду, новых предметов {n} - они только мои");
+        }
+
+        static Interactable ResolveIdRaw(int id)
+        {
             Interactable it;
             if (idMap.TryGetValue(id, out it) && it != null) return it;
             int side = id & SideMask;
@@ -6360,14 +6501,16 @@ namespace SodCoop
         }
 
         // Применить состояние ящика/шкафа (открыт или заперт). Если объекта рядом нет, запоминаем и применяем позже
-        static bool ApplyMove(int id, int hash, Vector3 wp, bool val, bool isLock)
+        // quiet - повторная попытка из MoveTick: объект всё ещё далеко, ждём дольше и в лог не пишем (раньше каждую секунду
+        // повторялось «применю позже» и каждый раз искались все ящики сцены)
+        static bool ApplyMove(int id, int hash, Vector3 wp, bool val, bool isLock, bool quiet = false)
         {
             float dist;
             var c = FindMoveCtl(hash, wp, out dist);
             if (c == null)
             {
-                bool isNew = QueueMove(new PendingMove { id = id, hash = hash, wp = wp, isLock = isLock, val = val, due = Time.realtimeSinceStartup + 1f });
-                if (isNew) Plugin.L.LogInfo($"[DOOR] объект id={id} далеко/не заспавнен, применю позже ({(isLock ? "замок" : "открыт")}={val})");
+                bool isNew = QueueMove(new PendingMove { id = id, hash = hash, wp = wp, isLock = isLock, val = val, due = Time.realtimeSinceStartup + (quiet ? 5f : 1f) });
+                if (isNew && !quiet) Plugin.L.LogInfo($"[DOOR] объект id={id} далеко/не заспавнен, применю позже ({(isLock ? "замок" : "открыт")}={val})");
                 return false;
             }
             Interactable ci = null;
@@ -6425,7 +6568,7 @@ namespace SodCoop
                             Plugin.L.LogInfo($"[DOOR] ящик id={m.id}: доделал через OnOpen/OnClose, isOpen={m.c.isOpen}");
                         }
                     }
-                    else ApplyMove(m.id, m.hash, m.wp, m.val, m.isLock);
+                    else ApplyMove(m.id, m.hash, m.wp, m.val, m.isLock, true);
                 }
                 catch (Exception) { }
             }
@@ -6891,6 +7034,23 @@ namespace SodCoop
             catch (Exception) { }
         }
 
+        // Двойники всех клиентов (humanID). SetVisible(true) - и игры, и самого мода (раз в 5 с, чтобы жители «видели» двойника) -
+        // включал все рендереры модели, и до следующей проверки (0,2 с) двойник мелькал. Теперь прячем сразу после SetVisible
+        static readonly System.Collections.Generic.HashSet<int> activePuppets = new System.Collections.Generic.HashSet<int>();
+        static int puppetVisFixes;
+
+        internal static void OnHumanSetVisible(Human h, bool vis)
+        {
+            if (!vis || h == null || activePuppets.Count == 0 || !activePuppets.Contains(h.humanID)) return;
+            int off = 0;
+            var rs = h.gameObject.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < rs.Length; i++)
+            {
+                try { var r = rs[i]; if (r != null && r.enabled) { r.enabled = false; NoteHidden(h.humanID, r); off++; } } catch (Exception) { }
+            }
+            if (off > 0 && puppetVisFixes++ % 50 == 0) Plugin.Dbg($"[PUPPET] двойник {h.humanID}: SetVisible включил {off} рендереров - сразу спрятал (раз {puppetVisFixes})");
+        }
+
         static float puppetHideLog;
         static void HidePuppet()
         {
@@ -6971,6 +7131,7 @@ namespace SodCoop
         {
             var c = puppet; puppet = null; puppetId = -1;
             if (c == null) return;
+            activePuppets.Remove(c.humanID);
             PuppetSeat(c, puppetSeatId, false); puppetSeatId = -1;
             string where = "на месте";
             try
@@ -7017,7 +7178,7 @@ namespace SodCoop
                 puppetAt = Time.unscaledTime;
                 var c = PickPuppet();
                 if (c == null) { Plugin.L.LogWarning("[PUPPET] не нашёл подходящего горожанина для двойника"); return; }
-                puppet = c; puppetId = c.humanID;
+                puppet = c; puppetId = c.humanID; activePuppets.Add(c.humanID);
                 CachePuppetParts(c);
                 try { if (Plugin.CfgPuppetNoAI.Value && c.ai != null) c.ai.EnableAI(false); } catch (Exception e) { Plugin.L.LogWarning($"[PUPPET] EnableAI: {e.Message}"); }
                 try { c.SetVisible(true, false); } catch (Exception) { }
@@ -11756,7 +11917,7 @@ namespace SodCoop
         {
             var res = new System.Collections.Generic.List<Interactable>();
             var ids = new System.Collections.Generic.HashSet<int>();
-            System.Action<Interactable> add = it => { try { if (it != null && it.inInventory == null && res.Count < 60 && ids.Add(it.id)) res.Add(it); } catch (Exception) { } };   // в кармане - не мировой предмет
+            System.Action<Interactable> add = it => { try { if (it != null && it.inInventory == null && !rewardLocal.Contains(it.id) && res.Count < 60 && ids.Add(it.id)) res.Add(it); } catch (Exception) { } };   // в кармане - не мировой предмет
             System.Collections.Generic.List<Interactable> idx;
             if (jobItemIndex != null && jobItemIndex.TryGetValue(j.jobID, out idx)) foreach (var it in idx) add(it);
             try { if (j.activeJobItems != null) foreach (var kv in j.activeJobItems) add(kv.Value); } catch (Exception) { }
@@ -11957,7 +12118,7 @@ namespace SodCoop
             var drop = new System.Collections.Generic.List<(JobPreset.JobTag tag, Interactable mine, Interactable theirs)>();
             foreach (var kv in j.activeJobItems)
             {
-                var mine = kv.Value; if (mine == null || hostPtr.Contains(mine.Pointer) || hostIds.Contains(mine.id)) continue;
+                var mine = kv.Value; if (mine == null || hostPtr.Contains(mine.Pointer) || hostIds.Contains(mine.id) || rewardLocal.Contains(mine.id)) continue;
                 Interactable theirs;
                 if (!host.TryGetValue(PresetNameOf(mine), out theirs) || theirs.id == mine.id || theirs.Pointer == mine.Pointer) continue;
                 // только предметы, созданные во время игры у меня самого (у предметов из сейва номер общий с хостом)
@@ -12298,7 +12459,7 @@ namespace SodCoop
         {
             var bl = new System.Collections.Generic.List<int>(); var al = new System.Collections.Generic.List<int>();
             foreach (var b in CityBuildings.Instance.buildingDirectory) if (b != null && b.alarmActive) bl.Add(b.buildingID);
-            foreach (var kv in CityData.Instance.addressDictionary) if (kv.Value != null && kv.Value.alarmActive) al.Add(kv.Key);
+            foreach (var x in AlarmAddresses()) { try { if (x.a != null && x.a.alarmActive) al.Add(x.key); } catch (Exception) { } }
             var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)17);
             w.Put(bl.Count); foreach (var x in bl) w.Put(x);
             w.Put(al.Count); foreach (var x in al) w.Put(x);
@@ -12317,10 +12478,26 @@ namespace SodCoop
         static System.Collections.Generic.List<Interactable> secDoorsCache;
         static float secDoorsAt;
 
-        // шторы охраны не меняются - собираем раз в минуту (обход всех этажей города занимал до 80 мс)
+        // Шторы охраны и адреса города не меняются: собираем один раз. Раньше шторы пересобирались раз в минуту (обход всех этажей
+        // города - до 80 мс), а словарь адресов обходился каждые 2 с: у хоста раз в минуту подтормаживал кадр (тревоги 35-66 мс)
+        static System.Collections.Generic.List<(int key, NewAddress a)> alarmAddrCache;
+        static int alarmAddrCount = -1;
+
+        static System.Collections.Generic.List<(int key, NewAddress a)> AlarmAddresses()
+        {
+            var dict = CityData.Instance.addressDictionary;
+            int n = dict != null ? dict.Count : 0;
+            if (alarmAddrCache != null && n == alarmAddrCount) return alarmAddrCache;
+            var res = new System.Collections.Generic.List<(int, NewAddress)>();
+            if (dict != null) foreach (var kv in dict) if (kv.Value != null) res.Add((kv.Key, kv.Value));
+            alarmAddrCache = res; alarmAddrCount = n;
+            Plugin.L.LogInfo($"[ALARM] адресов для тревог: {res.Count}");
+            return res;
+        }
+
         static System.Collections.Generic.List<Interactable> SecurityDoors()
         {
-            if (secDoorsCache != null && Time.realtimeSinceStartup < secDoorsAt) return secDoorsCache;
+            if (secDoorsCache != null && (secDoorsCache.Count > 0 || Time.realtimeSinceStartup < secDoorsAt)) return secDoorsCache;
             secDoorsAt = Time.realtimeSinceStartup + 60f;
             var res = new System.Collections.Generic.List<Interactable>();
             foreach (var b in CityBuildings.Instance.buildingDirectory)
@@ -12333,6 +12510,7 @@ namespace SodCoop
                 }
             }
             secDoorsCache = res;
+            Plugin.L.LogInfo($"[ALARM] штор охраны в городе: {res.Count}");
             return res;
         }
 
@@ -12375,10 +12553,10 @@ namespace SodCoop
                     bool want = bs.Contains(b.buildingID);
                     if (b.alarmActive != want) { try { b.SetAlarm(want, null, null); if (want) on++; else off++; } catch (Exception) { } }
                 }
-                foreach (var kv in CityData.Instance.addressDictionary)
+                foreach (var x in AlarmAddresses())
                 {
-                    var a = kv.Value; if (a == null) continue;
-                    bool want = ads.Contains(kv.Key);
+                    var a = x.a; if (a == null) continue;
+                    bool want = ads.Contains(x.key);
                     if (a.alarmActive != want) { try { a.SetAlarm(want, null); if (want) on++; else off++; } catch (Exception) { } }
                 }
                 if (r.AvailableBytes >= 4)
@@ -12914,6 +13092,7 @@ namespace SodCoop
             var c = o.thisCase;
             int jobId = c != null ? c.jobReference : 0;
             if (jobId <= 0 || string.IsNullOrEmpty(o.name)) return;
+            if (o.queueElement != null && IsRewardObjective(o.queueElement.entryRef)) return;   // награду каждый забирает свою
             EnsureAcceptSent(jobId);
             Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{o.name}' выполнена у меня, сообщаю другим");
             if (manager == null || manager.ConnectedPeersCount == 0) return;
