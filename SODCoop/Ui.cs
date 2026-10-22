@@ -1701,12 +1701,13 @@ namespace SodCoop
             }
             Lan.Server sel = null;
             foreach (var x in list) if (x.Ip == selIp && x.Port == selPort) sel = x;
-            UiKit.BarButton(win, UiKit.T("Host", "Создать"), 200f, () => { page = 1; msg = ""; hostSaves = MenuAuto.SaveNames(); hostSel = 0; hostTop = 0; });
-            UiKit.BarButton(win, UiKit.T("Connect", "Подключиться"), 220f, () => ConnectTo(sel), sel != null && sel.Compatible);
-            UiKit.BarButton(win, UiKit.T("Direct", "По адресу"), 200f, () => { page = 2; msg = ""; });
-            UiKit.BarButton(win, UiKit.T("Refresh", "Обновить"), 200f, () => { Lan.Servers.Clear(); Lan.Scan(); builtSig = ""; });
-            UiKit.BarButton(win, UiKit.T("Disable", "Выключить"), 200f, () => { Net.ApplyOff(); msg = UiKit.T("Multiplayer disabled.", "Мультиплеер выключен."); });
-            UiKit.BarButton(win, UiKit.T("Back", "Назад"), 200f, () => CloseMenu());
+            UiKit.BarButton(win, UiKit.T("Host", "Создать"), 190f, () => { page = 1; msg = ""; hostSaves = MenuAuto.SaveNames(); hostSel = 0; hostTop = 0; });
+            UiKit.BarButton(win, UiKit.T("Connect", "Подключиться"), 210f, () => ConnectTo(sel), sel != null && sel.Compatible);
+            UiKit.BarButton(win, UiKit.T("Direct", "По адресу"), 190f, () => { page = 2; msg = ""; });
+            UiKit.BarButton(win, UiKit.T("Refresh", "Обновить"), 180f, () => { Lan.Servers.Clear(); Lan.Scan(); builtSig = ""; });
+            UiKit.BarButton(win, UiKit.T("Disable", "Выключить"), 190f, () => { Net.ApplyOff(); msg = UiKit.T("Multiplayer disabled.", "Мультиплеер выключен."); });
+            UiKit.BarButton(win, UiKit.T("Collect logs", "Собрать логи"), 210f, () => { CloseMenu(); LogPack.Collect(); });
+            UiKit.BarButton(win, UiKit.T("Back", "Назад"), 170f, () => CloseMenu());
         }
 
         internal static void DevPage(int p) { if (p == 1) { hostSaves = MenuAuto.SaveNames(); hostSel = 0; hostTop = 0; } page = p; }

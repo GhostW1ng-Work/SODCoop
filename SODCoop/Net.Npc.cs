@@ -38,7 +38,10 @@ namespace SodCoop
             public int ap = -1;
             public int apIdle = -1, apArms = -1, apCarry = -1, apCombat = -1;
             public float atkUntil, combatHoldUntil; public bool atkHeld; public int curCombat = -1;
+            public int rev, doneRev = -1; public bool settled; public int slot;
         }
+
+        static int npcFrame;
         static readonly System.Collections.Generic.Dictionary<int, NpcTarget> npcTargets = new System.Collections.Generic.Dictionary<int, NpcTarget>();
 
         static void BuildNpcMap()
@@ -238,9 +241,14 @@ namespace SodCoop
             if (!Plugin.CfgNpcSync.Value || manager == null || manager.ConnectedPeersCount == 0) return;
             if (npcById == null || npcById.Count == 0 || Time.unscaledTime - npcMapAt > 30f) BuildNpcMap();
             if (npcById.Count == 0) return;
+            long tq = Perf.T();
             PuppetsFrame(dt);
+            Perf.Add("жители: двойники", tq); tq = Perf.T();
             CorpseTick();
+            Perf.Add("жители: тела", tq); tq = Perf.T();
             try { CctvTick(); } catch (Exception __e) { Err.Swallow(__e); }
+            Perf.Add("жители: камеры", tq);
+            if (!IsHost) { tq = Perf.T(); NpcClientTick(dt); Perf.Add("жители: движение у клиента", tq); return; }
             if (IsHost) { NpcSendTick(); try { TickRateTick(); } catch (Exception e) { if (!npcErrLogged) { npcErrLogged = true; Plugin.L.LogWarning("[NPC] частота: " + e.Message); } } }
             else NpcClientTick(dt);
         }
@@ -372,6 +380,7 @@ namespace SodCoop
                 NpcTarget t;
                 if (!npcTargets.TryGetValue(id, out t)) { t = new NpcTarget { c = c }; npcTargets[id] = t; }
                 t.c = c; t.pos = p; t.yaw = yaw; t.speed = sp; t.flags = f; t.flags2 = f2; t.idle = idle; t.arms = arms; t.carryItem = carry; t.combatArms = comb; t.outfit = outfit;
+                t.rev++; t.settled = false;
                 npcRecvCount++;
             }
         }
@@ -391,11 +400,19 @@ namespace SodCoop
                 Plugin.L.LogInfo($"[NPC] клиент: за 15 с получено записей: {npcRecvCount}, веду горожан: {npcTargets.Count}");
                 npcRecvCount = 0;
             }
-            float kp = 1f - Mathf.Exp(-12f * dt);
-            int locBudget = 8;
+            npcFrame++;
+            float now = Time.unscaledTime;
+            float kp = 1f - Mathf.Exp(-12f * dt), kpFar = 1f - Mathf.Exp(-36f * dt);
+            Vector3 eye = Vector3.zero; bool haveEye = false;
+            try { var cm = Camera.main; if (cm != null) { eye = cm.transform.position; haveEye = true; } } catch (Exception __e) { Err.Swallow(__e); }
+            int locBudget = 8, slotSeq = 0;
             foreach (var kv in npcTargets)
             {
                 var t = kv.Value; var c = t.c;
+                t.slot = slotSeq++;
+                if (t.settled && t.doneRev == t.rev && ((npcFrame + t.slot) % 90) != 0 && now >= t.atkUntil && !t.atkHeld && now >= t.combatHoldUntil && t.curCombat != 1) continue;
+                bool far = haveEye && (t.pos - eye).sqrMagnitude > 1600f;
+                if (far && !t.snap && t.doneRev == t.rev && ((npcFrame + t.slot) % 3) != 0) continue;
                 try
                 {
                     if (c == null) continue;
@@ -414,13 +431,20 @@ namespace SodCoop
                     if ((t.flags & 2) != 0 && !t.snap) { ApplyNpcState(t); continue; }
                     Vector3 cur = tr.position;
                     float d = Vector3.Distance(cur, t.pos);
-                    if (t.snap || d > 4f) { tr.position = t.pos; tr.rotation = Quaternion.Euler(0f, t.yaw, 0f); t.snap = false; }
+                    var want = Quaternion.Euler(0f, t.yaw, 0f);
+                    if (t.snap || d > 4f) { tr.position = t.pos; tr.rotation = want; t.snap = false; }
                     else
                     {
-                        tr.position = Vector3.Lerp(cur, t.pos, kp);
-                        tr.rotation = Quaternion.Slerp(tr.rotation, Quaternion.Euler(0f, t.yaw, 0f), kp);
+                        var rot = tr.rotation;
+                        if (d < 0.003f && Quaternion.Angle(rot, want) < 0.3f) { tr.position = t.pos; tr.rotation = want; t.settled = true; }
+                        else
+                        {
+                            float k = far ? kpFar : kp;
+                            tr.position = Vector3.Lerp(cur, t.pos, k);
+                            tr.rotation = Quaternion.Slerp(rot, want, k);
+                        }
                     }
-                    ApplyNpcState(t);
+                    if (t.doneRev != t.rev || (t.outfit != 255 && t.apOutfit != t.outfit)) { ApplyNpcState(t); if (t.apOutfit == t.outfit || t.outfit == 255) t.doneRev = t.rev; }
                     ArmsLayerForAttack(t);
                     CombatSync(t);
                     if (locBudget > 0 && Time.unscaledTime - t.lastLoc > 0.5f && (t.lastLocPos - tr.position).sqrMagnitude > 0.25f)
@@ -435,6 +459,7 @@ namespace SodCoop
 
         static void ArmsLayerForAttack(NpcTarget t)
         {
+            if (!t.atkHeld && Time.unscaledTime >= t.atkUntil) return;
             var c = t.c; if (c == null) return;
             var ac = c.animationController; if (ac == null) return;
             var an = ac.mainAnimator; if (an == null || an.layerCount < 2) return;
