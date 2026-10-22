@@ -691,8 +691,8 @@ namespace SodCoop
             {
                 var p = Player.Instance;
                 try { RestoreInventory(null); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] инвентарь: " + e.Message); }
-                if (Plugin.CfgNewPlayerMoney.Value >= 0) GcSet("money", "SetMoney", Plugin.CfgNewPlayerMoney.Value);
-                if (Plugin.CfgNewPlayerLockpicks.Value >= 0) { try { GcSet("lockPicks", "SetLockpicks", Plugin.CfgNewPlayerLockpicks.Value); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] отмычки: " + e.Message); } }
+                if (Rules.NewPlayerMoney >= 0) GcSet("money", "SetMoney", Rules.NewPlayerMoney);
+                if (Rules.NewPlayerLockpicks >= 0) { try { GcSet("lockPicks", "SetLockpicks", Rules.NewPlayerLockpicks); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] отмычки: " + e.Message); } }
                 GcSet("socialCredit", "SetSocialCredit", 0);
                 if (p != null)
                 {
@@ -767,14 +767,14 @@ namespace SodCoop
                 }
                 else
                 {
-                    if (Plugin.CfgNewPlayerClean.Value)
+                    if (Rules.NewPlayerClean)
                     {
                         NewPlayerStart();
-                        var nt = new ProfileData(); nt.money = Plugin.CfgNewPlayerMoney.Value; nt.social = 0; nt.valid = true; nt.lockpicks = Plugin.CfgNewPlayerLockpicks.Value;
+                        var nt = new ProfileData(); nt.money = Rules.NewPlayerMoney; nt.social = 0; nt.valid = true; nt.lockpicks = Rules.NewPlayerLockpicks;
                         profTarget = nt; profVerifyAt = Time.realtimeSinceStartup + 2f; profVerifyEnd = Time.realtimeSinceStartup + 25f;
                     }
                     if (pd != null && pd.apts.Count > 0) { profileApplying = true; try { RestoreResidence(pd.apts, pd.residence); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] квартира: " + e.Message); } finally { profileApplying = false; } }
-                    Plugin.L.LogInfo("[PROFILE] профиля ещё нет, это новый игрок" + (Plugin.CfgNewPlayerClean.Value ? ": чистый старт" : ""));
+                    Plugin.L.LogInfo("[PROFILE] профиля ещё нет, это новый игрок" + (Rules.NewPlayerClean ? ": чистый старт" : ""));
                 }
             }
             catch (Exception e) { Plugin.L.LogWarning("[PROFILE] применить профиль: " + e.Message); }

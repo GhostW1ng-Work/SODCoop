@@ -24,9 +24,15 @@ namespace SodCoop
         static bool lastPause;
         static bool moneyDumped;
 
+        internal static bool CheatsActive
+        {
+            get { return Plugin.CfgCheatKeys.Value && !(ClientOfHost && !Rules.ClientCheats); }
+        }
+
         internal static void CheatKeys()
         {
             if (cheatKeysBroken || !Plugin.CfgCheatKeys.Value) return;
+            if (ClientOfHost && !Rules.ClientCheats) { if (cheatOpen) CloseCheatMenu(); return; }
             try
             {
                 KeyCode mk;
@@ -102,7 +108,7 @@ namespace SodCoop
 
         static void ApplyPause()
         {
-            bool v = Plugin.CfgPauseNpc.Value;
+            bool v = Plugin.CfgPauseNpc.Value && CheatsActive;
             if (v == lastPause) return;
             lastPause = v;
             try { Game.Instance.SetPauseAI(v); Plugin.L.LogInfo($"[CHEAT] ИИ NPC {(v ? "остановлен" : "включён")}"); }

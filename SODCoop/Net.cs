@@ -335,6 +335,7 @@ namespace SodCoop
         const byte MsgPlayerInfo = 27;
         const byte MsgPlayerLeft = 28;
         const byte MsgHostReload = 37;
+        const byte MsgRules = 38;
         const byte MsgJob = 34;
         const byte MsgCorpse = 36;
         const byte MsgMurder = 35;
@@ -653,10 +654,16 @@ namespace SodCoop
         static Transform boneUL, boneUR, boneLL, boneLR, boneTorso, boneArmL, boneArmR;
         static bool remoteVent;
 
-        static bool InVent(Player p)
+        static bool inVentNow;
+
+        internal static void SetInVent(bool v)
         {
-            try { return p != null && p.currentDuctSection != null; } catch (Exception) { return false; }
+            if (inVentNow == v) return;
+            inVentNow = v;
+            Plugin.L.LogInfo(v ? "[POSE] я залез в вентиляцию" : "[POSE] я вылез из вентиляции");
         }
+
+        static bool InVent(Player p) { return inVentNow; }
         static float crouchFootBase = float.NaN;
         static float remoteLean, leanSmooth;
         static bool remoteBlocking;
@@ -772,6 +779,7 @@ namespace SodCoop
 
         internal static void Shutdown()
         {
+            Rules.Clear();
             try { ProfileOnShutdown(); } catch (Exception __e) { Err.Swallow(__e); }
             try { DownedOnShutdown(); } catch (Exception __e) { Err.Swallow(__e); }
             lostAt = -1f; everConnected = false; weaponSent = null;

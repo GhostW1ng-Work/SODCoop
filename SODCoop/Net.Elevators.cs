@@ -313,6 +313,7 @@ namespace SodCoop
                 peer.Send(w, DeliveryMethod.ReliableOrdered);
                 if (ok)
                 {
+                    SendRules(peer);
                     SendDoorSnapshot(peer); SendRoomSnapshot(peer); SendWindowSnapshot(peer); SendTime(); SendSoldSnapshot(peer); SendFurnSnapshot(peer);
                     try { SendElevatorState(peer, true); } catch (Exception e) { Plugin.L.LogWarning("[LIFT] снимок: " + e.Message); }
                     try { SendJobSnapshot(peer); } catch (Exception e) { Plugin.L.LogWarning("[JOB] снимок: " + e.Message); }
@@ -379,6 +380,10 @@ namespace SodCoop
                     Enter(o); SetRemoteAppearance(app); Leave();
                     Plugin.L.LogInfo($"[NET] в игре ещё один игрок: номер {pid}");
                 }
+            }
+            else if (type == MsgRules && !IsHost)
+            {
+                Rules.Read(reader);
             }
             else if (type == MsgHostReload && !IsHost)
             {
@@ -518,7 +523,7 @@ namespace SodCoop
                         try { vr.peer.Send(fw, DeliveryMethod.ReliableOrdered); } catch (Exception __e) { Err.Swallow(__e); }
                     }
                 }
-                else if (!IsHost || Plugin.CfgPvp.Value) OnPuppetHurt(reader);
+                else if (!IsHost || Rules.Pvp) OnPuppetHurt(reader);
             }
             else if (type == MsgNpc)
             {

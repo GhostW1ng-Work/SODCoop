@@ -60,7 +60,7 @@ namespace SodCoop
 
         static bool KeepWorld()
         {
-            return Plugin.CfgWorldNeverPauses.Value && manager != null && RtMode != NetMode.Off && Started;
+            return Rules.WorldNeverPauses && manager != null && RtMode != NetMode.Off && Started;
         }
 
         internal static bool ForcePlayBegin()

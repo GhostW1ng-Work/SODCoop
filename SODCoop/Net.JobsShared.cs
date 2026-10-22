@@ -662,6 +662,7 @@ namespace SodCoop
         internal static void OnCaseStatus(Case c, Case.CaseStatus st)
         {
             if (c != null) Plugin.L.LogInfo($"[JOB] дело '{c.name}' ({c.caseType}, задание {c.jobReference}): статус {st}{(applyingJob ? " (от другого игрока)" : "")}");
+            if (c != null && !applyingJob && st == Case.CaseStatus.submitted) localSubmitted.Add(CaseKey(c));
             if (applyingJob || c == null || st != Case.CaseStatus.handInCollected || manager == null || manager.ConnectedPeersCount == 0 || !Plugin.CfgJobSync.Value) return;
             int jobId = c.jobReference;
             if (jobId <= 0 && c.caseType != Case.CaseType.murder) return;
@@ -836,7 +837,7 @@ namespace SodCoop
                     if (!resolved && id <= 0)
                     {
                         applyingJob = true;
-                        try { if (money > 0) GameplayController.Instance.AddMoney(money, true, "case reward"); } catch (Exception e) { Plugin.L.LogWarning("[JOB] награда: " + e.Message); }
+                        try { if (money > 0 && !RewardRuleActive) GameplayController.Instance.AddMoney(money, true, "case reward"); } catch (Exception e) { Plugin.L.LogWarning("[JOB] награда: " + e.Message); }
                         finally { applyingJob = false; }
                     }
                     Toast($"Player {(rp != null ? rp.pid : 0)} solved the case" + (money > 0 ? $": you get the reward too." : "."));
@@ -845,7 +846,7 @@ namespace SodCoop
                 }
                 var j = JobById(id);
                 bool mine = j != null && j.accepted;
-                if (mine && money > 0)
+                if (mine && money > 0 && !RewardRuleActive)
                 {
                     applyingJob = true;
                     try { GameplayController.Instance.AddMoney(money, true, "case reward"); } catch (Exception e) { Plugin.L.LogWarning("[JOB] награда: " + e.Message); }
@@ -1104,6 +1105,7 @@ namespace SodCoop
         static void JobTick()
         {
             JobLoopDepth = 0;
+            try { RulesTick(); } catch (Exception e) { Plugin.L.LogWarning("[RULES] " + e.Message); }
             try { WorldMsgQueueTick(); } catch (Exception e) { Plugin.L.LogWarning("[JOB] очередь: " + e.Message); }
             try { LeverTick(); } catch (Exception e) { Plugin.L.LogWarning("[SWITCH] рычаги: " + e.Message); }
             long tj = Perf.T();

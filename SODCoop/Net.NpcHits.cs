@@ -92,7 +92,7 @@ namespace SodCoop
                     var vo = OwnerOfPuppet(c);
                     if (vo != null)
                     {
-                        if (Plugin.CfgPvp.Value) OnPuppetDamaged(vo.pid, amount, fromWho, pos, dir, fs, bs, erase, alert, forceRag, dur, shock, kill, recoil, ragMp);
+                        if (Rules.Pvp) OnPuppetDamaged(vo.pid, amount, fromWho, pos, dir, fs, bs, erase, alert, forceRag, dur, shock, kill, recoil, ragMp);
                         return false;
                     }
                 }

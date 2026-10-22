@@ -1559,6 +1559,13 @@ namespace SodCoop
         {
             if (inName != null) fName = inName.text; if (inPass != null) fPass = inPass.text; if (inPort != null) fPort = inPort.text;
             if (inAddr != null) fAddr = inAddr.text; if (inAPort != null) fAPort = inAPort.text; if (inAPass != null) fAPass = inAPass.text;
+            float fv; int iv;
+            if (inRDown != null && ParseF(inRDown.text, out fv)) Plugin.CfgDownedSeconds.Value = Mathf.Clamp(fv, 1f, 600f);
+            if (inRHold != null && ParseF(inRHold.text, out fv)) Plugin.CfgReviveHoldSeconds.Value = Mathf.Clamp(fv, 0.5f, 60f);
+            if (inRHealth != null && ParseF(inRHealth.text, out fv)) Plugin.CfgReviveHealth.Value = Mathf.Clamp(fv / 100f, 0.05f, 1f);
+            if (inRHosp != null && ParseF(inRHosp.text, out fv)) Plugin.CfgHospitalSeconds.Value = Mathf.Clamp(fv, 0f, 3600f);
+            if (inRMoney != null && int.TryParse(inRMoney.text, out iv)) Plugin.CfgNewPlayerMoney.Value = Math.Max(-1, iv);
+            if (inRPicks != null && int.TryParse(inRPicks.text, out iv)) Plugin.CfgNewPlayerLockpicks.Value = Math.Max(-1, iv);
         }
 
         static string Sig()
@@ -1588,13 +1595,15 @@ namespace SodCoop
         {
             var c = win.Content; UiKit.Clear(c); UiKit.Clear(win.Buttons);
             inName = inPass = inPort = inAddr = inAPort = inAPass = null;
-            win.Title.text = page == 1 ? UiKit.T("Host a game", "Создать игру") : page == 2 ? UiKit.T("Direct connect", "Подключение по адресу") : page == 3 ? UiKit.T("Password", "Пароль") : UiKit.T("Multiplayer", "Мультиплеер");
+            inRDown = inRHold = inRHealth = inRHosp = inRMoney = inRPicks = null;
+            win.Title.text = page == 4 ? UiKit.T("Server rules", "Правила сервера") : page == 1 ? UiKit.T("Host a game", "Создать игру") : page == 2 ? UiKit.T("Direct connect", "Подключение по адресу") : page == 3 ? UiKit.T("Password", "Пароль") : UiKit.T("Multiplayer", "Мультиплеер");
             float W = c.rect.width, H = c.rect.height;
             if (W < 100f) { W = 1372f; H = 604f; }
             if (page == 0) UiList(c, W);
             else if (page == 1) UiHost(c, W);
             else if (page == 2) UiDirect(c);
-            else UiPass(c);
+            else if (page == 3) UiPass(c);
+            else UiRules(c, W);
             uiMsg = UiKit.Label(c, msg ?? "", 24f, H - 84f, W - 48f, 36f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, UiKit.HeadColor);
             uiStatus = UiKit.Label(c, "", 24f, H - 48f, W - 48f, 36f, 20f);
             uiAt = 0f;
@@ -1638,6 +1647,65 @@ namespace SodCoop
 
         internal static void DevPage(int p) { if (p == 1) { hostSaves = MenuAuto.SaveNames(); hostSel = 0; hostTop = 0; } page = p; }
 
+        static TMPro.TMP_InputField inRDown, inRHold, inRHealth, inRHosp, inRMoney, inRPicks;
+
+        static bool ParseF(string s, out float v)
+        {
+            return float.TryParse((s ?? "").Trim().Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out v);
+        }
+
+        static void RuleToggle(Transform c, float x, ref float y, float w, string label, BepInEx.Configuration.ConfigEntry<bool> e)
+        {
+            bool on = e.Value;
+            var b = UiKit.Button(c, label + ": " + (on ? UiKit.T("on", "вкл") : UiKit.T("off", "выкл")), x, y, w, 46f, () => { Harvest(); e.Value = !e.Value; builtSig = ""; }, 20f);
+            UiKit.SetSelected(b, on);
+            y += 52f;
+        }
+
+        static TMPro.TMP_InputField RuleInput(Transform c, float x, ref float y, float w, string label, string value)
+        {
+            UiKit.Label(c, label, x, y, w - 140f, 44f, 20f);
+            var f = UiKit.Input(c, x + w - 130f, y, 130f, 44f, value, 6, false);
+            y += 50f;
+            return f;
+        }
+
+        static void UiRules(Transform c, float W)
+        {
+            float x = 36f, y = 16f, bw = 600f;
+            UiKit.Label(c, UiKit.T("Players and game", "Игроки и игра"), x, y, bw, 32f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, UiKit.HeadColor); y += 40f;
+            UiKit.Label(c, UiKit.T("Max players", "Игроков максимум"), x, y, 300f, 46f, 20f);
+            int mp = Mathf.Clamp(Plugin.CfgMaxPlayers.Value, 2, 4);
+            UiKit.Button(c, "<", x + bw - 182f, y, 52f, 46f, () => { Harvest(); Plugin.CfgMaxPlayers.Value = Mathf.Clamp(mp - 1, 2, 4); builtSig = ""; });
+            UiKit.Label(c, mp.ToString(), x + bw - 124f, y, 66f, 46f, 24f, TMPro.TextAlignmentOptions.Midline, Color.white);
+            UiKit.Button(c, ">", x + bw - 52f, y, 52f, 46f, () => { Harvest(); Plugin.CfgMaxPlayers.Value = Mathf.Clamp(mp + 1, 2, 4); builtSig = ""; });
+            y += 52f;
+            RuleToggle(c, x, ref y, bw, UiKit.T("Players can hurt each other", "Игроки могут ранить друг друга"), Plugin.CfgPvp);
+            RuleToggle(c, x, ref y, bw, UiKit.T("The world never pauses", "Мир не встаёт на паузу"), Plugin.CfgWorldNeverPauses);
+            RuleToggle(c, x, ref y, bw, UiKit.T("Players may use cheats", "Игрокам разрешены читы"), Plugin.CfgClientCheats);
+            y += 6f;
+            UiKit.Label(c, UiKit.T("Job and case reward", "Награда за задания и дела"), x, y, bw, 32f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, UiKit.HeadColor); y += 40f;
+            bool only = Plugin.CfgRewardOnlyHandIn.Value;
+            var b1 = UiKit.Button(c, UiKit.T("Everyone", "Всем игрокам"), x, y, (bw - 10f) / 2f, 46f, () => { Harvest(); Plugin.CfgRewardOnlyHandIn.Value = false; builtSig = ""; }, 20f);
+            var b2 = UiKit.Button(c, UiKit.T("Who hands in", "Только сдавшему"), x + (bw - 10f) / 2f + 10f, y, (bw - 10f) / 2f, 46f, () => { Harvest(); Plugin.CfgRewardOnlyHandIn.Value = true; builtSig = ""; }, 20f);
+            UiKit.SetSelected(b1, !only); UiKit.SetSelected(b2, only);
+
+            float rx = 700f, ry = 16f, rw = W - rx - 36f;
+            UiKit.Label(c, UiKit.T("Downed and hospital", "Ранение и больница"), rx, ry, rw, 32f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, UiKit.HeadColor); ry += 40f;
+            RuleToggle(c, rx, ref ry, rw, UiKit.T("A downed player can be revived", "Упавшего можно поднять"), Plugin.CfgDowned);
+            inRDown = RuleInput(c, rx, ref ry, rw, UiKit.T("Wait for help, s", "Ждать помощи, с"), Plugin.CfgDownedSeconds.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture));
+            inRHold = RuleInput(c, rx, ref ry, rw, UiKit.T("Hold the key to revive, s", "Держать клавишу для подъёма, с"), Plugin.CfgReviveHoldSeconds.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture));
+            inRHealth = RuleInput(c, rx, ref ry, rw, UiKit.T("Health after revive, %", "Здоровье после подъёма, %"), (Plugin.CfgReviveHealth.Value * 100f).ToString("0"));
+            inRHosp = RuleInput(c, rx, ref ry, rw, UiKit.T("Time in hospital, s", "Время в больнице, с"), Plugin.CfgHospitalSeconds.Value.ToString("0"));
+            ry += 6f;
+            UiKit.Label(c, UiKit.T("New player", "Новый игрок"), rx, ry, rw, 32f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, UiKit.HeadColor); ry += 40f;
+            inRMoney = RuleInput(c, rx, ref ry, rw, UiKit.T("Starting money", "Стартовые деньги"), Plugin.CfgNewPlayerMoney.Value.ToString());
+            inRPicks = RuleInput(c, rx, ref ry, rw, UiKit.T("Starting lockpicks", "Стартовые отмычки"), Plugin.CfgNewPlayerLockpicks.Value.ToString());
+            RuleToggle(c, rx, ref ry, rw, UiKit.T("Start with an empty inventory", "Начинать с пустым инвентарём"), Plugin.CfgNewPlayerClean);
+
+            UiKit.BarButton(win, UiKit.T("Back", "Назад"), 260f, () => { Harvest(); page = 1; msg = ""; });
+        }
+
         static void ConnectTo(Lan.Server sv)
         {
             if (sv == null) return;
@@ -1654,7 +1722,7 @@ namespace SodCoop
             inPass = UiKit.Input(c, x, y, 560f, 46f, fPass, 32, true); y += 62f;
             UiKit.Label(c, UiKit.T("Port", "Порт"), x, y, 560f, 32f); y += 34f;
             inPort = UiKit.Input(c, x, y, 200f, 46f, fPort, 5, false); y += 62f;
-            UiKit.Label(c, UiKit.T("Max players: ", "Игроков максимум: ") + Mathf.Clamp(Plugin.CfgMaxPlayers.Value, 2, 4) + UiKit.T(" (Network/MaxPlayers in the config)", " (Network/MaxPlayers в конфиге)"), x, y, 600f, 32f, 20f); y += 40f;
+            UiKit.Label(c, UiKit.T("Max players: ", "Игроков максимум: ") + Mathf.Clamp(Plugin.CfgMaxPlayers.Value, 2, 4) + UiKit.T(". Rules: ", ". Правила: ") + Rules.Summary(), x, y, 600f, 64f, 18f, TMPro.TextAlignmentOptions.TopLeft); y += 66f;
             UiKit.Label(c, UiKit.T("Load save starts the selected save at once. New game: set it up yourself. The server starts when the city has loaded.",
                 "«Загрузить сейв» сразу запускает выбранный сейв. «Новая игра» - настрой её сам. Сервер запустится, когда город загрузится."), x, y, 600f, 90f, 20f, TMPro.TextAlignmentOptions.TopLeft);
 
@@ -1674,6 +1742,7 @@ namespace SodCoop
                 UiKit.Button(c, UiKit.T("Up", "Выше"), lx, ly, 160f, 44f, () => hostTop -= per);
                 UiKit.Button(c, UiKit.T("Down", "Ниже"), lx + 172f, ly, 160f, 44f, () => hostTop += per);
             }
+            UiKit.BarButton(win, UiKit.T("Server rules...", "Правила сервера..."), 300f, () => { Harvest(); page = 4; msg = ""; });
             UiKit.BarButton(win, UiKit.T("Host: load save", "Загрузить сейв"), 300f, () => { Harvest(); StartHost(false); }, hostSaves.Count > 0);
             UiKit.BarButton(win, UiKit.T("Host: new game", "Новая игра"), 300f, () => { Harvest(); StartHost(true); });
             UiKit.BarButton(win, UiKit.T("Back", "Назад"), 240f, () => { Harvest(); page = 0; msg = ""; });

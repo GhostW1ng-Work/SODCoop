@@ -162,6 +162,7 @@ namespace SodCoop
         static void DrawCaseAnswers()
         {
             if (caseAnswers == null) return;
+            if (!CheatsActive) { caseAnswers = null; return; }
             if (Time.unscaledTime - caseAnswersAt > 2f) { caseAnswersAt = Time.unscaledTime; try { caseAnswers = BuildCaseAnswers(); } catch (Exception __e) { Err.Swallow(__e); } }
             if (caseStyle == null)
             {

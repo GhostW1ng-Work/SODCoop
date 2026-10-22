@@ -63,11 +63,25 @@ namespace SodCoop
         }
     }
 
+    [HarmonyPatch(typeof(Player), "OnCrawlIntoVent")]
+    public static class VentInPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix() { try { Net.SetInVent(true); } catch (Exception e) { Err.Swallow(e); } }
+    }
+
+    [HarmonyPatch(typeof(Player), "OnCrawlOutOfVent")]
+    public static class VentOutPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix() { try { Net.SetInVent(false); } catch (Exception e) { Err.Swallow(e); } }
+    }
+
     [HarmonyPatch(typeof(Player), "RecieveDamage")]
     public static class GodPatch
     {
         [HarmonyPrefix]
-        public static bool Prefix() { return !Plugin.CfgGod.Value; }
+        public static bool Prefix() { return !(Plugin.CfgGod.Value && Net.CheatsActive); }
     }
 
     [HarmonyPatch(typeof(NewDoor), "SetOpen")]
@@ -211,7 +225,7 @@ namespace SodCoop
         [HarmonyPrefix]
         public static bool Prefix(Actor __instance)
         {
-            if (!Plugin.CfgInvisible.Value) return true;
+            if (!(Plugin.CfgInvisible.Value && Net.CheatsActive)) return true;
             try { return __instance.isPlayer; } catch (Exception) { return true; }
         }
     }
@@ -222,7 +236,7 @@ namespace SodCoop
         [HarmonyPrefix]
         public static bool Prefix(Actor newTarget)
         {
-            if (!Plugin.CfgInvisible.Value) return true;
+            if (!(Plugin.CfgInvisible.Value && Net.CheatsActive)) return true;
             try { return newTarget == null || !newTarget.isPlayer; } catch (Exception) { return true; }
         }
     }
@@ -593,7 +607,11 @@ namespace SodCoop
     public static class RewardPatch
     {
         [HarmonyPrefix]
-        public static void Prefix(out int __state) { __state = Interactable.worldAssignID; }
+        public static bool Prefix(SideJob __instance, out int __state)
+        {
+            __state = Interactable.worldAssignID;
+            try { return !Net.SkipJobReward(__instance); } catch (Exception e) { Err.Swallow(e); return true; }
+        }
 
         [HarmonyPostfix]
         public static void Postfix(SideJob __instance, int __state)
@@ -659,12 +677,13 @@ namespace SodCoop
     public static class CaseResolvePatch
     {
         [HarmonyPrefix]
-        public static void Prefix(out double __state) { __state = Net.MoneyNow(); }
+        public static void Prefix(out double[] __state) { __state = new[] { Net.MoneyNow(), Net.SocialNow() }; }
 
         [HarmonyPostfix]
-        public static void Postfix(Case __instance, double __state)
+        public static void Postfix(Case __instance, double[] __state)
         {
-            try { Net.OnCaseResolved(__instance, __state); } catch (Exception e) { Plugin.L.LogWarning("[JOB] " + e.Message); }
+            try { Net.OnCaseResolved(__instance, __state[0]); } catch (Exception e) { Plugin.L.LogWarning("[JOB] " + e.Message); }
+            try { Net.ApplyRewardRule(__instance, __state[0], __state[1]); } catch (Exception e) { Plugin.L.LogWarning("[RULES] " + e.Message); }
         }
     }
 

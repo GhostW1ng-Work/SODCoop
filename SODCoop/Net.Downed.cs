@@ -90,7 +90,7 @@ namespace SodCoop
                 Plugin.L.LogInfo(rec ? $"[KO] игрок встаёт после больницы (KOTime={p.KOTime:F2})" : $"[KO] игрок без сознания, лечится без перемотки времени (KOTime={p.KOTime:F2})");
             }
             ClampKoTime("кадр");
-            float total = rec ? 5f : Plugin.CfgHospitalSeconds.Value;
+            float total = rec ? 5f : Rules.HospitalSeconds;
             float el = now - koStartAt;
             if (now >= koLogAt && sd != null)
             {
@@ -159,18 +159,18 @@ namespace SodCoop
         {
             if (allowKo) return false;
             if (downed) return true;
-            if (!Plugin.CfgDowned.Value || !OthersHere()) return false;
+            if (!Rules.Downed || !OthersHere()) return false;
             var p = Player.Instance;
             if (p == null || p.playerKOInProgress) return false;
             downed = true; downDir = dir; revivers.Clear();
             float now = Time.realtimeSinceStartup;
-            downUntil = now + Mathf.Max(1f, Plugin.CfgDownedSeconds.Value); downSentAt = 0f; downFreezeAt = 0f;
+            downUntil = now + Mathf.Max(1f, Rules.DownedSeconds); downSentAt = 0f; downFreezeAt = 0f;
             try { float max = p.maximumHealth; if (p.currentHealth < max * 0.05f) p.SetHealth(max * 0.05f); } catch (Exception __e) { Err.Swallow(__e); }
             DownFreeze(p, true);
             SendBodyFx(2, Vector3.zero);
             SendDown(1);
-            Toast($"You are down! Wait for help ({Plugin.CfgDownedSeconds.Value:F0} s).");
-            Plugin.L.LogInfo($"[DOWN] я лежу, жду помощи {Plugin.CfgDownedSeconds.Value:F0} с");
+            Toast($"You are down! Wait for help ({Rules.DownedSeconds:F0} s).");
+            Plugin.L.LogInfo($"[DOWN] я лежу, жду помощи {Rules.DownedSeconds:F0} с");
             return true;
         }
 
@@ -218,7 +218,7 @@ namespace SodCoop
         {
             downed = false; revivers.Clear();
             DownFreeze(p, false);
-            try { float max = p.maximumHealth; p.SetHealth(Mathf.Clamp01(Plugin.CfgReviveHealth.Value) * max); } catch (Exception __e) { Err.Swallow(__e); }
+            try { float max = p.maximumHealth; p.SetHealth(Mathf.Clamp01(Rules.ReviveHealth) * max); } catch (Exception __e) { Err.Swallow(__e); }
             SendBodyFx(3, Vector3.zero);
             SendDown(0);
             Toast($"Player {byPid} revived you.");
@@ -268,7 +268,7 @@ namespace SodCoop
             if (reviveTarget != best.pid) { if (reviveTarget >= 0) SendRevive(reviveTarget, 0); reviveTarget = best.pid; reviveProgress = 0f; reviveSentAt = 0f; }
             reviveProgress += dt;
             if (now >= reviveSentAt) { reviveSentAt = now + 0.3f; SendRevive(best.pid, 1); }
-            if (reviveProgress >= Mathf.Max(0.2f, Plugin.CfgReviveHoldSeconds.Value))
+            if (reviveProgress >= Mathf.Max(0.2f, Rules.ReviveHoldSeconds))
             {
                 SendRevive(best.pid, 2);
                 best.downed = false;
@@ -322,7 +322,7 @@ namespace SodCoop
             }
             else if (nearDowned != null)
             {
-                float hold = Mathf.Max(0.2f, Plugin.CfgReviveHoldSeconds.Value);
+                float hold = Mathf.Max(0.2f, Rules.ReviveHoldSeconds);
                 text = reviveTarget == nearDowned.pid ? $"Reviving player {nearDowned.pid}... {Mathf.Min(1f, reviveProgress / hold) * 100f:F0}%"
                                                       : $"Hold {ReviveKey()} to revive player {nearDowned.pid} ({Mathf.Max(0f, nearDowned.downUntil - now):F0} s left)";
             }

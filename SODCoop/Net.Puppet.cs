@@ -348,7 +348,7 @@ namespace SodCoop
 
         static void PuppetClientFollow()
         {
-            if (!Plugin.CfgPvp.Value || puppetId < 0 || avatar == null || npcById == null) return;
+            if (!Rules.Pvp || puppetId < 0 || avatar == null || npcById == null) return;
             Citizen c; if (!npcById.TryGetValue(puppetId, out c) || c == null) return;
             try
             {
@@ -369,7 +369,7 @@ namespace SodCoop
             {
                 var rs = c.gameObject.GetComponentsInChildren<Renderer>(true);
                 for (int i = 0; i < rs.Length; i++) { try { if (rs[i] != null && rs[i].enabled) { rs[i].enabled = false; NoteHidden(c.humanID, rs[i]); } } catch (Exception __e) { Err.Swallow(__e); } }
-                if (!Plugin.CfgPvp.Value)
+                if (!Rules.Pvp)
                 {
                     var cs = c.gameObject.GetComponentsInChildren<Collider>(true);
                     for (int i = 0; i < cs.Length; i++) { try { if (cs[i] != null && cs[i].enabled) { cs[i].enabled = false; NoteHidden(c.humanID, cs[i]); } } catch (Exception __e) { Err.Swallow(__e); } }
@@ -385,7 +385,7 @@ namespace SodCoop
             try
             {
                 if (manager == null || manager.ConnectedPeersCount == 0) return true;
-                if (IsHost && !Plugin.CfgPvp.Value && fromWho != null && fromWho.isPlayer) return true;
+                if (IsHost && !Rules.Pvp && fromWho != null && fromWho.isPlayer) return true;
                 int aid = -1;
                 try { var h = fromWho as Human; if (h != null && !h.isPlayer) aid = h.humanID; } catch (Exception __e) { Err.Swallow(__e); }
                 var w = new NetDataWriter();
