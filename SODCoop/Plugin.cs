@@ -23,7 +23,7 @@ namespace SodCoop
     [BepInPlugin("com.flyingfrogs.sodcoop", "SodCoop", Plugin.ModVersion)]
     public class Plugin : BasePlugin
     {
-        internal const string ModVersion = "0.12.0";
+        internal const string ModVersion = "0.13.0";
         internal static ManualLogSource L;
         internal static void Dbg(string m) { try { if (CfgDebugLog != null && CfgDebugLog.Value) L.LogInfo(m); } catch (System.Exception) { } }
         internal static ConfigEntry<NetMode> CfgMode;
@@ -90,6 +90,8 @@ namespace SodCoop
         internal static ConfigEntry<bool> CfgDoorSync;
         internal static ConfigEntry<bool> CfgCheatKeys;
         internal static ConfigEntry<bool> CfgClientCheats, CfgRewardOnlyHandIn;
+        internal static ConfigEntry<bool> CfgUpdateCheck;
+        internal static ConfigEntry<string> CfgUpdateRepo;
         internal static ConfigEntry<string> CfgCheatMenuKey;
         internal static ConfigEntry<int> CfgAddMoney;
         internal static ConfigEntry<int> CfgMoneyAmount;
@@ -283,6 +285,8 @@ namespace SodCoop
                 "Host sends game time, time speed and weather to the client every few seconds");
             CfgObjSync = Config.Bind("Objects", "Sync", true,
                 "Sync world objects the player carries (garbage bags, boxes...) and drops/throws: the other player sees them move");
+            CfgUpdateCheck = Config.Bind("Update", "Check", true, "Check GitHub for a newer mod version at game start and offer to install it");
+            CfgUpdateRepo = Config.Bind("Update", "Repo", "GhostW1ng-Work/SODCoop", "GitHub repository (owner/name) whose latest release is checked");
             CfgClientCheats = Config.Bind("Rules", "ClientCheats", true, "Host: other players may use the cheat menu on this server");
             CfgRewardOnlyHandIn = Config.Bind("Rules", "RewardOnlyHandIn", false, "Host: only the player who handed in a case gets its money, social credit and reward item (false = everyone gets the reward)");
             CfgCheatKeys = Config.Bind("Cheats", "Hotkeys", false,

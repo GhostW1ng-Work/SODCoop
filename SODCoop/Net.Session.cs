@@ -90,10 +90,12 @@ namespace SodCoop
             ClientReleaseWorld();
             RtMode = NetMode.Off;
             Toast(text.Replace("\n", " "));
-            UiKit.ShowMessage(UiKit.T("Can't connect", "Подключиться нельзя"), text);
+            if (cmp > 0 && Updater.Newer) UiKit.ShowMessage(UiKit.T("Can't connect", "Подключиться нельзя"), text, (UiKit.T("Update", "Обновить"), () => Updater.Offer(UiKit.T("Mod update", "Обновление мода"))), ("OK", null));
+            else if (cmp > 0) UiKit.ShowMessage(UiKit.T("Can't connect", "Подключиться нельзя"), text, (UiKit.T("Open page", "Открыть страницу"), Updater.OpenPage), ("OK", null));
+            else UiKit.ShowMessage(UiKit.T("Can't connect", "Подключиться нельзя"), text);
         }
 
-        static int CompareVersions(string a, string b)
+        internal static int CompareVersions(string a, string b)
         {
             Version va, vb;
             if (Version.TryParse(a, out va) && Version.TryParse(b, out vb)) return va.CompareTo(vb);
