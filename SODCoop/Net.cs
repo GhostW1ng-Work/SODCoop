@@ -42,7 +42,8 @@ namespace SodCoop
             public Transform boneUR;
             public Transform boneLL;
             public Transform boneLR;
-            public Transform boneTorso;
+            public Transform boneTorso, boneArmL, boneArmR;
+            public bool remoteVent;
             public float crouchFootBase = float.NaN;
             public float remoteLean;
             public float leanSmooth;
@@ -145,7 +146,7 @@ namespace SodCoop
             boneUR = r.boneUR;
             boneLL = r.boneLL;
             boneLR = r.boneLR;
-            boneTorso = r.boneTorso;
+            boneTorso = r.boneTorso; boneArmL = r.boneArmL; boneArmR = r.boneArmR; remoteVent = r.remoteVent;
             crouchFootBase = r.crouchFootBase;
             remoteLean = r.remoteLean;
             leanSmooth = r.leanSmooth;
@@ -231,7 +232,7 @@ namespace SodCoop
             r.boneUR = boneUR;
             r.boneLL = boneLL;
             r.boneLR = boneLR;
-            r.boneTorso = boneTorso;
+            r.boneTorso = boneTorso; r.boneArmL = boneArmL; r.boneArmR = boneArmR; r.remoteVent = remoteVent;
             r.crouchFootBase = crouchFootBase;
             r.remoteLean = remoteLean;
             r.leanSmooth = leanSmooth;
@@ -649,7 +650,13 @@ namespace SodCoop
         static Vector3 modelBaseScale = Vector3.one;
         static Vector3 modelBasePos;
         static Quaternion modelBaseRot = Quaternion.identity;
-        static Transform boneUL, boneUR, boneLL, boneLR, boneTorso;
+        static Transform boneUL, boneUR, boneLL, boneLR, boneTorso, boneArmL, boneArmR;
+        static bool remoteVent;
+
+        static bool InVent(Player p)
+        {
+            try { return p != null && p.currentDuctSection != null; } catch (Exception) { return false; }
+        }
         static float crouchFootBase = float.NaN;
         static float remoteLean, leanSmooth;
         static bool remoteBlocking;

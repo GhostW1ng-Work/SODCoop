@@ -134,6 +134,7 @@ namespace SodCoop
                 boneLL = FindDeep(clone.transform, "LowerLegLeft");
                 boneLR = FindDeep(clone.transform, "LowerLegRight");
                 boneTorso = FindDeep(clone.transform, "Midriff");
+                boneArmL = FindDeep(clone.transform, "UpperArmLeft"); boneArmR = FindDeep(clone.transform, "UpperArmRight");
                 remoteLod = lod ?? new List<Renderer>();
                 var anim = clone.GetComponent<Animator>();
                 if (anim == null) anim = clone.GetComponentInChildren<Animator>(true);
@@ -217,6 +218,7 @@ namespace SodCoop
                 boneLL = FindDeep(clone.transform, "LowerLegLeft");
                 boneLR = FindDeep(clone.transform, "LowerLegRight");
                 boneTorso = FindDeep(clone.transform, "Midriff");
+                boneArmL = FindDeep(clone.transform, "UpperArmLeft"); boneArmR = FindDeep(clone.transform, "UpperArmRight");
                 Plugin.L.LogInfo($"[NET] Кости: UL={boneUL != null} UR={boneUR != null} LL={boneLL != null} LR={boneLR != null} torso={boneTorso != null}");
                 clone.SetActive(true);
                 UnityEngine.Object.Destroy(holder);

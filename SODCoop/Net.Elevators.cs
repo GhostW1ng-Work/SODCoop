@@ -565,6 +565,8 @@ namespace SodCoop
                 remoteBlocking = false;
                 remoteConsuming = (fl & 16) != 0;
                 remoteSitting = (fl & 32) != 0;
+                remoteVent = (fl & 8) != 0;
+                if (remoteVent) { remoteCrouched = true; remoteSitting = false; }
                 remoteCarryObj = (fl & 64) != 0;
                 remoteLean = reader.GetFloat();
                 remoteSeatId = reader.AvailableBytes >= 4 ? reader.GetInt() : -1;

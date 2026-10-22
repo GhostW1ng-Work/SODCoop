@@ -563,6 +563,7 @@ namespace SodCoop
                         if (fistsNow) fl |= 4;
                         try { var fpc = FirstPersonItemController.Instance; if (fpc != null && fpc.isConsuming && !fpc.forceHolstered && !string.IsNullOrEmpty(curItem) && curItem != "nothing") fl |= 16; } catch (Exception __e) { Err.Swallow(__e); }
                         if (SittingNow(p)) fl |= 32;
+                        if (InVent(p)) fl |= 8;
                         try { if (InteractionController.Instance != null && InteractionController.Instance.carryingObject != null) fl |= 64; } catch (Exception __e) { Err.Swallow(__e); }
 
                         w.Put(fl);

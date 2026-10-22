@@ -68,11 +68,14 @@ namespace SodCoop
                 return;
             }
             Vector3 right = avatar.transform.right;
-            float hip = Plugin.CfgCrouchBendHip.Value * k, knee = Plugin.CfgCrouchBendKnee.Value * k;
+            float hip = (remoteVent ? Plugin.CfgCrawlHip.Value : Plugin.CfgCrouchBendHip.Value) * k;
+            float knee = (remoteVent ? Plugin.CfgCrawlKnee.Value : Plugin.CfgCrouchBendKnee.Value) * k;
+            float lean = (remoteVent ? Plugin.CfgCrawlLean.Value : Plugin.CfgCrouchLean.Value) * k;
             BendAround(boneUL, -hip, right); BendAround(boneUR, -hip, right);
             BendAround(boneLL, knee, right); BendAround(boneLR, knee, right);
             BendAround(fl, hip - knee, right); BendAround(fr, hip - knee, right);
-            BendAround(boneTorso, Plugin.CfgCrouchLean.Value * k, right);
+            BendAround(boneTorso, lean, right);
+            if (remoteVent) { float arms = -Plugin.CfgCrawlArms.Value * k; BendAround(boneArmL, arms, right); BendAround(boneArmR, arms, right); }
             if (fl != null && fr != null && !float.IsNaN(crouchFootBase))
             {
                 float drop = Mathf.Min(fl.position.y, fr.position.y) - rootY - crouchFootBase;
@@ -252,7 +255,7 @@ namespace SodCoop
             {
                 want = PickConsumeState(remoteItem);
             }
-            else if (remoteCrouched)
+            else if (remoteCrouched && !remoteVent)
             {
                 string c = CrouchState(false);
                 string cw = CrouchState(true);

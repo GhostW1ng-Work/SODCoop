@@ -56,6 +56,7 @@ namespace SodCoop
         internal static ConfigEntry<int> CfgArmsState;
         internal static ConfigEntry<int> CfgIdleState;
         internal static ConfigEntry<float> CfgCrouchDrop;
+        internal static ConfigEntry<float> CfgCrawlHip, CfgCrawlKnee, CfgCrawlLean, CfgCrawlArms;
         internal static ConfigEntry<float> CfgCrouchHip;
         internal static ConfigEntry<float> CfgCrouchBendHip, CfgCrouchBendKnee, CfgCrouchLean;
         internal static ConfigEntry<float> CfgCrouchKnee;
@@ -212,6 +213,10 @@ namespace SodCoop
                 "Crouch: how far (degrees) the knees bend (the shins swing back). The feet stay flat and on the floor automatically");
             CfgCrouchLean = Config.Bind("Avatar", "CrouchLean", 25f,
                 "Crouch: forward lean of the body in degrees");
+            CfgCrawlHip = Config.Bind("Avatar", "CrawlHip", 10f, "Air vent crawl: hip bend in degrees (0 = thighs straight down)");
+            CfgCrawlKnee = Config.Bind("Avatar", "CrawlKnee", 95f, "Air vent crawl: knee bend in degrees (lower legs lie on the floor behind)");
+            CfgCrawlLean = Config.Bind("Avatar", "CrawlLean", 80f, "Air vent crawl: forward lean of the body in degrees");
+            CfgCrawlArms = Config.Bind("Avatar", "CrawlArms", 80f, "Air vent crawl: how much the arms turn down towards the floor in degrees");
             CfgCrouchKnee = Config.Bind("Avatar", "CrouchKneeAngle", -100f,
                 "Lower-leg (knee) bend in degrees while crouched. Usually the opposite sign of the hip angle");
             CfgCrouchTorso = Config.Bind("Avatar", "CrouchTorsoAngle", 15f,
