@@ -440,9 +440,9 @@ namespace SodCoop
         }
 
         [HarmonyPostfix]
-        public static void Postfix(int __0, int __1, Human __2, Human __3, TelephoneController.CallSource __4, TelephoneController.PhoneCall __result)
+        public static void Postfix(int __0, int __1, Human __2, Human __3, TelephoneController.CallSource __4, float __5, bool __6, TelephoneController.PhoneCall __result)
         {
-            try { Net.LogPhoneCall(__0, __1, __2, __3, __4, __result); } catch (Exception __e) { Err.Swallow(__e); }
+            try { Net.LogPhoneCall(__0, __1, __2, __3, __4, __result, __5, __6); } catch (Exception __e) { Err.Swallow(__e); }
         }
     }
 
@@ -455,9 +455,9 @@ namespace SodCoop
         }
 
         [HarmonyPostfix]
-        public static void Postfix(Telephone __0, Telephone __1, Human __2, Human __3, TelephoneController.CallSource __4, TelephoneController.PhoneCall __result)
+        public static void Postfix(Telephone __0, Telephone __1, Human __2, Human __3, TelephoneController.CallSource __4, float __5, bool __6, TelephoneController.PhoneCall __result)
         {
-            try { Net.LogPhoneCall(__0 != null ? __0.number : -1, __1 != null ? __1.number : -1, __2, __3, __4, __result); } catch (Exception __e) { Err.Swallow(__e); }
+            try { Net.LogPhoneCall(__0 != null ? __0.number : -1, __1 != null ? __1.number : -1, __2, __3, __4, __result, __5, __6); } catch (Exception __e) { Err.Swallow(__e); }
         }
     }
 
@@ -723,6 +723,74 @@ namespace SodCoop
         public static void Postfix(SceneRecorder.SceneCapture __result)
         {
             try { Net.OnCctvCapture(__result != null); } catch (Exception __e) { Err.Swallow(__e); }
+        }
+    }
+
+    [HarmonyPatch]
+    public static class JobLoopPatch
+    {
+        public static System.Collections.Generic.IEnumerable<System.Reflection.MethodBase> TargetMethods()
+        {
+            var bf = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.DeclaredOnly;
+            foreach (var t in new[] { typeof(SideJob), typeof(SideJobMissingPerson), typeof(SideJobSabotage), typeof(SideJobStealBriefcase) })
+            {
+                var m = t.GetMethod("GameWorldLoop", bf);
+                if (m != null) yield return m;
+            }
+            var o = typeof(SideJob).GetMethod("ObjectiveStateLoop", bf);
+            if (o != null) yield return o;
+        }
+
+        [HarmonyPrefix]
+        public static bool Prefix(SideJob __instance, out bool __state)
+        {
+            __state = false;
+            if (Net.MirrorJob(__instance)) return false;
+            __state = true; Net.JobLoopDepth++;
+            return true;
+        }
+
+        [HarmonyPostfix]
+        public static void Postfix(bool __state)
+        {
+            if (__state && Net.JobLoopDepth > 0) Net.JobLoopDepth--;
+        }
+    }
+
+    [HarmonyPatch]
+    public static class JobPinPatch
+    {
+        public static System.Collections.Generic.IEnumerable<System.Reflection.MethodBase> TargetMethods()
+        {
+            foreach (var m in typeof(CasePanelController).GetMethods())
+                if (m.Name == "PinToCasePanel" && m.GetParameters().Length == 6) yield return m;
+        }
+
+        [HarmonyPostfix]
+        public static void Postfix(object[] __args)
+        {
+            try
+            {
+                var c = __args[0] as Case; var ev = __args[1] as Evidence;
+                var keys = __args[2] as Il2CppSystem.Collections.Generic.List<Evidence.DataKey>;
+                if (keys == null && __args[2] is Evidence.DataKey)
+                {
+                    keys = new Il2CppSystem.Collections.Generic.List<Evidence.DataKey>();
+                    keys.Add((Evidence.DataKey)__args[2]);
+                }
+                Net.OnJobPin(c, ev, keys);
+            }
+            catch (Exception e) { Err.Swallow(e); }
+        }
+    }
+
+    [HarmonyPatch(typeof(GameplayController), "AddGuestPass", new[] { typeof(NewAddress), typeof(float) })]
+    public static class JobGuestPassPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(NewAddress loc, float forHours)
+        {
+            try { Net.OnJobGuestPass(loc, forHours); } catch (Exception e) { Err.Swallow(e); }
         }
     }
 

@@ -155,7 +155,7 @@ namespace SodCoop
             var c = j != null ? j.thisCase : null;
             if (c == null) { Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{entry}' от игрока {pid} - у меня задание не взято"); return; }
             bool haveOpen = false; try { haveOpen = HasObjective(c, entry, false); } catch (Exception __e) { Err.Swallow(__e); }
-            if (!haveOpen)
+            if (!haveOpen && !MirrorJobs)
             {
                 pendingObjectives.RemoveAll(x => x.job == jobId && x.entry == entry);
                 pendingObjectives.Add((jobId, entry, Time.realtimeSinceStartup + 4f, () => ApplyRemoteObjective(j, c, pid, entry, t, usePointer, pp, icon, act, delay, removePrev, chapter, silent, crouch, bottom, parsing)));
@@ -437,7 +437,12 @@ namespace SodCoop
                 try { Interactable p; if (nj.postID > 0 && CityData.Instance.savableInteractableDictionary.TryGetValue(nj.postID, out p)) cur.post = p; } catch (Exception __e) { Err.Swallow(__e); }
             }
             if (nj.knowHandInLocation && !cur.knowHandInLocation) QueueJobInfo(cur.jobID, nj.jobInfoDialogMsg, 0);
-            if (!IsHost && nj.knowHandInLocation) CatchUpPhase(cur, nj.phase, "хоста");
+            if (MirrorJobs && cur.accepted && cur.state != SideJob.JobState.ended)
+            {
+                if (cur.phase != nj.phase) Plugin.L.LogInfo($"[JOB] задание {cur.jobID}: этап {cur.phase} -> {nj.phase}, как у хоста");
+                cur.phase = nj.phase; cur.phaseChange = nj.phase;
+            }
+            else if (!IsHost && nj.knowHandInLocation) CatchUpPhase(cur, nj.phase, "хоста");
             try { SyncJobDialogs(cur, nj); } catch (Exception e) { Plugin.L.LogWarning($"[JOB] фразы задания {cur.jobID}: {e.Message}"); }
             if (nj.state != cur.state)
             {
@@ -494,7 +499,7 @@ namespace SodCoop
 
         static void JobPhaseReportTick()
         {
-            if (IsHost || Time.realtimeSinceStartup < phaseTickAt) return;
+            if (IsHost || MirrorJobs || Time.realtimeSinceStartup < phaseTickAt) return;
             phaseTickAt = Time.realtimeSinceStartup + 1f;
             var ctl = SideJobController.Instance;
             if (ctl == null || ctl.allJobsDictionary == null) return;
@@ -785,6 +790,14 @@ namespace SodCoop
                 d.humanID = r.GetInt(); d.dialogRef = r.GetString(); d.roomID = r.GetInt(); d.key = (Evidence.DataKey)r.GetInt();
                 if (j != null) AddJobDialogHere(j, d, "от игрока " + (rp != null ? rp.pid : 0));
             }
+            else if (op == 24 && !IsHost)
+            {
+                OnJobCallMsg(r);
+            }
+            else if (op == 26 && !IsHost)
+            {
+                OnJobGuestPassMsg(r);
+            }
             else if (op == 21)
             {
                 int adId = r.GetInt(), job = r.GetInt();
@@ -959,12 +972,21 @@ namespace SodCoop
             if (el == null || string.IsNullOrEmpty(el.id)) { Toast("Select an item on your case board to share it."); return; }
             int jobRef = 0;
             try { var ac = cp.activeCase; if (ac != null) jobRef = ac.jobReference; } catch (Exception __e) { Err.Swallow(__e); }
-            var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)5); w.Put(el.id); w.Put(jobRef);
-            int nk = el.dk != null ? el.dk.Count : 0;
-            w.Put(nk);
-            for (int i = 0; i < nk; i++) w.Put((int)el.dk[i]);
+            var ks = new System.Collections.Generic.List<int>();
+            if (el.dk != null) for (int i = 0; i < el.dk.Count; i++) ks.Add((int)el.dk[i]);
             Evidence sev = null;
             try { Toolbox.Instance.TryGetEvidence(el.id, out sev); } catch (Exception __e) { Err.Swallow(__e); }
+            SendEvidence(sev, el.id, ks, jobRef, false);
+            string nm = el.n ?? el.id;
+            Toast("Shared with the other players: " + nm);
+            Plugin.L.LogInfo($"[JOB] улика '{el.id}' отправлена другим игрокам (дело задания {jobRef})");
+        }
+
+        static void SendEvidence(Evidence sev, string evId, System.Collections.Generic.List<int> keys, int jobRef, bool auto)
+        {
+            var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)5); w.Put(evId); w.Put(jobRef);
+            w.Put(keys.Count);
+            foreach (var k in keys) w.Put(k);
             w.Put(EvidenceSig(sev));
             byte[] ib = null;
             try
@@ -978,10 +1000,8 @@ namespace SodCoop
             }
             catch (Exception e) { Plugin.L.LogWarning("[JOB] предмет улики: " + e.Message); }
             w.Put(ib != null); if (ib != null) w.PutBytesWithLength(ib);
+            w.Put(auto);
             manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
-            string nm = el.n ?? el.id;
-            Toast("Shared with the other players: " + nm);
-            Plugin.L.LogInfo($"[JOB] улика '{el.id}' отправлена другим игрокам (дело задания {jobRef})");
         }
 
         static string EvidenceSig(Evidence ev)
@@ -1042,6 +1062,7 @@ namespace SodCoop
             for (int i = 0; i < nk; i++) keys.Add((Evidence.DataKey)r.GetInt());
             string sig = r.AvailableBytes > 0 ? r.GetString() : "";
             byte[] itemBytes = r.AvailableBytes > 0 && r.GetBool() ? r.GetBytesWithLength() : null;
+            bool auto = r.AvailableBytes > 0 && r.GetBool();
             int pid = rp != null ? rp.pid : 0;
             Evidence ev = null;
             bool found = false;
@@ -1072,8 +1093,9 @@ namespace SodCoop
             try
             {
                 if (keys.Count == 0) keys.Add(Evidence.DataKey.name);
+                if (auto && target.caseElements != null) foreach (var ce in target.caseElements) if (ce != null && ce.id == evId) return;
                 cp.PinToCasePanel(target, ev, keys, true, Vector2.zero, false);
-                Toast($"Player {pid} shared evidence: it is pinned to your case '{target.name}'.");
+                if (!auto) Toast($"Player {pid} shared evidence: it is pinned to your case '{target.name}'.");
                 Plugin.L.LogInfo($"[JOB] улика '{evId}' от игрока {pid} закреплена в деле '{target.name}'");
             }
             catch (Exception e) { Plugin.L.LogWarning("[JOB] закрепить улику: " + e.Message); }
@@ -1081,6 +1103,7 @@ namespace SodCoop
 
         static void JobTick()
         {
+            JobLoopDepth = 0;
             try { WorldMsgQueueTick(); } catch (Exception e) { Plugin.L.LogWarning("[JOB] очередь: " + e.Message); }
             try { LeverTick(); } catch (Exception e) { Plugin.L.LogWarning("[SWITCH] рычаги: " + e.Message); }
             long tj = Perf.T();

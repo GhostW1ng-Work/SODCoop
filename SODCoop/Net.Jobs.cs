@@ -37,6 +37,7 @@ namespace SodCoop
 
         internal static void ClientJobWorldLoop()
         {
+            if (MirrorJobs) return;
             var ctl = SideJobController.Instance;
             if (ctl == null || ctl.allJobsDictionary == null) return;
             var list = new System.Collections.Generic.List<SideJob>();
@@ -230,9 +231,13 @@ namespace SodCoop
             return n;
         }
 
-        internal static void LogPhoneCall(int from, int to, Human caller, Human receiver, TelephoneController.CallSource src, TelephoneController.PhoneCall call)
+        internal static void LogPhoneCall(int from, int to, Human caller, Human receiver, TelephoneController.CallSource src, TelephoneController.PhoneCall call, float ring = 0.1f, bool specific = false)
         {
             if (manager == null) return;
+            if (HostJobLoopSync && !applyingJobCall && receiver != null && receiver.isPlayer && src != null && src.job > 0 && call != null)
+            {
+                try { SendJobCall(from, to, caller, src, ring, specific); } catch (Exception e) { Plugin.L.LogWarning("[PHONE] звонок задания клиентам: " + e.Message); }
+            }
             bool fromMe = caller != null && caller.isPlayer;
             if (!fromMe && (receiver == null || !receiver.isPlayer)) return;
             bool fake = false; TelephoneController.CallSource fs = null;
