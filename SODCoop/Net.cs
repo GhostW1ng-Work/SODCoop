@@ -25,6 +25,7 @@ namespace SodCoop
         sealed class RP
         {
             public int pid; public NetPeer peer; public string clientId = ""; public string profileId = ""; public string label = "";
+            public string nick = "";
             public bool downed; public float downUntil, reviveAt;
             public float combatUntil;
             public bool attackAlt;

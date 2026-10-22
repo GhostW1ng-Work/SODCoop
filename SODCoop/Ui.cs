@@ -35,6 +35,13 @@ namespace SodCoop
         public int TopCol = 3;
         public int BottomCol = 5;
         public int ShoesCol = 0;
+        public string FirstName = "";
+        public string SurName = "";
+
+        internal string FullName()
+        {
+            return ((FirstName ?? "").Trim() + " " + (SurName ?? "").Trim()).Trim();
+        }
     }
 
     internal static class CharEditor
@@ -88,8 +95,26 @@ namespace SodCoop
             return null;
         }
 
+        static TMPro.TMP_InputField inFirst, inSur;
+
+        static void HarvestName()
+        {
+            if (inFirst != null) cur.FirstName = (inFirst.text ?? "").Trim();
+            if (inSur != null) cur.SurName = (inSur.text ?? "").Trim();
+        }
+
+        static Appearance mine;
+        static bool mineLoaded;
+
+        internal static Appearance Mine
+        {
+            get { if (!mineLoaded) { mineLoaded = true; mine = Load(); } return mine; }
+        }
+
         static void Save()
         {
+            HarvestName();
+            mine = JsonSerializer.Deserialize<Appearance>(JsonSerializer.Serialize(cur, new JsonSerializerOptions { IncludeFields = true }), new JsonSerializerOptions { IncludeFields = true }); mineLoaded = true;
             try { File.WriteAllText(SavePath, JsonSerializer.Serialize(cur, new JsonSerializerOptions { WriteIndented = true, IncludeFields = true })); status = "Saved"; Plugin.L.LogInfo("[CHAR] сохранено: " + SavePath); }
             catch (Exception e) { status = "Save failed: " + e.Message; Plugin.L.LogWarning("[CHAR] " + e.Message); }
         }
@@ -650,6 +675,7 @@ namespace SodCoop
 
         static void Rebuild()
         {
+            HarvestName();
             var c = win.Content; UiKit.Clear(c); UiKit.Clear(win.Buttons);
             float W = c.rect.width, H = c.rect.height;
             if (W < 100f) { W = 1672f; H = 724f; }
@@ -682,6 +708,13 @@ namespace SodCoop
             float rx = px + pw + 30f, rw = W - rx - 20f;
             uiStatus = UiKit.Label(c, "", rx, 10f, rw, 60f, 22f, TMPro.TextAlignmentOptions.TopLeft, UiKit.HeadColor);
             UiKit.Label(c, UiKit.T("Left mouse: rotate\nMiddle mouse: up / down\nWheel: zoom", "ЛКМ - вращать\nСКМ - вверх / вниз\nКолесо - приблизить"), rx, 90f, rw, 110f, 20f, TMPro.TextAlignmentOptions.TopLeft);
+            float ny = 230f;
+            UiKit.Label(c, UiKit.T("Name in multiplayer", "Имя в мультиплеере"), rx, ny, rw, 36f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, UiKit.HeadColor); ny += 42f;
+            UiKit.Label(c, UiKit.T("First name", "Имя"), rx, ny, rw, 32f, 20f); ny += 34f;
+            inFirst = UiKit.Input(c, rx, ny, rw, 46f, cur.FirstName ?? "", 24, false); ny += 56f;
+            UiKit.Label(c, UiKit.T("Surname", "Фамилия"), rx, ny, rw, 32f, 20f); ny += 34f;
+            inSur = UiKit.Input(c, rx, ny, rw, 46f, cur.SurName ?? "", 24, false); ny += 56f;
+            UiKit.Label(c, UiKit.T("Empty = the name from the save. Press Save.", "Пусто - имя из сейва. Нажми «Сохранить»."), rx, ny, rw, 60f, 18f, TMPro.TextAlignmentOptions.TopLeft);
 
             UiKit.BarButton(win, UiKit.T("Back", "Назад"), 260f, () => CloseEditor());
             UiKit.BarButton(win, UiKit.T("Random", "Случайно"), 260f, () => { Randomize(); uiDirty = true; });

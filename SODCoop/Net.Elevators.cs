@@ -297,7 +297,7 @@ namespace SodCoop
                 me.profileId = profId;
                 if (profId != "") foreach (var o2 in players) if (o2 != me && o2.profileId == profId) { Plugin.L.LogWarning("[PROFILE] у двух игроков одинаковый постоянный номер (скопирована папка игры с SodCoop_playerid.txt?). Удалите этот файл у одной из копий"); break; }
                 Enter(me); SetRemoteAppearance(theirApp); Leave();
-                Toast(ok ? "Player " + me.pid + " joined the game." : "A player connected, but their world does not match yours.");
+                Toast(ok ? UiKit.T(PlayerLabel(me.pid) + " joined the game.", PlayerLabel(me.pid) + " зашёл в игру.") : "A player connected, but their world does not match yours.");
                 Plugin.L.LogInfo($"[NET] Handshake от клиента: ok={ok}, ему выдан номер {me.pid}");
                 Plugin.L.LogInfo($"[NET]   клиент: {theirs}");
                 Plugin.L.LogInfo($"[NET]   хост:   {mine}");

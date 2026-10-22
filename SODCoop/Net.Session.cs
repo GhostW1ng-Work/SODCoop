@@ -268,12 +268,36 @@ namespace SodCoop
             try { var a = CharEditor.Load(); return a == null ? "" : CharEditor.ToJson(a); } catch (Exception) { return ""; }
         }
 
+        static string PlayerLabel(int pid)
+        {
+            foreach (var r in players) if (r.pid == pid && !string.IsNullOrEmpty(r.nick)) return r.nick;
+            return UiKit.T("Player ", "Игрок ") + pid;
+        }
+
+        static float nameAt;
+
+        static void NameTick(Player p)
+        {
+            if (p == null || Time.realtimeSinceStartup < nameAt) return;
+            nameAt = Time.realtimeSinceStartup + 2f;
+            var a = CharEditor.Mine;
+            if (a == null) return;
+            string f = (a.FirstName ?? "").Trim(), s = (a.SurName ?? "").Trim();
+            if (f == "" && s == "") return;
+            string full = a.FullName();
+            if (p.firstName == f && p.surName == s && p.citizenName == full) return;
+            p.firstName = f; p.surName = s; p.casualName = f != "" ? f : s; p.citizenName = full;
+            try { var g = Game.Instance; if (g != null) { g.playerFirstName = f; g.playerSurname = s; } } catch (Exception e) { Err.Swallow(e); }
+            Plugin.L.LogInfo("[CHAR] моё имя в игре: " + full);
+        }
+
         static void SetRemoteAppearance(string json)
         {
             json = json ?? "";
             if (json == remoteAppJson) return;
             remoteAppJson = json;
             remoteApp = CharEditor.FromJson(json);
+            if (curRp != null) curRp.nick = remoteApp != null ? remoteApp.FullName() : "";
             Plugin.L.LogInfo("[CHAR] получен внешний вид второго игрока: " + (remoteApp == null ? "нет (останется модель жителя)" : "голова=" + remoteApp.Head + " волосы=" + remoteApp.Hair + " верх=" + remoteApp.Top + " низ=" + remoteApp.Bottom));
             if (avatar != null) DestroyAvatar();
         }
@@ -597,6 +621,7 @@ namespace SodCoop
                 try { NpcTick(dt); } catch (Exception e) { if (!npcErrLogged) { npcErrLogged = true; Plugin.L.LogWarning($"[NPC] {e.Message}"); } }
                 Perf.Add("жители", tp0); tp0 = Perf.T();
                 try { ProfileTick(dt); } catch (Exception e) { if (!profErrLogged) { profErrLogged = true; Plugin.L.LogWarning($"[PROFILE] {e.Message}"); } }
+                try { NameTick(p); } catch (Exception e) { Err.Swallow(e); }
                 Perf.Add("профили", tp0); tp0 = Perf.T();
                 try { KoTick(p, dt); } catch (Exception e) { if (!koErrLogged) { koErrLogged = true; Plugin.L.LogWarning($"[KO] {e.Message}"); } }
                 try { DownTick(p, dt); } catch (Exception e) { if (!downErrLogged) { downErrLogged = true; Plugin.L.LogWarning($"[DOWN] {e.Message}"); } }

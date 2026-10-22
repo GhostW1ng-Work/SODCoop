@@ -1079,7 +1079,7 @@ namespace SodCoop
                 ev = ImportSharedItem(itemBytes, evId);
                 found = ev != null;
             }
-            if (!found) { Toast($"Player {pid} shared evidence you do not have yet."); Plugin.L.LogWarning($"[JOB] улика '{evId}' от игрока {pid} у меня не найдена"); return; }
+            if (!found) { Toast(UiKit.T($"{PlayerLabel(pid)} shared evidence you do not have yet.", $"{PlayerLabel(pid)} поделился уликой, которой у тебя ещё нет.")); Plugin.L.LogWarning($"[JOB] улика '{evId}' от игрока {pid} у меня не найдена"); return; }
             var cp = CasePanelController.Instance;
             if (cp == null) return;
             Case target = null;
