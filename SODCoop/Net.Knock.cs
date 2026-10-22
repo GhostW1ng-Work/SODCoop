@@ -38,7 +38,7 @@ namespace SodCoop
         {
             int key = r.GetInt(), knocks = r.GetInt(); float urgency = r.GetFloat();
             var door = DoorByKey(key);
-            if (door == null) { Plugin.L.LogWarning($"[KNOCK] дверь {key} не найдена"); return; }
+            if (door == null) { Plugin.Dbg($"[KNOCK] дверь {key} ещё не подгружена, стук пропущен"); return; }
             Actor who = null;
             try
             {

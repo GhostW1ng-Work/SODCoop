@@ -781,6 +781,7 @@ namespace SodCoop
         internal static void Shutdown()
         {
             Rules.Clear();
+            doorPending.Clear();
             try { ProfileOnShutdown(); } catch (Exception __e) { Err.Swallow(__e); }
             try { DownedOnShutdown(); } catch (Exception __e) { Err.Swallow(__e); }
             lostAt = -1f; everConnected = false; weaponSent = null;

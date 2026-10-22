@@ -52,6 +52,56 @@ namespace SodCoop
             return doorKeys.TryGetValue(d.Pointer, out k) ? k : -1;
         }
 
+        sealed class PendingDoor { public bool hasOpen, hasLock, hasJam, locked, jammed; public float ajar, at; }
+        static readonly System.Collections.Generic.Dictionary<int, PendingDoor> doorPending = new System.Collections.Generic.Dictionary<int, PendingDoor>();
+        static float doorPendingAt, doorPendingLogAt;
+        static int doorPendingApplied, doorPendingDropped;
+
+        static PendingDoor Pend(int key)
+        {
+            PendingDoor p;
+            if (!doorPending.TryGetValue(key, out p)) { p = new PendingDoor(); doorPending[key] = p; }
+            p.at = Time.unscaledTime;
+            return p;
+        }
+
+        static void ApplyDoorJam(NewDoor d, bool val, bool fx)
+        {
+            applyingDoor = true;
+            try { d.SetJammed(val, null, fx); } finally { applyingDoor = false; }
+        }
+
+        static void DoorPendingTick()
+        {
+            float now = Time.unscaledTime;
+            if (doorPending.Count == 0 || now < doorPendingAt) return;
+            doorPendingAt = now + 2f;
+            var done = new System.Collections.Generic.List<int>();
+            foreach (var kv in doorPending)
+            {
+                var p = kv.Value;
+                if (now - p.at > 1800f) { done.Add(kv.Key); doorPendingDropped++; continue; }
+                var d = DoorByKey(kv.Key);
+                if (d == null) continue;
+                try
+                {
+                    if (p.hasOpen && Mathf.Abs(d.ajar - p.ajar) > 0.01f) ApplyDoorOpen(d, p.ajar, true);
+                    if (p.hasLock && d.isLocked != p.locked) ApplyDoorLock(d, p.locked);
+                    if (p.hasJam && d.isJammed != p.jammed) ApplyDoorJam(d, p.jammed, false);
+                    doorPendingApplied++;
+                }
+                catch (Exception e) { Err.Swallow(e); }
+                done.Add(kv.Key);
+            }
+            foreach (int k in done) doorPending.Remove(k);
+            if (now - doorPendingLogAt > 60f && (doorPendingApplied > 0 || doorPendingDropped > 0))
+            {
+                doorPendingLogAt = now;
+                Plugin.L.LogInfo($"[DOOR] отложенные двери: применено {doorPendingApplied} после подгрузки района, ждут {doorPending.Count}, устарело {doorPendingDropped}");
+                doorPendingApplied = 0; doorPendingDropped = 0;
+            }
+        }
+
         static NewDoor DoorByKey(int key)
         {
             try
@@ -578,7 +628,8 @@ namespace SodCoop
                 {
                     int key = r.GetInt(); float ajar = r.GetFloat(); bool skip = r.GetBool();
                     var d = DoorByKey(key);
-                    if (d == null) { Plugin.L.LogWarning($"[DOOR] дверь {key} не найдена"); return; }
+                    if (d == null) { var pd = Pend(key); pd.hasOpen = true; pd.ajar = ajar; return; }
+                    doorPending.Remove(key);
                     ApplyDoorOpen(d, ajar, skip);
                     if (Plugin.CfgDebugLog.Value) Plugin.L.LogInfo($"[DOOR] второй игрок открыл/закрыл дверь {key}: ajar={ajar:0.00}");
                 }
@@ -586,13 +637,9 @@ namespace SodCoop
                 {
                     int key = r.GetInt(); bool val = r.GetBool();
                     var d = DoorByKey(key);
-                    if (d == null) { Plugin.L.LogWarning($"[DOOR] дверь {key} не найдена"); return; }
+                    if (d == null) { var pd = Pend(key); if (kind == 2) { pd.hasLock = true; pd.locked = val; } else { pd.hasJam = true; pd.jammed = val; } return; }
                     if (kind == 2) ApplyDoorLock(d, val);
-                    else
-                    {
-                        applyingDoor = true;
-                        try { d.SetJammed(val, null, val); } finally { applyingDoor = false; }
-                    }
+                    else ApplyDoorJam(d, val, val);
                     if (Plugin.CfgDebugLog.Value) Plugin.L.LogInfo($"[DOOR] второй игрок: {(kind == 2 ? "замок" : "заклинивание")} двери {key} = {val}");
                 }
                 else if (kind == 4)
@@ -820,6 +867,7 @@ namespace SodCoop
 
         static void DoorTick()
         {
+            try { DoorPendingTick(); } catch (Exception e) { Err.Swallow(e); }
             MoveTick();
             RoomSnapTick();
             WindowTick();
@@ -834,7 +882,7 @@ namespace SodCoop
                 {
                     int key = doorSnap[i][0]; byte fl = (byte)doorSnap[i][1]; float ajar = doorSnapAjar[i];
                     var d = DoorByKey(key);
-                    if (d == null) continue;
+                    if (d == null) { var pd = Pend(key); pd.hasOpen = true; pd.ajar = ajar; pd.hasLock = true; pd.locked = (fl & 1) != 0; pd.hasJam = true; pd.jammed = (fl & 2) != 0; continue; }
                     if (Mathf.Abs(d.ajar - ajar) > 0.01f) ApplyDoorOpen(d, ajar, true);
                     bool lk = (fl & 1) != 0;
                     if (d.isLocked != lk) ApplyDoorLock(d, lk);
