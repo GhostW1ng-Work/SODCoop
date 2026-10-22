@@ -1304,13 +1304,35 @@ namespace SodCoop
         static (string, Action)[] msgButtons;
         static Win msgWin;
 
-        internal static void ShowMessage(string title, string text, params (string, Action)[] buttons) { msgTitle = title; msgText = text; msgButtons = buttons; }
+        static Func<string> msgLive, msgLivePending;
+        static bool msgPending;
+        static int msgRestores;
+        static float msgRestoreAt;
+        static TMPro.TextMeshProUGUI msgLabel;
+
+        internal static void ShowMessage(string title, string text, params (string, Action)[] buttons) { msgTitle = title; msgText = text; msgButtons = buttons; msgLivePending = null; }
+
+        internal static void ShowProgress(string title, Func<string> live, params (string, Action)[] buttons)
+        {
+            msgTitle = title; msgText = live() ?? ""; msgButtons = buttons; msgLivePending = live;
+        }
 
         static void MessageTick()
         {
             if (msgWin != null && msgWin.Alive && msgWin.Root.activeSelf)
             {
-                if (MainPanelShown) Show(msgWin, false);
+                if (MainPanelShown) { Show(msgWin, false); msgRestoreAt = Time.unscaledTime + 1f; Plugin.L.LogInfo("[UI] меню игры закрыло сообщение, покажу снова"); return; }
+                if (msgText == null)
+                {
+                    if (msgLive != null && msgLabel != null) { string t = msgLive() ?? ""; if (msgLabel.text != t) msgLabel.text = t; }
+                    return;
+                }
+            }
+            if (msgText == null && msgPending && msgRestores < 5 && msgWin != null && msgWin.Alive && MainPanelShown && Time.unscaledTime > msgRestoreAt
+                && !NetMenu.Open && !CharEditor.Open && !Net.CheatMenuOpen)
+            {
+                msgRestores++;
+                Show(msgWin, true);
                 return;
             }
             if (msgText == null || NetMenu.Open || CharEditor.Open || Net.CheatMenuOpen) return;
@@ -1318,14 +1340,16 @@ namespace SodCoop
             msgWin.Title.text = msgTitle ?? "";
             Clear(msgWin.Content); Clear(msgWin.Buttons);
             var c = msgWin.Content; float W = c.rect.width > 100f ? c.rect.width : 872f;
-            Label(c, msgText, 30f, 30f, W - 60f, 150f, 24f, TMPro.TextAlignmentOptions.Center, Color.white);
+            msgLabel = Label(c, msgText, 30f, 30f, W - 60f, 150f, 24f, TMPro.TextAlignmentOptions.Center, Color.white);
+            msgLive = msgLivePending; msgLivePending = null;
             var btns = msgButtons != null && msgButtons.Length > 0 ? msgButtons : new[] { ("OK", (Action)null) };
             foreach (var bt in btns)
             {
                 var act = bt.Item2;
-                BarButton(msgWin, bt.Item1, btns.Length > 2 ? 240f : 260f, () => { Show(msgWin, false); act?.Invoke(); });
+                BarButton(msgWin, bt.Item1, btns.Length > 2 ? 240f : 260f, () => { msgPending = false; Show(msgWin, false); act?.Invoke(); });
             }
             msgText = null; msgButtons = null;
+            msgPending = true; msgRestores = 0;
             Show(msgWin, true);
         }
 

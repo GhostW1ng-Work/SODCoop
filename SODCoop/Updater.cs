@@ -14,6 +14,17 @@ namespace SodCoop
         static volatile int state;
         static volatile string error = "";
         static bool offered, started;
+        static long got, total;
+        static volatile bool installing;
+
+        static string ProgressText()
+        {
+            if (installing) return UiKit.T($"Installing version {Latest}...", $"Устанавливаю версию {Latest}...");
+            string mb = (got / 1048576.0).ToString("0.0");
+            string head = UiKit.T($"Downloading version {Latest}...", $"Скачиваю версию {Latest}...");
+            if (total <= 0) return head + "\n" + mb + UiKit.T(" MB", " МБ");
+            return head + "\n" + mb + " / " + (total / 1048576.0).ToString("0.0") + UiKit.T(" MB", " МБ") + "  (" + (got * 100 / total) + "%)";
+        }
 
         static string PluginDir { get { return Path.GetDirectoryName(typeof(Updater).Assembly.Location); } }
 
@@ -95,14 +106,27 @@ namespace SodCoop
         static void Download()
         {
             string url = ZipUrl, dir = PluginDir;
-            Net.Toast(UiKit.T("Downloading the update...", "Скачиваю обновление..."));
+            got = 0; total = 0; installing = false;
+            UiKit.ShowProgress(UiKit.T("Mod update", "Обновление мода"), ProgressText, (UiKit.T("Hide", "Скрыть"), null));
             Plugin.L.LogInfo("[UPDATE] скачиваю " + url);
             Task.Run(async () =>
             {
                 try
                 {
                     using var c = Client();
-                    byte[] data = await c.GetByteArrayAsync(url);
+                    byte[] data;
+                    using (var resp = await c.GetAsync(url, HttpCompletionOption.ResponseHeadersRead))
+                    {
+                        resp.EnsureSuccessStatusCode();
+                        total = resp.Content.Headers.ContentLength ?? 0;
+                        using var src = await resp.Content.ReadAsStreamAsync();
+                        var ms = new MemoryStream();
+                        var buf = new byte[81920];
+                        int r;
+                        while ((r = await src.ReadAsync(buf, 0, buf.Length)) > 0) { ms.Write(buf, 0, r); got += r; }
+                        data = ms.ToArray();
+                    }
+                    installing = true;
                     int n = 0;
                     using (var zip = new ZipArchive(new MemoryStream(data), ZipArchiveMode.Read))
                         foreach (var e in zip.Entries)
