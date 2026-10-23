@@ -11,6 +11,7 @@ Play Shadows of Doubt together with friends: one city, one clock, the same citiz
 ## Features
 
 **Shared world**
+- Citizens are synced.
 - Doors, locks, windows, lights, breakers, elevators, furniture and items are synced.
 - Security systems: alarms, cameras, shutters and guards react to every player.
 - Time and weather are shared.
@@ -86,7 +87,7 @@ MIT, see [LICENSE.txt](LICENSE.txt).
 ## Возможности
 
 **Общий мир**
-- Синхронизированы
+- Синхронизированы жители.
 - Двери, замки, окна, свет, щитки, лифты, мебель и предметы синхронизированы.
 - Системы охраны: тревоги, камеры, защитные шторы и охранники реагируют на каждого игрока.
 - Время и погода общие;
