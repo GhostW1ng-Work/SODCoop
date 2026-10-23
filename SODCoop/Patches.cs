@@ -511,6 +511,16 @@ namespace SodCoop
         }
     }
 
+    [HarmonyPatch(typeof(Actor), "UpdateTrespassing")]
+    public static class PuppetTrespassPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(Actor __instance)
+        {
+            try { return !Net.PuppetIllegalOverride(__instance); } catch (Exception) { return true; }
+        }
+    }
+
     [HarmonyPatch(typeof(NewBuilding), "SetAlarm")]
     public static class BuildingAlarmPatch
     {
@@ -581,9 +591,7 @@ namespace SodCoop
     {
         public static System.Reflection.MethodBase TargetMethod()
         {
-            foreach (var m in typeof(Case).GetMethods())
-                if (m.Name == "AddObjective") { var ps = m.GetParameters(); if (ps.Length == 15 && ps[1].ParameterType == typeof(Objective.ObjectiveTrigger)) return m; }
-            return null;
+            return Net.AddObjectiveMethod();
         }
 
         [HarmonyPrefix]

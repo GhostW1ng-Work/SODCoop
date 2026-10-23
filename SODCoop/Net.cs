@@ -27,6 +27,7 @@ namespace SodCoop
             public int pid; public NetPeer peer; public string clientId = ""; public string profileId = ""; public string label = "";
             public string nick = "";
             public bool downed; public float downUntil, reviveAt;
+            public bool illTres, illAction; public int illEsc;
             public float combatUntil;
             public bool attackAlt;
             public string remoteItem = "";
@@ -337,6 +338,7 @@ namespace SodCoop
         const byte MsgPlayerLeft = 28;
         const byte MsgHostReload = 37;
         const byte MsgRules = 38;
+        const byte MsgIllegal = 39;
         const byte MsgJob = 34;
         const byte MsgCorpse = 36;
         const byte MsgMurder = 35;

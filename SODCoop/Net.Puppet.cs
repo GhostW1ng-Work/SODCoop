@@ -270,7 +270,7 @@ namespace SodCoop
                 puppetLocAt = now;
                 try { p.UpdateGameLocation(0f, false); } catch (Exception __e) { Err.Swallow(__e); }
             }
-            if (now - puppetHideAt > 0.2f) { puppetHideAt = now; HidePuppet(); }
+            if (now - puppetHideAt > 0.2f) { puppetHideAt = now; HidePuppet(); try { if (curRp != null) ApplyPuppetIllegal(p, curRp); } catch (Exception __e) { Err.Swallow(__e); } }
             if (now - puppetAiAt > 5f)
             {
                 puppetAiAt = now;

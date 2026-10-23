@@ -285,11 +285,61 @@ namespace SodCoop
                     }
                     if (removed > 0) Plugin.L.LogInfo($"[JOB] задание {jobId}: моя цель '{entry}' заменена хостовой");
                 }
-                c.AddObjective(entry, t, usePointer, pp, icon, act, delay, removePrev, chapter, silent, crouch, j, bottom, false, parsing);
+                CallAddObjective(c, entry, t, usePointer, pp, icon, act, delay, removePrev, chapter, silent, crouch, j, bottom, false, parsing);
                 Plugin.L.LogInfo($"[JOB] задание {jobId}: цель '{entry}' от игрока {pid} передана игре (дубль игра не поставит)");
             }
             catch (Exception e) { Plugin.L.LogWarning($"[JOB] цель '{entry}' задания {jobId}: {e.Message}"); }
             finally { applyingJob = false; }
+        }
+
+        static System.Reflection.MethodInfo addObjMethod;
+        static bool addObjLooked;
+
+        internal static System.Reflection.MethodInfo AddObjectiveMethod()
+        {
+            if (addObjLooked) return addObjMethod;
+            addObjLooked = true;
+            foreach (var m in typeof(Case).GetMethods())
+            {
+                if (m.Name != "AddObjective") continue;
+                var ps = m.GetParameters();
+                if (ps.Length < 2 || ps[1].ParameterType != typeof(Objective.ObjectiveTrigger)) continue;
+                if (addObjMethod == null || ps.Length > addObjMethod.GetParameters().Length) addObjMethod = m;
+            }
+            if (addObjMethod == null) Plugin.L.LogWarning("[JOB] Case.AddObjective не найден - цели заданий не будут синхронизироваться");
+            else
+            {
+                var names = new System.Collections.Generic.List<string>();
+                foreach (var p in addObjMethod.GetParameters()) names.Add(p.Name);
+                Plugin.L.LogInfo($"[JOB] Case.AddObjective: параметров {names.Count} ({string.Join(", ", names)})");
+            }
+            return addObjMethod;
+        }
+
+        static void CallAddObjective(Case c, string entry, Objective.ObjectiveTrigger t, bool usePointer, Vector3 pp, InterfaceControls.Icon icon,
+            Objective.OnCompleteAction act, float delay, bool removePrev, string chapter, bool silent, bool crouch, SideJob j, bool bottom, bool ignoreDup, bool parsing)
+        {
+            var m = AddObjectiveMethod();
+            if (m == null) throw new MissingMethodException("Case.AddObjective");
+            var known = new System.Collections.Generic.Dictionary<string, object>
+            {
+                ["entryRef"] = entry, ["trigger"] = t, ["usePointer"] = usePointer, ["pointerPosition"] = pp, ["useIcon"] = icon,
+                ["onCompleteAction"] = act, ["delay"] = delay, ["removePrevious"] = removePrev, ["chapterString"] = chapter, ["isSilent"] = silent,
+                ["allowCrouchPromt"] = crouch, ["jobRef"] = j, ["forceBottomOfList"] = bottom, ["ignoreDuplicates"] = ignoreDup, ["useParsing"] = parsing
+            };
+            var ordered = new object[] { entry, t, usePointer, pp, icon, act, delay, removePrev, chapter, silent, crouch, j, bottom, ignoreDup, parsing };
+            var ps = m.GetParameters();
+            var args = new object[ps.Length];
+            for (int i = 0; i < ps.Length; i++)
+            {
+                object v;
+                if (known.TryGetValue(ps[i].Name ?? "", out v)) { args[i] = v; continue; }
+                if (ps.Length == ordered.Length) { args[i] = ordered[i]; continue; }
+                var pt = ps[i].ParameterType;
+                if (ps[i].HasDefaultValue && ps[i].DefaultValue != null && !(ps[i].DefaultValue is DBNull)) args[i] = ps[i].DefaultValue;
+                else args[i] = pt.IsValueType ? Activator.CreateInstance(pt) : null;
+            }
+            m.Invoke(c, args);
         }
 
         internal static void OnObjectiveCompleted(Objective o)

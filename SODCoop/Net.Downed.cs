@@ -284,6 +284,7 @@ namespace SodCoop
             rp.downed = st == 1 || st == 3;
             rp.downUntil = Time.realtimeSinceStartup + secs;
             rp.reviveAt = st == 3 ? Time.realtimeSinceStartup : 0f;
+            if (rp.downed || st == 2) { try { ClearPuppetHeat(rp, rp.downed ? "лежит" : "KO"); } catch (Exception e) { Plugin.L.LogWarning("[ALARM] " + e.Message); } }
             if (rp.downed && !was) { Toast(UiKit.T($"{PlayerLabel(rp.pid)} is down! Hold {ReviveKey()} next to them to revive.", $"{PlayerLabel(rp.pid)} ранен! Подойди и держи {ReviveKey()}, чтобы поднять.")); Plugin.L.LogInfo($"[DOWN] игрок {rp.pid} лежит"); }
             if (!rp.downed && was)
             {

@@ -622,6 +622,7 @@ namespace SodCoop
                 Perf.Add("жители", tp0); tp0 = Perf.T();
                 try { ProfileTick(dt); } catch (Exception e) { if (!profErrLogged) { profErrLogged = true; Plugin.L.LogWarning($"[PROFILE] {e.Message}"); } }
                 try { NameTick(p); } catch (Exception e) { Err.Swallow(e); }
+                try { IllegalTick(p); } catch (Exception e) { Err.Swallow(e); }
                 Perf.Add("профили", tp0); tp0 = Perf.T();
                 try { KoTick(p, dt); } catch (Exception e) { if (!koErrLogged) { koErrLogged = true; Plugin.L.LogWarning($"[KO] {e.Message}"); } }
                 try { DownTick(p, dt); } catch (Exception e) { if (!downErrLogged) { downErrLogged = true; Plugin.L.LogWarning($"[DOWN] {e.Message}"); } }

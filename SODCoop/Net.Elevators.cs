@@ -381,6 +381,10 @@ namespace SodCoop
                     Plugin.L.LogInfo($"[NET] в игре ещё один игрок: номер {pid}");
                 }
             }
+            else if (type == MsgIllegal && IsHost)
+            {
+                if (rp != null) OnIllegalMsg(rp, reader);
+            }
             else if (type == MsgRules && !IsHost)
             {
                 Rules.Read(reader);

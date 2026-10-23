@@ -43,21 +43,144 @@ namespace SodCoop
             return null;
         }
 
+        sealed class AlarmSent { public bool val; public string who = ""; public float at; public int repeats; }
+        static readonly System.Collections.Generic.Dictionary<string, AlarmSent> alarmSent = new System.Collections.Generic.Dictionary<string, AlarmSent>();
+
+        static string AlarmTargetLabel(Human t)
+        {
+            if (t == null) return "нет";
+            try
+            {
+                if (t.isPlayer) return "хост";
+                foreach (var rp in players) if (PuppetIdOf(rp) == t.humanID) return "игрок " + rp.pid + " (двойник)";
+                return "житель " + t.humanID;
+            }
+            catch (Exception) { return "?"; }
+        }
+
+        static bool AlarmShouldSend(string key, bool val, Human target, out string who, out int repeats)
+        {
+            who = AlarmTargetLabel(target); repeats = 0;
+            float now = Time.realtimeSinceStartup;
+            AlarmSent s;
+            if (!alarmSent.TryGetValue(key, out s)) { s = new AlarmSent(); alarmSent[key] = s; s.val = !val; }
+            if (s.val == val && s.who == who && now - s.at < 5f) { s.repeats++; return false; }
+            repeats = s.repeats;
+            s.val = val; s.who = who; s.at = now; s.repeats = 0;
+            return true;
+        }
+
         internal static void OnBuildingAlarm(NewBuilding b, bool val, Human target, NewFloor floor)
         {
             if (!IsHost || applyingAlarm || b == null || manager == null || manager.ConnectedPeersCount == 0) return;
+            string who; int rep;
+            if (!AlarmShouldSend("b" + b.buildingID + (floor != null ? "_" + floor.floor : ""), val, target, out who, out rep)) return;
             var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)16); w.Put((byte)1); w.Put(b.buildingID); w.Put(val);
             w.Put(floor != null ? floor.floor : int.MinValue); PutAlarmTarget(w, target);
             manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
-            Plugin.L.LogInfo($"[ALARM] тревога в здании {b.buildingID}{(floor != null ? " этаж " + floor.floor : "")}: {(val ? "включена" : "выключена")}");
+            Plugin.L.LogInfo($"[ALARM] тревога в здании {b.buildingID}{(floor != null ? " этаж " + floor.floor : "")}: {(val ? "включена" : "выключена")}, цель: {who}{(rep > 0 ? $", до этого продлена {rep} раз" : "")}");
         }
 
         internal static void OnAddressAlarm(NewAddress a, bool val, Human target)
         {
             if (!IsHost || applyingAlarm || a == null || manager == null || manager.ConnectedPeersCount == 0) return;
+            string who; int rep;
+            if (!AlarmShouldSend("a" + a.id, val, target, out who, out rep)) return;
             var w = new NetDataWriter(); w.Put(MsgJob); w.Put((byte)16); w.Put((byte)2); w.Put(a.id); w.Put(val); w.Put(0); PutAlarmTarget(w, target);
             manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
-            Plugin.L.LogInfo($"[ALARM] тревога в {a.name}: {(val ? "включена" : "выключена")}");
+            Plugin.L.LogInfo($"[ALARM] тревога в {a.name}: {(val ? "включена" : "выключена")}, цель: {who}{(rep > 0 ? $", до этого продлена {rep} раз" : "")}");
+        }
+
+        static bool illSentTres, illSentAction, illSentAny;
+        static int illSentEsc;
+        static float illTickAt, illSentAt;
+
+        static void IllegalTick(Player p)
+        {
+            if (IsHost || manager == null || p == null) return;
+            float now = Time.realtimeSinceStartup;
+            if (now < illTickAt) return;
+            illTickAt = now + 0.25f;
+            bool off = downed;
+            try { off = off || p.playerKOInProgress; } catch (Exception __e) { Err.Swallow(__e); }
+            bool tres = !off && p.isTrespassing;
+            bool act = !off && p.illegalActionActive;
+            int esc = tres ? p.trespassingEscalation : 0;
+            if (illSentAny && tres == illSentTres && act == illSentAction && esc == illSentEsc && now - illSentAt < 3f) return;
+            illSentAny = true; illSentTres = tres; illSentAction = act; illSentEsc = esc; illSentAt = now;
+            var w = new NetDataWriter(); w.Put(MsgIllegal); w.Put((byte)((tres ? 1 : 0) | (act ? 2 : 0))); w.Put((byte)Mathf.Clamp(esc, 0, 255));
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+        }
+
+        static void OnIllegalMsg(RP rp, NetDataReader r)
+        {
+            byte f = r.GetByte(); int esc = r.GetByte();
+            bool tres = (f & 1) != 0, act = (f & 2) != 0;
+            if (tres != rp.illTres || act != rp.illAction) Plugin.L.LogInfo($"[ALARM] игрок {rp.pid}: {(tres ? "нарушает границы (эскалация " + esc + ")" : "в разрешённом месте")}{(act ? ", незаконное действие" : "")}");
+            rp.illTres = tres; rp.illAction = act; rp.illEsc = esc;
+            var c = PuppetOf(rp);
+            if ((object)c != null) ApplyPuppetIllegal(c, rp);
+        }
+
+        static void ApplyPuppetIllegal(Citizen c, RP rp)
+        {
+            if (c == null || rp == null) return;
+            bool off = rp.downed;
+            bool tres = !off && rp.illTres, act = !off && rp.illAction;
+            c.isTrespassing = tres; c.illegalAreaActive = tres; c.trespassingEscalation = tres ? rp.illEsc : 0; c.illegalActionActive = act;
+            c.UpdateIllegalStatus();
+        }
+
+        internal static bool PuppetIllegalOverride(Actor a)
+        {
+            if (!IsHost || a == null || players.Count == 0) return false;
+            IntPtr ptr = a.Pointer;
+            for (int i = 0; i < players.Count; i++)
+            {
+                var c = PuppetOf(players[i]);
+                if ((object)c == null || c.Pointer != ptr) continue;
+                ApplyPuppetIllegal(c, players[i]);
+                return true;
+            }
+            return false;
+        }
+
+        static void ClearPuppetHeat(RP rp, string why)
+        {
+            if (!IsHost || rp == null) return;
+            var c = PuppetOf(rp);
+            if (c == null) return;
+            ApplyPuppetIllegal(c, rp);
+            int alarms = 0, chasers = 0;
+            foreach (var b in CityBuildings.Instance.buildingDirectory)
+            {
+                try { if (b != null && b.alarmTargets != null && b.alarmTargets.Contains(c)) { b.alarmTargets.Remove(c); alarms++; } } catch (Exception __e) { Err.Swallow(__e); }
+            }
+            foreach (var x in AlarmAddresses())
+            {
+                try { var a = x.a; if (a != null && a.alarmTargets != null && a.alarmTargets.Contains(c)) { a.alarmTargets.Remove(c); alarms++; } } catch (Exception __e) { Err.Swallow(__e); }
+            }
+            IntPtr ptr = c.Pointer;
+            var list = CityData.Instance.citizenDirectory;
+            for (int i = 0; list != null && i < list.Count; i++)
+            {
+                var h = list[i];
+                if (h == null || h.Pointer == ptr) continue;
+                try
+                {
+                    var ai = h.ai;
+                    if (ai == null) continue;
+                    bool chasing = (ai.persuitTarget != null && ai.persuitTarget.Pointer == ptr) || (ai.attackTarget != null && ai.attackTarget.Pointer == ptr);
+                    try { if (h.seesIllegal != null && h.seesIllegal.ContainsKey(c)) { h.seesIllegal.Remove(c); chasing = true; } } catch (Exception __e) { Err.Swallow(__e); }
+                    if (!chasing) continue;
+                    if (ai.persuitTarget != null && ai.persuitTarget.Pointer == ptr) { ai.SetPersuit(false); ai.persuitTarget = null; }
+                    if (ai.attackTarget != null && ai.attackTarget.Pointer == ptr) { ai.CancelCombat(); ai.attackTarget = null; }
+                    ai.ResetInvestigate();
+                    chasers++;
+                }
+                catch (Exception __e) { Err.Swallow(__e); }
+            }
+            Plugin.L.LogInfo($"[ALARM] игрок {rp.pid} {why}: двойник убран из целей тревог ({alarms}), погоню прекратили {chasers}");
         }
 
         static NewBuilding BuildingById(int id)

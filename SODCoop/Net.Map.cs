@@ -49,7 +49,7 @@ namespace SodCoop
         {
             try
             {
-                if (mapTracked != null && MapController.Instance != null) MapController.Instance.RemoveTrackedObject(mapTracked);
+                if ((object)mapTracked != null && MapController.Instance != null) MapController.Instance.RemoveTrackedObject(mapTracked);
             }
             catch (Exception __e) { Err.Swallow(__e); }
             mapTracked = null;
@@ -69,12 +69,12 @@ namespace SodCoop
 
         static void MapTickOne()
         {
-            if (!Plugin.CfgMapIcon.Value) { if (mapTracked != null) MapUntrack(); return; }
-            if (avatar == null) { if (mapTracked != null) MapUntrack(); return; }
+            if (!Plugin.CfgMapIcon.Value) { if ((object)mapTracked != null) MapUntrack(); return; }
+            if (avatar == null) { if ((object)mapTracked != null) MapUntrack(); return; }
             var mc = MapController.Instance;
             if (mc == null) return;
             if (mapTracked != null && mapTracked == avatar.transform) return;
-            if (mapTracked != null) MapUntrack();
+            if ((object)mapTracked != null) MapUntrack();
             try
             {
                 float sz = Mathf.Max(6f, Plugin.CfgMapIconSize.Value);
