@@ -301,8 +301,26 @@ namespace SodCoop
         [HarmonyPrefix]
         public static bool Prefix(Vector3 __0)
         {
+            try { if (Net.fallCheck && Net.FallRescue("выпал из мира")) return false; } catch (Exception e) { Plugin.L.LogWarning("[RAT] " + e.Message); }
             try { return !Net.TryGoDown(__0); } catch (Exception e) { Plugin.L.LogWarning("[DOWN] " + e.Message); return true; }
         }
+    }
+
+    [HarmonyPatch(typeof(UnityStandardAssets.Characters.FirstPerson.FirstPersonController), "PlayerOutOfWorldCheck")]
+    public static class OutOfWorldPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix() { Net.fallCheck = true; }
+
+        [HarmonyFinalizer]
+        public static void Finalizer() { Net.fallCheck = false; }
+    }
+
+    [HarmonyPatch(typeof(Game), "ForcePlayerDirtyDeath")]
+    public static class SeaDeathPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix() { try { return !Net.FallRescue("упал в море"); } catch (Exception e) { Plugin.L.LogWarning("[RAT] " + e.Message); return true; } }
     }
 
     [HarmonyPatch(typeof(Player), "RecieveDamage")]

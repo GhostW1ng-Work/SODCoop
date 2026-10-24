@@ -577,6 +577,8 @@ namespace SodCoop
                             pos = new Vector3(lastSendPos.x, pos.y, lastSendPos.z); feetSend = groundY;
                         }
                         else { talkLogged = false; lastSendPos = new Vector3(pos.x, feetSend, pos.z); haveSendPos = true; }
+                        bool ratNow = LocalRat(); Vector3 ratUpNow = Vector3.up;
+                        if (ratNow) RatPose(p, ref pos, ref feetSend, out ratUpNow);
                         var w = new NetDataWriter();
                         w.Put(MsgPos);
                         w.Put(pos.x);
@@ -603,6 +605,7 @@ namespace SodCoop
                         bool flashOn = false; try { var fpc = FirstPersonItemController.Instance; flashOn = fpc != null && fpc.flashlight; } catch (Exception __e) { Err.Swallow(__e); }
                         float pitch = 0f; try { var cm = Camera.main; if (cm != null) pitch = Mathf.DeltaAngle(0f, cm.transform.eulerAngles.x); } catch (Exception __e) { Err.Swallow(__e); }
                         w.Put(flashOn); w.Put(pitch);
+                        w.Put(ratNow); if (ratNow) { w.Put(ratUpNow.x); w.Put(ratUpNow.y); w.Put(ratUpNow.z); }
                         manager.SendToAll(w, DeliveryMethod.Sequenced);
                         if (curItem != sentItem || Time.realtimeSinceStartup > itemSendAt)
                         {
@@ -624,6 +627,7 @@ namespace SodCoop
                 try { NameTick(p); } catch (Exception e) { Err.Swallow(e); }
                 try { IllegalTick(p); } catch (Exception e) { Err.Swallow(e); }
                 Perf.Add("профили", tp0); tp0 = Perf.T();
+                try { RatGoodTick(p); } catch (Exception __e) { Err.Swallow(__e); }
                 try { KoTick(p, dt); } catch (Exception e) { if (!koErrLogged) { koErrLogged = true; Plugin.L.LogWarning($"[KO] {e.Message}"); } }
                 try { DownTick(p, dt); } catch (Exception e) { if (!downErrLogged) { downErrLogged = true; Plugin.L.LogWarning($"[DOWN] {e.Message}"); } }
                 Perf.Add("нокаут и помощь", tp0); tp0 = Perf.T();
@@ -667,6 +671,10 @@ namespace SodCoop
                             }
                         }
 
+                        tq = RatTilt(curRp, tq);
+                        float ratK = RpRat(curRp) ? RatAvatarScale : 1f;
+                        if (tr.localScale.y != 1f) tr.localScale = Vector3.one;
+                        if (ratK < 1f) tp.y += Plugin.CfgAvatarYOffset.Value * (ratK - 1f);
                         bool inLift = false;
                         if (remoteElevId >= 0)
                         {
@@ -690,7 +698,8 @@ namespace SodCoop
                             tr.position = Vector3.Lerp(tr.position, tp, k);
                             tr.rotation = Quaternion.Slerp(tr.rotation, tq, k);
                             Vector3 d = tr.position - before;
-                            d.y = 0f;
+                            if (RpRat(curRp)) d = Vector3.ProjectOnPlane(d, curRp.ratUp) / RatAvatarScale;
+                            else d.y = 0f;
                             float inst = dt > 0.0001f ? d.magnitude / dt : 0f;
                             animSpeed = Mathf.Lerp(animSpeed, inst, 1f - Mathf.Exp(-8f * dt));
                         }
@@ -776,8 +785,10 @@ namespace SodCoop
                         if (avatarModel != null)
                         {
                             sitK = Mathf.MoveTowards(sitK, poseAnimSit ? 1f : 0f, dt * 4f);
-                            avatarModel.localScale = AvatarBaseScale() * Mathf.Clamp(Plugin.CfgAvatarHeight.Value, 0.3f, 2f);
-                            avatarModel.localPosition = modelBasePos + new Vector3(0f, -(Plugin.CfgDropWithAnim.Value * crouchAnimK + (seatSnapped ? 0f : Plugin.CfgSitDrop.Value) * sitK), 0f);
+                            float ratM = RpRat(curRp) ? RatAvatarScale : 1f;
+                            avatarModel.localScale = AvatarBaseScale() * Mathf.Clamp(Plugin.CfgAvatarHeight.Value, 0.3f, 2f) * ratM;
+                            avatarModel.localPosition = modelBasePos * ratM + new Vector3(0f, -(Plugin.CfgDropWithAnim.Value * crouchAnimK + (seatSnapped ? 0f : Plugin.CfgSitDrop.Value) * sitK) * ratM, 0f);
+                            if (ratM < 1f) RatAvatarDiag(curRp, avatar, targetPos);
                             leanSmooth = Mathf.Lerp(leanSmooth, remoteLean, 1f - Mathf.Exp(-10f * dt));
                             avatarModel.localRotation = Quaternion.Euler(0f, 0f, -leanSmooth * (poseAnimLean ? Plugin.CfgTiltWithAnim.Value : Plugin.CfgLeanScale.Value)) * modelBaseRot;
                         }

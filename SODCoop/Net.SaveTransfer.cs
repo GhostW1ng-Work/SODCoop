@@ -64,6 +64,7 @@ namespace SodCoop
             string name = xferSaveName;
             Plugin.L.LogInfo("[XFER] сохранение получено: " + name);
             xferMode = false; xferFinish = false; xferText = "";
+            keepModsOnce = true;
             Shutdown();
             if (followHost)
             {

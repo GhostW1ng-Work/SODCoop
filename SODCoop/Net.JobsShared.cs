@@ -1313,6 +1313,8 @@ namespace SodCoop
             try { WatchTick(); } catch (Exception e) { Plugin.L.LogWarning("[WANTED] " + e.Message); }
             try { FameTick(); } catch (Exception e) { Plugin.L.LogWarning("[FAME] " + e.Message); }
             try { DebtTick(); } catch (Exception e) { Plugin.L.LogWarning("[DEBT] " + e.Message); }
+            try { RatTick(); } catch (Exception e) { Plugin.L.LogWarning("[RAT] " + e.Message); }
+            try { RatCollisionTick(); } catch (Exception e) { Plugin.L.LogWarning("[RAT] столкновения: " + e.Message); }
             try { WorldMsgQueueTick(); } catch (Exception e) { Plugin.L.LogWarning("[JOB] очередь: " + e.Message); }
             try { LeverTick(); } catch (Exception e) { Plugin.L.LogWarning("[SWITCH] рычаги: " + e.Message); }
             long tj = Perf.T();

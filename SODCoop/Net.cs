@@ -27,6 +27,7 @@ namespace SodCoop
             public int pid; public NetPeer peer; public string clientId = ""; public string profileId = ""; public string label = "";
             public string nick = "";
             public bool downed; public float downUntil, reviveAt;
+            public bool ratOn; public Vector3 ratUp = Vector3.up;
             public bool illTres, illAction, illArrestOnly; public int illEsc;
             public float combatUntil;
             public bool attackAlt;

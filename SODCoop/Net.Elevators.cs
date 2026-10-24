@@ -72,7 +72,8 @@ namespace SodCoop
                 foreach (var l in t.GetComponentsInChildren<Light>(true)) { l.enabled = true; l.gameObject.SetActive(true); }
             }
             var rot = Quaternion.Euler(remotePitch, yaw, 0f);
-            t.position = av.transform.position + Vector3.up * 1.5f + rot * Vector3.forward * 0.3f;
+            float ratK = RpRat(curRp) ? RatAvatarScale : 1f;
+            t.position = av.transform.position + av.transform.up * 1.5f * ratK + rot * Vector3.forward * 0.3f * ratK;
             t.rotation = rot;
         }
 
@@ -604,6 +605,14 @@ namespace SodCoop
                 remoteDrunk = reader.AvailableBytes >= 1 ? reader.GetByte() / 255f : 0f;
                 if (reader.AvailableBytes >= 8) { remoteElevId = reader.GetInt(); remoteElevDy = reader.GetFloat(); } else remoteElevId = -1;
                 if (reader.AvailableBytes >= 5) { remoteFlash = reader.GetBool(); remotePitch = reader.GetFloat(); } else remoteFlash = false;
+                bool ratOn = reader.AvailableBytes >= 1 && reader.GetBool();
+                Vector3 ratUp = Vector3.up;
+                if (ratOn && reader.AvailableBytes >= 12) ratUp = new Vector3(reader.GetFloat(), reader.GetFloat(), reader.GetFloat());
+                if (rp != null)
+                {
+                    if (ratOn != rp.ratOn) Plugin.L.LogInfo($"[RAT] игрок {rp.pid} {(ratOn ? "теперь крыса - уменьшаю аватар" : "больше не крыса")}");
+                    rp.ratOn = ratOn; rp.ratUp = ratUp;
+                }
                 if (avatar == null) CreateAvatar();
             }
         }

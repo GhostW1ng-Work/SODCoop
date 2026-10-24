@@ -14,6 +14,7 @@ namespace SodCoop
         static readonly string[] ModIds = { "mod_filmNoir", "mod_shortSighted", "mod_gamblingDebt", "mod_houseArrest", "mod_fameAndFortune", "mod_snailNemesis", "mod_ratDetective", "mod_ironman", "permaDeath" };
         static readonly Dictionary<string, int> hostMods = new Dictionary<string, int>();
         static readonly Dictionary<string, int> modOrig = new Dictionary<string, int>();
+        static bool keepModsOnce;
         static readonly Dictionary<int, GameObject> remoteSnails = new Dictionary<int, GameObject>();
         static readonly Dictionary<int, Vector3> remoteSnailPos = new Dictionary<int, Vector3>();
         static readonly Dictionary<int, Quaternion> remoteSnailRot = new Dictionary<int, Quaternion>();
@@ -123,6 +124,12 @@ namespace SodCoop
         {
             hostMods.Clear();
             foreach (var id in new List<int>(remoteSnails.Keys)) RemoveRemoteSnail(id);
+            if (keepModsOnce)
+            {
+                keepModsOnce = false;
+                if (modOrig.Count > 0) Plugin.L.LogInfo("[MODS] загружаю сейв хоста - модификаторы хоста пока оставляю включёнными");
+                return;
+            }
             if (permaFieldSaved) { permaFieldSaved = false; try { var g = Game.Instance; if (g != null) g.permaDeath = permaFieldOrig; } catch (Exception __e) { Err.Swallow(__e); } }
             if (modOrig.Count == 0) return;
             var back = new List<string>();
