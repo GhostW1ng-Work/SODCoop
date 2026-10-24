@@ -239,8 +239,9 @@ namespace SodCoop
     public static class InvisIllegalPatch
     {
         [HarmonyPrefix]
-        public static bool Prefix(Actor newTarget)
+        public static bool Prefix(Actor __instance, Actor newTarget)
         {
+            if (Net.OnlyPoliceReacts(__instance, newTarget)) return false;
             if (!((Plugin.CfgInvisible.Value && Net.CheatsActive) || Net.GhostMe)) return true;
             try { return newTarget == null || !newTarget.isPlayer; } catch (Exception) { return true; }
         }
@@ -569,6 +570,26 @@ namespace SodCoop
     {
         [HarmonyPrefix]
         public static bool Prefix(int addVal) { return !(Net.GhostMe && addVal > 0); }
+    }
+
+    [HarmonyPatch(typeof(NewAIController), "SetPersue")]
+    public static class ArrestPersuePatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(NewAIController __instance, Actor __0)
+        {
+            try { return !(__instance != null && Net.OnlyPoliceReacts(__instance.human, __0)); } catch (Exception) { return true; }
+        }
+    }
+
+    [HarmonyPatch(typeof(NewAIController), "StartAttack")]
+    public static class ArrestAttackPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(NewAIController __instance, Actor __0)
+        {
+            try { return !(__instance != null && Net.OnlyPoliceReacts(__instance.human, __0)); } catch (Exception) { return true; }
+        }
     }
 
     [HarmonyPatch(typeof(NewBuilding), "SetAlarm")]

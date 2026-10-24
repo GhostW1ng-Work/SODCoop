@@ -92,6 +92,7 @@ namespace SodCoop
         }
 
         static bool illSentTres, illSentAction, illSentAny;
+
         static int illSentEsc;
         static float illTickAt, illSentAt;
 
@@ -106,18 +107,19 @@ namespace SodCoop
             bool tres = !off && p.isTrespassing;
             bool act = !off && p.illegalActionActive;
             int esc = tres ? p.trespassingEscalation : 0;
-            if (illSentAny && tres == illSentTres && act == illSentAction && esc == illSentEsc && now - illSentAt < 3f) return;
-            illSentAny = true; illSentTres = tres; illSentAction = act; illSentEsc = esc; illSentAt = now;
-            var w = new NetDataWriter(); w.Put(MsgIllegal); w.Put((byte)((tres ? 1 : 0) | (act ? 2 : 0))); w.Put((byte)Mathf.Clamp(esc, 0, 255));
+            bool arrestOnly = tres && OnlyHouseArrestTrespass(p);
+            if (illSentAny && tres == illSentTres && act == illSentAction && esc == illSentEsc && arrestOnly == illSentArrest && now - illSentAt < 3f) return;
+            illSentAny = true; illSentTres = tres; illSentAction = act; illSentEsc = esc; illSentArrest = arrestOnly; illSentAt = now;
+            var w = new NetDataWriter(); w.Put(MsgIllegal); w.Put((byte)((tres ? 1 : 0) | (act ? 2 : 0) | (arrestOnly ? 4 : 0))); w.Put((byte)Mathf.Clamp(esc, 0, 255));
             manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
         }
 
         static void OnIllegalMsg(RP rp, NetDataReader r)
         {
             byte f = r.GetByte(); int esc = r.GetByte();
-            bool tres = (f & 1) != 0, act = (f & 2) != 0;
-            if (tres != rp.illTres || act != rp.illAction) Plugin.L.LogInfo($"[ALARM] игрок {rp.pid}: {(tres ? "нарушает границы (эскалация " + esc + ")" : "в разрешённом месте")}{(act ? ", незаконное действие" : "")}");
-            rp.illTres = tres; rp.illAction = act; rp.illEsc = esc;
+            bool tres = (f & 1) != 0, act = (f & 2) != 0, arrest = (f & 4) != 0;
+            if (tres != rp.illTres || act != rp.illAction || arrest != rp.illArrestOnly) Plugin.L.LogInfo($"[ALARM] игрок {rp.pid}: {(tres ? "нарушает границы (эскалация " + esc + ")" + (arrest ? " только из-за домашнего ареста - реагирует полиция" : "") : "в разрешённом месте")}{(act ? ", незаконное действие" : "")}");
+            rp.illTres = tres; rp.illAction = act; rp.illEsc = esc; rp.illArrestOnly = arrest;
             var c = PuppetOf(rp);
             if ((object)c != null) ApplyPuppetIllegal(c, rp);
         }

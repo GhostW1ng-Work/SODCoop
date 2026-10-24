@@ -387,6 +387,10 @@ namespace SodCoop
             {
                 OnPermaDeadMsg(rp, reader);
             }
+            else if (type == MsgWatch && !IsHost)
+            {
+                OnWatchMsg(reader);
+            }
             else if (type == MsgSnail)
             {
                 OnSnailMsg(rp, reader);

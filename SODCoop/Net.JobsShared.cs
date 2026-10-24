@@ -1310,6 +1310,7 @@ namespace SodCoop
             try { RulesTick(); } catch (Exception e) { Plugin.L.LogWarning("[RULES] " + e.Message); }
             try { ModifiersTick(); } catch (Exception e) { Plugin.L.LogWarning("[MODS] " + e.Message); }
             try { PermaTick(); } catch (Exception e) { Plugin.L.LogWarning("[MODS] " + e.Message); }
+            try { WatchTick(); } catch (Exception e) { Plugin.L.LogWarning("[WANTED] " + e.Message); }
             try { WorldMsgQueueTick(); } catch (Exception e) { Plugin.L.LogWarning("[JOB] очередь: " + e.Message); }
             try { LeverTick(); } catch (Exception e) { Plugin.L.LogWarning("[SWITCH] рычаги: " + e.Message); }
             long tj = Perf.T();
