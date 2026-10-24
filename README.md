@@ -28,6 +28,16 @@ Play Shadows of Doubt together with friends: one city, one clock, the same citiz
 - A downed player can be revived by a teammate (hold **H**).
 - Player markers on the map.
 
+**Game modifiers**
+- The host's game modifiers apply to every player.
+- Film Noir and Short-Sighted (everyone starts with glasses).
+- Gambling Debt: every player has their own debt, and debt collectors come for every player who misses a payment.
+- House Arrest: only the police react to a player outside home.
+- Fame & Fortune: fans and haters approach every player.
+- Snail Nemesis: every player has their own snail, and the others can see it.
+- Rat Detective: every player is rat-sized; the others see you as a tiny detective.
+- Permadeath and Ironman: a client who dies becomes a ghost and can only watch; if the host dies, the game is over for everyone. Without Ironman the last save is loaded instead.
+
 **Hosting**
 - Configurable server rules.
 - LAN discovery, optional password, direct connect by IP.
@@ -103,6 +113,16 @@ MIT, see [LICENSE.txt](LICENSE.txt).
 - У каждого игрока на каждом сервере свой инвентарь, деньги, ключи.
 - Раненого игрока может поднять напарник (держать **H**);
 - Отметки игроков на карте.
+
+**Модификаторы игры**
+- Модификаторы хоста действуют на всех игроков.
+- «Фильм нуар» и «Близорукость» (каждый начинает с очками).
+- «Долг за азартные игры»: у каждого игрока свой долг, и коллекторы приходят к каждому, кто пропустил платёж.
+- «Домашний арест»: на игрока вне дома реагирует только полиция.
+- «Слава и богатство»: поклонники и ненавистники подходят к каждому игроку.
+- «Улитка-заклятый враг»: у каждого игрока своя улитка, и остальные её видят.
+- «Крысиный детектив»: все игроки размером с крысу, остальные видят вас крошечным детективом.
+- «Перманентная смерть» и «Железный человек»: погибший клиент становится призраком и может только наблюдать; если погиб хост, игра заканчивается для всех. Без «Железного человека» вместо этого загружается последнее сохранение.
 
 **Сервер**
 - Настраиваемые параметры сервера
