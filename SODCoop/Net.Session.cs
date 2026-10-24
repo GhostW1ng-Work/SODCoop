@@ -271,7 +271,7 @@ namespace SodCoop
         static string PlayerLabel(int pid)
         {
             foreach (var r in players) if (r.pid == pid && !string.IsNullOrEmpty(r.nick)) return r.nick;
-            return UiKit.T("Player ", "Игрок ") + pid;
+            return UiKit.T("Player ", "Игрок ") + (pid + 1);
         }
 
         static float nameAt;

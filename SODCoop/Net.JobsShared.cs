@@ -464,7 +464,7 @@ namespace SodCoop
                 }
                 pendingJobInfo.Remove(id);
                 AcquireJobInfoHere(j, p.msg, p.pid > 0 ? "player " + p.pid + " called the client" : "хост выслушал заказчика");
-                if (j.knowHandInLocation) Toast($"Player {p.pid} called the client: the job details are on your case board.");
+                if (j.knowHandInLocation) Toast($"{PlayerLabel(p.pid)} called the client: the job details are on your case board.");
             }
         }
 
@@ -732,7 +732,7 @@ namespace SodCoop
             try { c.SetStatus(Case.CaseStatus.handInCollected, false); try { CasePanelController.Instance.UpdateCloseCaseButton(); } catch (Exception __e) { Err.Swallow(__e); } }
             catch (Exception e) { Plugin.L.LogWarning("[JOB] бланк: " + e.Message); }
             finally { applyingJob = false; }
-            Toast($"Player {(rp != null ? rp.pid : 0)} took the hand-in form for '{c.name}': you have it too.");
+            Toast($"{PlayerLabel(rp != null ? rp.pid : 0)} took the hand-in form for '{c.name}': you have it too.");
             Plugin.L.LogInfo($"[JOB] бланк дела '{c.name}' взят другим игроком - у меня тоже");
         }
 
@@ -890,7 +890,7 @@ namespace SodCoop
                         try { if (money > 0 && !RewardRuleActive) GameplayController.Instance.AddMoney(money, true, "case reward"); } catch (Exception e) { Plugin.L.LogWarning("[JOB] награда: " + e.Message); }
                         finally { applyingJob = false; }
                     }
-                    Toast($"Player {(rp != null ? rp.pid : 0)} solved the case" + (money > 0 ? $": you get the reward too." : "."));
+                    Toast($"{PlayerLabel(rp != null ? rp.pid : 0)} solved the case" + (money > 0 ? $": you get the reward too." : "."));
                     Plugin.L.LogInfo($"[JOB] дело {(id > 0 ? "задания " + id : "об убийстве")} сдано игроком {(rp != null ? rp.pid : 0)}, награда {money}, у меня сдано своё дело: {resolved}");
                     return;
                 }
@@ -908,7 +908,7 @@ namespace SodCoop
                     try { j.End(); } catch (Exception e) { Plugin.L.LogWarning($"[JOB] закончить задание {id}: {e.Message}"); }
                     finally { applyingJob = false; }
                 }
-                Toast($"Player {(rp != null ? rp.pid : 0)} completed the job" + (mine && money > 0 ? $": you get {money} too." : "."));
+                Toast($"{PlayerLabel(rp != null ? rp.pid : 0)} completed the job" + (mine && money > 0 ? $": you get {money} too." : "."));
                 Plugin.L.LogInfo($"[JOB] задание {id} сдано игроком {(rp != null ? rp.pid : 0)}, награда {money}, мне начислено: {mine && money > 0}");
             }
             else if (op == 5)
@@ -1298,7 +1298,7 @@ namespace SodCoop
                 if (keys.Count == 0) keys.Add(Evidence.DataKey.name);
                 if (auto && target.caseElements != null) foreach (var ce in target.caseElements) if (ce != null && ce.id == evId) return;
                 cp.PinToCasePanel(target, ev, keys, true, Vector2.zero, false);
-                if (!auto) Toast($"Player {pid} shared evidence: it is pinned to your case '{target.name}'.");
+                if (!auto) Toast($"{PlayerLabel(pid)} shared evidence: it is pinned to your case '{target.name}'.");
                 Plugin.L.LogInfo($"[JOB] улика '{evId}' от игрока {pid} закреплена в деле '{target.name}'");
             }
             catch (Exception e) { Plugin.L.LogWarning("[JOB] закрепить улику: " + e.Message); }

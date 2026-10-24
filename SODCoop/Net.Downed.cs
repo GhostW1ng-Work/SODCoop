@@ -221,7 +221,7 @@ namespace SodCoop
             try { float max = p.maximumHealth; p.SetHealth(Mathf.Clamp01(Rules.ReviveHealth) * max); } catch (Exception __e) { Err.Swallow(__e); }
             SendBodyFx(3, Vector3.zero);
             SendDown(0);
-            Toast($"Player {byPid} revived you.");
+            Toast($"{PlayerLabel(byPid)} revived you.");
             Plugin.L.LogInfo($"[DOWN] меня поднял игрок {byPid}");
         }
 
@@ -288,7 +288,7 @@ namespace SodCoop
             if (rp.downed && !was) { Toast(UiKit.T($"{PlayerLabel(rp.pid)} is down! Hold {ReviveKey()} next to them to revive.", $"{PlayerLabel(rp.pid)} ранен! Подойди и держи {ReviveKey()}, чтобы поднять.")); Plugin.L.LogInfo($"[DOWN] игрок {rp.pid} лежит"); }
             if (!rp.downed && was)
             {
-                Toast(st == 0 ? $"Player {rp.pid} is back on his feet." : $"Player {rp.pid} was not revived in time.");
+                Toast(st == 0 ? $"{PlayerLabel(rp.pid)} is back on their feet." : $"{PlayerLabel(rp.pid)} was not revived in time.");
                 Plugin.L.LogInfo($"[DOWN] игрок {rp.pid}: " + (st == 0 ? "поднят" : "не дождался, KO"));
             }
         }

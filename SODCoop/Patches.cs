@@ -521,6 +521,16 @@ namespace SodCoop
         }
     }
 
+    [HarmonyPatch(typeof(MapController), "PressTracked")]
+    public static class MapMarkerPressPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(ButtonController pressedButton)
+        {
+            try { return !Net.OnMapMarkerPressed(pressedButton); } catch (Exception) { return true; }
+        }
+    }
+
     [HarmonyPatch(typeof(NewBuilding), "SetAlarm")]
     public static class BuildingAlarmPatch
     {

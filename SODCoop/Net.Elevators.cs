@@ -195,7 +195,7 @@ namespace SodCoop
             Plugin.L.LogInfo($"[NET] игрок {rp.pid} убран ({why}); осталось удалённых игроков: {players.Count}");
             if (IsHost)
             {
-                Toast("Player " + rp.pid + " left the game (" + why + ").");
+                Toast((string.IsNullOrEmpty(rp.nick) ? PlayerLabel(rp.pid) : rp.nick) + " left the game (" + why + ").");
                 var w = new NetDataWriter(); w.Put(MsgPlayerLeft); w.Put((byte)rp.pid);
                 foreach (var o in players) if (o.peer != null) { try { o.peer.Send(w, DeliveryMethod.ReliableOrdered); } catch (Exception __e) { Err.Swallow(__e); } }
             }
@@ -217,6 +217,7 @@ namespace SodCoop
             }
             Leave();
             players.Clear();
+            MapSessionEnded();
             foreach (var id in new List<int>(puppetHiddenRends.Keys)) UnhidePuppet(id);
             foreach (var id in new List<int>(puppetHiddenCols.Keys)) UnhidePuppet(id);
         }
@@ -398,7 +399,7 @@ namespace SodCoop
             {
                 int pid = reader.GetByte();
                 var o = RpByPid(pid);
-                if (o != null) { RemovePlayer(o, "вышел"); Toast("Player " + pid + " left the game."); }
+                if (o != null) { string nm = PlayerLabel(pid); RemovePlayer(o, "вышел"); Toast(nm + " left the game."); }
             }
             else if (type == MsgAction)
             {
