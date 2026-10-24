@@ -168,14 +168,14 @@ namespace SodCoop
     public static class InteractActionPatch
     {
         [HarmonyPrefix]
-        public static void Prefix(Actor who) { Net.MarkPlayerPress(who); }
+        public static bool Prefix(Actor who) { if (Net.GhostBlocks(who)) return false; Net.MarkPlayerPress(who); return true; }
     }
 
     [HarmonyPatch(typeof(Interactable), "OnInteraction", new System.Type[] { typeof(InteractablePreset.InteractionKey), typeof(Actor) })]
     public static class InteractKeyPatch
     {
         [HarmonyPrefix]
-        public static void Prefix(Actor who) { Net.MarkPlayerPress(who); }
+        public static bool Prefix(Actor who) { if (Net.GhostBlocks(who)) return false; Net.MarkPlayerPress(who); return true; }
     }
 
     [HarmonyPatch(typeof(Interactable), "SetCustomState1")]
@@ -223,10 +223,15 @@ namespace SodCoop
     public static class InvisSightPatch
     {
         [HarmonyPrefix]
-        public static bool Prefix(Actor __instance)
+        public static void Prefix()
         {
-            if (!(Plugin.CfgInvisible.Value && Net.CheatsActive)) return true;
-            try { return __instance.isPlayer; } catch (Exception) { return true; }
+            try
+            {
+                var g = Game.Instance;
+                bool want = (Plugin.CfgInvisible.Value && Net.CheatsActive) || Net.GhostMe;
+                if (g != null && g.invisiblePlayer != want) g.invisiblePlayer = want;
+            }
+            catch (Exception) { }
         }
     }
 
@@ -236,7 +241,7 @@ namespace SodCoop
         [HarmonyPrefix]
         public static bool Prefix(Actor newTarget)
         {
-            if (!(Plugin.CfgInvisible.Value && Net.CheatsActive)) return true;
+            if (!((Plugin.CfgInvisible.Value && Net.CheatsActive) || Net.GhostMe)) return true;
             try { return newTarget == null || !newTarget.isPlayer; } catch (Exception) { return true; }
         }
     }
@@ -529,6 +534,41 @@ namespace SodCoop
         {
             try { return !Net.OnMapMarkerPressed(pressedButton); } catch (Exception) { return true; }
         }
+    }
+
+    [HarmonyPatch(typeof(BioScreenController), "SetInventoryOpen")]
+    public static class GhostInventoryPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(bool val) { return !(val && Net.GhostMe); }
+    }
+
+    [HarmonyPatch(typeof(BioScreenController), "SelectSlot")]
+    public static class GhostSlotPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix() { return !Net.GhostMe; }
+    }
+
+    [HarmonyPatch(typeof(FirstPersonItemController), "PickUpItem")]
+    public static class GhostPickUpPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(ref bool __result) { if (!Net.GhostBlocksPickup()) return true; __result = false; return false; }
+    }
+
+    [HarmonyPatch(typeof(GameplayController), "AddMoney")]
+    public static class GhostMoneyPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(int addVal) { return !(Net.GhostMe && addVal > 0); }
+    }
+
+    [HarmonyPatch(typeof(GameplayController), "AddSocialCredit")]
+    public static class GhostSocialPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(int addVal) { return !(Net.GhostMe && addVal > 0); }
     }
 
     [HarmonyPatch(typeof(NewBuilding), "SetAlarm")]

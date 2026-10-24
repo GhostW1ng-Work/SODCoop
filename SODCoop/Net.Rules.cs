@@ -83,6 +83,7 @@ namespace SodCoop
             w.Put(Plugin.CfgPvp.Value); w.Put(Plugin.CfgDowned.Value); w.Put(Plugin.CfgDownedSeconds.Value); w.Put(Plugin.CfgReviveHoldSeconds.Value);
             w.Put(Plugin.CfgReviveHealth.Value); w.Put(Plugin.CfgHospitalSeconds.Value); w.Put(Plugin.CfgNewPlayerMoney.Value); w.Put(Plugin.CfgNewPlayerLockpicks.Value);
             w.Put(Plugin.CfgNewPlayerClean.Value); w.Put(Plugin.CfgWorldNeverPauses.Value); w.Put(Plugin.CfgClientCheats.Value); w.Put(Plugin.CfgRewardOnlyHandIn.Value);
+            Net.WriteModifiers(w);
         }
 
         internal static string Signature()
@@ -98,6 +99,7 @@ namespace SodCoop
             revHealth = r.GetFloat(); hospSec = r.GetFloat(); money = r.GetInt(); picks = r.GetInt();
             clean = r.GetBool(); neverPause = r.GetBool(); cheats = r.GetBool(); onlyHandIn = r.GetBool();
             fromHost = true;
+            if (r.AvailableBytes > 0) { try { Net.ReadModifiers(r); } catch (Exception e) { Plugin.L.LogWarning("[MODS] модификаторы хоста: " + e.Message); } }
             Plugin.L.LogInfo("[RULES] правила хоста: " + Summary());
             if (first) Net.Toast(UiKit.T("Server rules: ", "Правила сервера: ") + Summary());
         }

@@ -240,7 +240,7 @@ namespace SodCoop
 
         static void PuppetTick(float dt)
         {
-            bool want = Plugin.CfgPuppet.Value && manager != null && manager.ConnectedPeersCount > 0 && avatar != null;
+            bool want = Plugin.CfgPuppet.Value && manager != null && manager.ConnectedPeersCount > 0 && avatar != null && !IsGhostRp(curRp);
             if (!want)
             {
                 if (puppet != null) ReleasePuppet("клиент не подключён");

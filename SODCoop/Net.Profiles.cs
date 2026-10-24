@@ -42,6 +42,7 @@ namespace SodCoop
         }
         public sealed class ProfApt { public int id; public System.Collections.Generic.List<int[]> rems = new System.Collections.Generic.List<int[]>(); }
         public sealed class ProfCode { public int type, id; public System.Collections.Generic.List<int> digits = new System.Collections.Generic.List<int>(); }
+        public sealed class ProfDebt { public int company, debt, payments, missed; public float due, check; }
         public sealed class ProfDisk { public string upgrade = ""; public int state, list, level, objId, uninstallCost; }
         public sealed class ProfileData
         {
@@ -62,6 +63,9 @@ namespace SodCoop
             public System.Collections.Generic.List<ProfDisk> disks = new System.Collections.Generic.List<ProfDisk>();
             public bool hasBoards;
             public System.Collections.Generic.List<ProfBoard> boards = new System.Collections.Generic.List<ProfBoard>();
+            public bool debtsSet;
+            public System.Collections.Generic.List<ProfDebt> debts = new System.Collections.Generic.List<ProfDebt>();
+            public bool dead;
         }
         public sealed class ProfPin { public string id = "", n = "", sig = "", item = "", pose = ""; public int cam; public System.Collections.Generic.List<int> dk = new System.Collections.Generic.List<int>(); public float x, y; public bool co, m; public int color; }
         public sealed class ProfBoard { public string name = ""; public int type, jobRef; public System.Collections.Generic.List<ProfPin> pins = new System.Collections.Generic.List<ProfPin>(); }
@@ -375,6 +379,7 @@ namespace SodCoop
         static void CaptureExtra(Player p, ProfileData pd)
         {
             try { CaptureBoards(pd); } catch (Exception e) { if (!profErrLogged) { profErrLogged = true; Plugin.L.LogWarning("[PROFILE] доски дел: " + e.Message); } }
+            try { CaptureDebts(pd); } catch (Exception __e) { Err.Swallow(__e); }
             var pos = p.transform.position;
             pd.px = pos.x; pd.py = pos.y; pd.pz = pos.z;
             try { var n = p.currentNode; if (n != null) { var c = n.nodeCoord; pd.nx = (int)c.x; pd.ny = (int)c.y; pd.nz = (int)c.z; pd.hasPos = true; } } catch (Exception __e) { Err.Swallow(__e); }
@@ -585,6 +590,7 @@ namespace SodCoop
             try { RestoreCodes(pd); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] коды: " + e.Message); }
             try { RestoreDisks(pd.disks); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] синк-диски: " + e.Message); }
             try { RestorePosition(p, pd); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] позиция: " + e.Message); }
+            try { RestoreDebts(pd.debts, !pd.debtsSet); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] долги: " + e.Message); }
             if (pd.hasBoards && pd.boards.Count > 0)
             {
                 boardsPending = new System.Collections.Generic.List<ProfBoard>(pd.boards);
@@ -686,7 +692,7 @@ namespace SodCoop
             try
             {
                 var p = Player.Instance;
-                try { RestoreInventory(null); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] инвентарь: " + e.Message); }
+                try { RestoreInventory(NewPlayerKit()); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] инвентарь: " + e.Message); }
                 if (Rules.NewPlayerMoney >= 0) GcSet("money", "SetMoney", Rules.NewPlayerMoney);
                 if (Rules.NewPlayerLockpicks >= 0) { try { GcSet("lockPicks", "SetLockpicks", Rules.NewPlayerLockpicks); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] отмычки: " + e.Message); } }
                 GcSet("socialCredit", "SetSocialCredit", 0);
@@ -760,6 +766,7 @@ namespace SodCoop
                     try { var pp = Player.Instance; Plugin.L.LogInfo($"[PROFILE] после применения: деньги {GcGet("money"):F0} (в профиле {pd.money}), рейтинг {GcGet("socialCredit"):F0} (в профиле {pd.social}), здоровье {(pp != null ? pp.currentHealth : -1f):F2} (в профиле {pd.hp:F2}), нерв {(pp != null ? pp.currentNerve : -1f):F2} (в профиле {pd.nerve:F2})"); } catch (Exception __e) { Err.Swallow(__e); }
                     Plugin.L.LogInfo($"[PROFILE] профиль загружен: деньги {pd.money}, рейтинг {pd.social}, здоровье {pd.hp:F1}/{pd.maxHp:F1}, предметов {pd.items.Count}, квартир {pd.apts.Count}");
                     Toast("Your saved profile was loaded.");
+                    try { GhostOnProfile(pd); } catch (Exception e) { Plugin.L.LogWarning("[MODS] призрак: " + e.Message); }
                 }
                 else
                 {
@@ -770,6 +777,7 @@ namespace SodCoop
                         profTarget = nt; profVerifyAt = Time.realtimeSinceStartup + 2f; profVerifyEnd = Time.realtimeSinceStartup + 25f;
                     }
                     if (pd != null && pd.apts.Count > 0) { profileApplying = true; try { RestoreResidence(pd.apts, pd.residence); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] квартира: " + e.Message); } finally { profileApplying = false; } }
+                    try { RestoreDebts(null, true); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] долги: " + e.Message); }
                     Plugin.L.LogInfo("[PROFILE] профиля ещё нет, это новый игрок" + (Rules.NewPlayerClean ? ": чистый старт" : ""));
                 }
             }
@@ -920,6 +928,7 @@ namespace SodCoop
                 ProfileData old; profiles.TryGetValue(id, out old);
                 pd.id = id; pd.saved = DateTime.UtcNow.ToString("u");
                 pd.apts = old != null ? old.apts : new System.Collections.Generic.List<ProfApt>();
+                if (old != null && old.dead) pd.dead = true;
                 profiles[id] = pd; profDirty = true;
                 if (snapPath != "" && Time.realtimeSinceStartup < snapUntil) SnapshotWrite();
             }

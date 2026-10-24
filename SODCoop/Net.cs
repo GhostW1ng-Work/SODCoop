@@ -782,8 +782,11 @@ namespace SodCoop
 
         internal static void Shutdown()
         {
+            try { PermaOnShutdown(); } catch (Exception e) { Plugin.L.LogWarning("[MODS] " + e.Message); }
+            try { ModifiersRestore(); } catch (Exception e) { Plugin.L.LogWarning("[MODS] " + e.Message); }
             Rules.Clear();
             doorPending.Clear();
+            ratScanDone = false;
             try { ProfileOnShutdown(); } catch (Exception __e) { Err.Swallow(__e); }
             try { DownedOnShutdown(); } catch (Exception __e) { Err.Swallow(__e); }
             lostAt = -1f; everConnected = false; weaponSent = null;

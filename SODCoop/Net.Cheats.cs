@@ -108,8 +108,11 @@ namespace SodCoop
 
         static void ApplyPause()
         {
+            if (ClientOfHost || RtMode == NetMode.Client) return;
             bool v = Plugin.CfgPauseNpc.Value && CheatsActive;
-            if (v == lastPause) return;
+            bool cur = v;
+            try { cur = Game.Instance.pauseAI; } catch (Exception __e) { Err.Swallow(__e); }
+            if (v == lastPause && v == cur) return;
             lastPause = v;
             try { Game.Instance.SetPauseAI(v); Plugin.L.LogInfo($"[CHEAT] ИИ NPC {(v ? "остановлен" : "включён")}"); }
             catch (Exception e) { Plugin.L.LogWarning($"[CHEAT] SetPauseAI: {e.Message}"); }

@@ -192,6 +192,7 @@ namespace SodCoop
             }
             catch (Exception e) { Leave(); Plugin.L.LogWarning("[NET] RemovePlayer: " + e.Message); }
             players.Remove(rp);
+            try { RemoveRemoteSnail(rp.pid); ghostPids.Remove(rp.pid); } catch (Exception __e) { Err.Swallow(__e); }
             Plugin.L.LogInfo($"[NET] игрок {rp.pid} убран ({why}); осталось удалённых игроков: {players.Count}");
             if (IsHost)
             {
@@ -224,7 +225,7 @@ namespace SodCoop
 
         static bool IsRelayed(byte t)
         {
-            return t == MsgPos || t == MsgAction || t == MsgItem || t == MsgHeld || t == MsgObj || t == MsgItemEv || t == MsgDoor || t == MsgBodyFx || t == MsgShot || t == MsgWeapon || t == MsgSound || t == MsgDown || t == MsgRevive || t == MsgElevator || t == MsgKnock || t == MsgJob || t == MsgMurder || t == MsgCorpse;
+            return t == MsgPos || t == MsgAction || t == MsgItem || t == MsgHeld || t == MsgObj || t == MsgItemEv || t == MsgDoor || t == MsgBodyFx || t == MsgShot || t == MsgWeapon || t == MsgSound || t == MsgDown || t == MsgRevive || t == MsgElevator || t == MsgKnock || t == MsgJob || t == MsgMurder || t == MsgCorpse || t == MsgSnail || t == MsgPermaDead;
         }
 
         static bool NeedsCtx(byte t)
@@ -381,6 +382,14 @@ namespace SodCoop
                     Enter(o); SetRemoteAppearance(app); Leave();
                     Plugin.L.LogInfo($"[NET] в игре ещё один игрок: номер {pid}");
                 }
+            }
+            else if (type == MsgPermaDead)
+            {
+                OnPermaDeadMsg(rp, reader);
+            }
+            else if (type == MsgSnail)
+            {
+                OnSnailMsg(rp, reader);
             }
             else if (type == MsgIllegal && IsHost)
             {

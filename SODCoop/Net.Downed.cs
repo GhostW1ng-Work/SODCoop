@@ -157,6 +157,7 @@ namespace SodCoop
 
         internal static bool TryGoDown(Vector3 dir)
         {
+            if (GhostMe) return true;
             if (allowKo) return false;
             if (downed) return true;
             if (!Rules.Downed || !OthersHere()) return false;
@@ -207,6 +208,7 @@ namespace SodCoop
             downed = false; revivers.Clear();
             DownFreeze(p, false);
             SendDown(2);
+            if (PermaDeathOut()) return;
             Plugin.L.LogInfo("[DOWN] " + why + ": KO как обычно");
             allowKo = true;
             try { p.TriggerPlayerKO(downDir, 0f, false); }
