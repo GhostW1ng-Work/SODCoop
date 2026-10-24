@@ -216,6 +216,7 @@ namespace SodCoop
                     {
                         if (h == null || h.isDead || h.isStunned || h.isAsleep || h.ai == null || h.Pointer == c.Pointer) continue;
                         if (!h.hatesRats && !h.scaredOfRats) continue;
+                        if (IsPuppetCit(h.TryCast<Citizen>())) continue;
                         Vector3 hp = h.transform.position;
                         if (Mathf.Abs(hp.y - rpos.y) > 2.5f) continue;
                         Vector3 d = rpos - hp;

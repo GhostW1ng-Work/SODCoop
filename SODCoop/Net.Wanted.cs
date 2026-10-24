@@ -45,6 +45,7 @@ namespace SodCoop
             if (observer == null || target == null) return false;
             try
             {
+                if (IsHost && IsPuppetCit(observer.TryCast<Citizen>())) return true;
                 if (RatTooFar(observer, target)) return true;
                 if (observer.isEnforcer) return false;
                 return ArrestOnlyPuppetRp(target) != null;

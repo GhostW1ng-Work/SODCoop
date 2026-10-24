@@ -302,7 +302,11 @@ namespace SodCoop
         public static bool Prefix(Vector3 __0)
         {
             try { if (Net.fallCheck && Net.FallRescue("выпал из мира")) return false; } catch (Exception e) { Plugin.L.LogWarning("[RAT] " + e.Message); }
-            try { return !Net.TryGoDown(__0); } catch (Exception e) { Plugin.L.LogWarning("[DOWN] " + e.Message); return true; }
+            bool down = false;
+            try { down = Net.TryGoDown(__0); } catch (Exception e) { Plugin.L.LogWarning("[DOWN] " + e.Message); }
+            if (down) return false;
+            try { if (!Net.KoAllowed && Net.PermaDeathOut()) return false; } catch (Exception e) { Plugin.L.LogWarning("[MODS] " + e.Message); }
+            return true;
         }
     }
 

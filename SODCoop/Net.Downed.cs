@@ -69,6 +69,11 @@ namespace SodCoop
         {
             if (p == null) return;
             bool ko = p.playerKOInProgress, rec = p.KORecovery;
+            if (ko && !koSeen && !allowKo && !GhostMe && !permaOut && PermaOn && manager != null)
+            {
+                Plugin.L.LogInfo("[MODS] нокаут прошёл мимо проверки - применяю перманентную смерть");
+                try { PermaDeathOut(); } catch (Exception e) { Plugin.L.LogWarning("[MODS] " + e.Message); }
+            }
             if (ko) koSeen = true;
             else if (koSeen)
             {
@@ -161,6 +166,8 @@ namespace SodCoop
             }
             return (bool)keyHeldMethod.Invoke(null, new object[] { k });
         }
+
+        internal static bool KoAllowed { get { return allowKo; } }
 
         static bool OthersHere() { return manager != null && manager.ConnectedPeersCount > 0 && players.Count > 0; }
 
