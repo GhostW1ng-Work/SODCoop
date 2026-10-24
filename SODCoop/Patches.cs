@@ -572,6 +572,30 @@ namespace SodCoop
         public static bool Prefix(int addVal) { return !(Net.GhostMe && addVal > 0); }
     }
 
+    [HarmonyPatch(typeof(NewAIController), "OnNewTrackTarget")]
+    public static class FameTrackPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(NewAIController __instance) { try { Net.OnNpcNewTrackTarget(__instance); } catch (Exception __e) { Err.Swallow(__e); } }
+    }
+
+    [HarmonyPatch(typeof(NewAIController), "TalkTo")]
+    public static class FameTalkPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(NewAIController __instance, InteractionController.ConversationType convoType)
+        {
+            try { return Net.OnNpcTalkTo(__instance, (int)convoType); } catch (Exception) { return true; }
+        }
+    }
+
+    [HarmonyPatch(typeof(NewAIController), "OnReturnFromTalkTo")]
+    public static class FameTalkReturnPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(NewAIController __instance) { try { Net.OnClientTalkReturn(__instance); } catch (Exception __e) { Err.Swallow(__e); } }
+    }
+
     [HarmonyPatch(typeof(NewAIController), "SetPersue")]
     public static class ArrestPersuePatch
     {
