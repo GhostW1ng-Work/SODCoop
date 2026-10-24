@@ -63,7 +63,7 @@ namespace SodCoop
             public bool hasBoards;
             public System.Collections.Generic.List<ProfBoard> boards = new System.Collections.Generic.List<ProfBoard>();
         }
-        public sealed class ProfPin { public string id = "", n = "", sig = "", item = ""; public System.Collections.Generic.List<int> dk = new System.Collections.Generic.List<int>(); public float x, y; public bool co, m; public int color; }
+        public sealed class ProfPin { public string id = "", n = "", sig = "", item = "", pose = ""; public int cam; public System.Collections.Generic.List<int> dk = new System.Collections.Generic.List<int>(); public float x, y; public bool co, m; public int color; }
         public sealed class ProfBoard { public string name = ""; public int type, jobRef; public System.Collections.Generic.List<ProfPin> pins = new System.Collections.Generic.List<ProfPin>(); }
 
         static bool profileApplying, helloOkFlag, profDirty, profErrLogged;
@@ -285,17 +285,13 @@ namespace SodCoop
                             string js;
                             if (!pinItemJson.TryGetValue(el.id, out js))
                             {
-                                js = "";
-                                var it = ev.interactable;
-                                if (it != null)
-                                {
-                                    var d = new StateSaveData(); d.interactables = new Il2CppSystem.Collections.Generic.List<Interactable>(); d.interactables.Add(it);
-                                    js = JsonUtility.ToJson(d);
-                                    if (js.Length > 20000) js = "";
-                                }
+                                js = EvidenceItemJson(ev, el.id) ?? "";
+                                if (js.Length > 20000) js = "";
                                 pinItemJson[el.id] = js;
                             }
                             pin.item = js;
+                            pin.cam = CaptureCameraId(ev, false);
+                            pin.pose = CapturePose(ev, false);
                         }
                     }
                     catch (Exception __e) { Err.Swallow(__e); }
@@ -311,7 +307,7 @@ namespace SodCoop
             bool found = false;
             try { found = Toolbox.Instance.TryGetEvidence(pin.id, out ev) && ev != null; } catch (Exception __e) { Err.Swallow(__e); }
             if (pin.sig != "" && (!found || EvidenceSig(ev) != pin.sig)) { ev = FindEvidenceBySig(pin.sig); found = ev != null; }
-            if (!found && pin.item != "") { ev = ImportSharedItem(System.Text.Encoding.UTF8.GetBytes(pin.item), pin.id); found = ev != null; }
+            if (!found && pin.item != "") { ev = ImportSharedItem(System.Text.Encoding.UTF8.GetBytes(pin.item), pin.id, pin.cam, pin.pose ?? ""); found = ev != null; }
             return found ? ev : null;
         }
 

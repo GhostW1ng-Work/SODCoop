@@ -1042,17 +1042,35 @@ namespace SodCoop
             byte[] ib = null;
             try
             {
-                var sit = sev != null ? sev.interactable : null;
-                if (sit != null)
-                {
-                    var d = new StateSaveData(); d.interactables = new Il2CppSystem.Collections.Generic.List<Interactable>(); d.interactables.Add(sit);
-                    ib = System.Text.Encoding.UTF8.GetBytes(JsonUtility.ToJson(d));
-                }
+                string js = EvidenceItemJson(sev, evId);
+                if (js != null) ib = System.Text.Encoding.UTF8.GetBytes(js);
             }
             catch (Exception e) { Plugin.L.LogWarning("[JOB] предмет улики: " + e.Message); }
             w.Put(ib != null); if (ib != null) w.PutBytesWithLength(ib);
             w.Put(auto);
+            w.Put(CaptureCameraId(sev));
+            w.Put(CapturePose(sev));
             manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+        }
+
+        internal static string EvidenceItemJson(Evidence sev, string evId)
+        {
+            var sit = sev != null ? sev.interactable : null;
+            if (sit == null) return null;
+            var d = new StateSaveData(); d.interactables = new Il2CppSystem.Collections.Generic.List<Interactable>(); d.interactables.Add(sit);
+            var es = sev.TryCast<EvidenceSurveillance>();
+            var oldSCap = sit.sCap;
+            bool addCap = es != null && es.savedCapture != null && (sit.sCap == null || sit.sCap.Count == 0) && (sit.cap == null || sit.cap.Count == 0);
+            if (addCap)
+            {
+                sit.sCap = new Il2CppSystem.Collections.Generic.List<SceneRecorder.SceneCapture>();
+                sit.sCap.Add(es.savedCapture);
+            }
+            try { return JsonUtility.ToJson(d); }
+            finally
+            {
+                if (addCap) { sit.sCap = oldSCap; Plugin.L.LogInfo($"[JOB] улика '{evId}': кадр камеры {es.savedCapture.id} хранится только в улике - кладу его в копию предмета"); }
+            }
         }
 
         static string EvidenceSig(Evidence ev)
@@ -1062,9 +1080,112 @@ namespace SodCoop
             {
                 var it = ev.interactable;
                 string kind = it != null ? PresetNameOf(it) : (ev.preset != null ? ev.preset.name : "");
-                return kind + "|" + (ev.belongsTo != null ? ev.belongsTo.humanID : -1) + "|" + (ev.writer != null ? ev.writer.humanID : -1) + "|" + (ev.reciever != null ? ev.reciever.humanID : -1);
+                return kind + "|" + (ev.belongsTo != null ? ev.belongsTo.humanID : -1) + "|" + (ev.writer != null ? ev.writer.humanID : -1) + "|" + (ev.reciever != null ? ev.reciever.humanID : -1) + CaptureSig(ev);
             }
             catch (Exception) { return ""; }
+        }
+
+        static SceneRecorder.SceneCapture EvidenceCapture(Evidence ev)
+        {
+            if (ev == null) return null;
+            var es = ev.TryCast<EvidenceSurveillance>();
+            var it = ev.interactable;
+            SceneRecorder.SceneCapture cap = es != null ? es.savedCapture : null;
+            if (cap == null && it != null && it.sCap != null && it.sCap.Count > 0) cap = it.sCap[0];
+            if (cap == null && it != null && it.cap != null && it.cap.Count > 0) cap = it.cap[0];
+            return cap;
+        }
+
+        static string CaptureSig(Evidence ev)
+        {
+            try
+            {
+                var cap = EvidenceCapture(ev);
+                if (cap == null) return "";
+                return "|" + cap.t.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
+            }
+            catch (Exception) { return ""; }
+        }
+
+        internal static int CaptureCameraId(Evidence ev, bool log = true)
+        {
+            try
+            {
+                var cap = EvidenceCapture(ev);
+                if (cap == null) return 0;
+                var rec = cap.recorder;
+                string how = "в кадре";
+                if (rec == null || rec.interactable == null)
+                {
+                    how = "через игру по номеру кадра";
+                    var g = Toolbox.Instance.GetSceneCaptureFromID(cap.id);
+                    rec = g != null ? g.recorder : null;
+                }
+                int id = rec != null && rec.interactable != null ? rec.interactable.id : 0;
+                if (log) Plugin.L.LogInfo($"[JOB] кадр {cap.id} (время {cap.t:F3}): камера {(id != 0 ? id + ", найдена " + how : "не найдена")}");
+                return id;
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[JOB] камера кадра: " + e.Message); return 0; }
+        }
+
+        static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
+
+        internal static string CapturePose(Evidence ev, bool log = true)
+        {
+            try
+            {
+                var cap = EvidenceCapture(ev);
+                if (cap == null) return "";
+                int nd = cap.drp != null ? cap.drp.Count : 0;
+                var p = cap.GetCaptureWorldPosition(); var q = cap.GetCaptureWorldRotation();
+                if (log) Plugin.L.LogInfo($"[JOB] кадр {cap.id}: точек камеры {nd}, камера {(cap.recorder != null ? "есть" : "нет")}, позиция {p}, поворот {q}");
+                if (p == Vector3.zero) return "";
+                return string.Join(",", new[] { p.x, p.y, p.z, q.x, q.y, q.z }.Select(f => f.ToString("R", Inv)));
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[JOB] позиция кадра: " + e.Message); return ""; }
+        }
+
+        static void ApplyCapturePose(SceneRecorder.SceneCapture cap, string pose, string evId)
+        {
+            if (cap == null) return;
+            int nd = cap.drp != null ? cap.drp.Count : 0;
+            string before = "?";
+            try { before = cap.GetCaptureWorldPosition().ToString(); } catch (Exception __e) { Err.Swallow(__e); }
+            if (nd == 0 && !string.IsNullOrEmpty(pose))
+            {
+                try
+                {
+                    var f = pose.Split(',').Select(x => float.Parse(x, Inv)).ToArray();
+                    var d = new SceneRecorder.DynamicRecordPosition();
+                    d.pos = new Vector3(f[0], f[1], f[2]); d.rot = new Vector3(f[3], f[4], f[5]);
+                    if (cap.drp == null) cap.drp = new Il2CppSystem.Collections.Generic.List<SceneRecorder.DynamicRecordPosition>();
+                    cap.drp.Add(d);
+                }
+                catch (Exception e) { Plugin.L.LogWarning($"[JOB] улика '{evId}': позиция кадра: {e.Message}"); }
+            }
+            string after = "?";
+            try { after = cap.GetCaptureWorldPosition().ToString(); } catch (Exception __e) { Err.Swallow(__e); }
+            Plugin.L.LogInfo($"[JOB] улика '{evId}': кадр {cap.id}, точек камеры {nd}, позиция была {before}, стала {after} (прислана: {(pose != "" ? pose : "нет")})");
+        }
+
+        static void LinkCaptureCamera(Interactable it, Evidence ev, int camId, string evId)
+        {
+            SceneRecorder rec = null;
+            string src = "видеокамера " + camId;
+            try { var cam = camId != 0 ? FindById(camId) : null; rec = cam != null ? cam.sceneRecorder : null; } catch (Exception __e) { Err.Swallow(__e); }
+            if (rec == null) { src = "мой фотоаппарат"; try { rec = Player.Instance != null ? Player.Instance.sceneRecorder : null; } catch (Exception __e) { Err.Swallow(__e); } }
+            int n = 0;
+            var all = new System.Collections.Generic.List<SceneRecorder.SceneCapture>();
+            try
+            {
+                var es = ev != null ? ev.TryCast<EvidenceSurveillance>() : null;
+                if (es != null && es.savedCapture != null) all.Add(es.savedCapture);
+                if (it.sCap != null) for (int i = 0; i < it.sCap.Count; i++) if (it.sCap[i] != null) all.Add(it.sCap[i]);
+                if (it.cap != null) for (int i = 0; i < it.cap.Count; i++) if (it.cap[i] != null) all.Add(it.cap[i]);
+                if (rec != null) foreach (var c in all) if (c.recorder == null) { c.recorder = rec; n++; }
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[JOB] улика '{evId}': камера кадра: {e.Message}"); }
+            Plugin.L.LogInfo($"[JOB] улика '{evId}': {(rec != null ? "привязал к кадрам (" + n + ") устройство: " + src : "не нашёл устройство для кадра, фото будет пустым")}");
         }
 
         static Evidence FindEvidenceBySig(string sig)
@@ -1087,7 +1208,7 @@ namespace SodCoop
             return null;
         }
 
-        static Evidence ImportSharedItem(byte[] bytes, string evId)
+        internal static Evidence ImportSharedItem(byte[] bytes, string evId, int camId, string pose)
         {
             try
             {
@@ -1100,10 +1221,39 @@ namespace SodCoop
                 int n, u;
                 ImportItems(data.interactables, "[JOB]", "улики " + evId, out n, out u);
                 try { it.RemoveFromPlacement(); } catch (Exception __e) { Err.Swallow(__e); }
+                EnsureItemEvidence(it, evId);
+                LinkCaptureCamera(it, it.evidence, camId, evId);
+                if (it.sCap != null && it.sCap.Count > 0) ApplyCapturePose(it.sCap[0], pose, evId);
                 Plugin.L.LogInfo($"[JOB] улика '{evId}': у меня её не было, создал копию предмета '{it.p}' (номер {it.id}, улика {(it.evidence != null ? it.evidence.evID : "нет")})");
                 return it.evidence;
             }
             catch (Exception e) { Plugin.L.LogWarning($"[JOB] копия улики '{evId}': {e.Message}"); return null; }
+        }
+
+        static void EnsureItemEvidence(Interactable it, string evId)
+        {
+            int sc = it.sCap != null ? it.sCap.Count : 0, cc = it.cap != null ? it.cap.Count : 0;
+            if (it.evidence == null)
+            {
+                try
+                {
+                    it.evidence = Toolbox.Instance.GetOrCreateEvidenceForInteractable(it.preset, "I" + it.id, it, it.belongsTo, it.writer, it.reciever, it.jobParent, null, it.preset != null ? it.preset.retailItem : null, it.pv);
+                    Plugin.L.LogInfo($"[JOB] улика '{evId}': игра не создала улику для копии, создал сам: {(it.evidence != null ? it.evidence.evID : "не вышло")}");
+                }
+                catch (Exception e) { Plugin.L.LogWarning($"[JOB] улика '{evId}': создать улику для копии: {e.Message}"); }
+            }
+            try
+            {
+                var es = it.evidence != null ? it.evidence.TryCast<EvidenceSurveillance>() : null;
+                var cap = sc > 0 ? it.sCap[0] : (cc > 0 ? it.cap[0] : null);
+                if (es != null && (cap != null || es.savedCapture == null))
+                {
+                    var was = es.savedCapture;
+                    if (cap != null) { es.savedCapture = cap; es.captureID = cap.id; }
+                    Plugin.L.LogInfo($"[JOB] улика '{evId}': снимок камеры {(cap != null ? "подставлен присланный (кадр " + cap.id + ")" : "не найден")}, у игры был {(was != null ? "кадр " + was.id + " (время " + was.t.ToString("F3", Inv) + ")" : "нет")}, кадров в предмете {sc}/{cc}");
+                }
+            }
+            catch (Exception e) { Plugin.L.LogWarning($"[JOB] улика '{evId}': снимок: {e.Message}"); }
         }
 
         static void OnEvidenceShared(RP rp, NetDataReader r)
@@ -1114,6 +1264,8 @@ namespace SodCoop
             string sig = r.AvailableBytes > 0 ? r.GetString() : "";
             byte[] itemBytes = r.AvailableBytes > 0 && r.GetBool() ? r.GetBytesWithLength() : null;
             bool auto = r.AvailableBytes > 0 && r.GetBool();
+            int camId = r.AvailableBytes >= 4 ? r.GetInt() : 0;
+            string pose = r.AvailableBytes > 0 ? r.GetString() : "";
             int pid = rp != null ? rp.pid : 0;
             Evidence ev = null;
             bool found = false;
@@ -1126,7 +1278,7 @@ namespace SodCoop
             }
             if (!found && itemBytes != null)
             {
-                ev = ImportSharedItem(itemBytes, evId);
+                ev = ImportSharedItem(itemBytes, evId, camId, pose);
                 found = ev != null;
             }
             if (!found) { Toast(UiKit.T($"{PlayerLabel(pid)} shared evidence you do not have yet.", $"{PlayerLabel(pid)} поделился уликой, которой у тебя ещё нет.")); Plugin.L.LogWarning($"[JOB] улика '{evId}' от игрока {pid} у меня не найдена"); return; }

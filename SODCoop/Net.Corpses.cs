@@ -105,6 +105,18 @@ namespace SodCoop
             try { c.UpdateGameLocation(0f, false); } catch (Exception __e) { Err.Swallow(__e); }
         }
 
+        static int npcGetUpLogs;
+
+        static void NpcGetUp(NpcTarget t, string why)
+        {
+            var c = t.c; if (c == null) return;
+            var ai = c.ai; var ac = c.animationController;
+            try { if (ai != null) { if (ai.ko) ai.SetKO(false, Vector3.zero, Vector3.zero, true, 0f); ai.ko = false; ai.isRagdoll = false; } } catch (Exception __e) { Err.Swallow(__e); }
+            try { if (ac != null) { ac.SetRagdoll(false, false); ac.SetPauseAnimation(false); } } catch (Exception __e) { Err.Swallow(__e); }
+            t.snap = true; t.settled = false;
+            if (npcGetUpLogs < 30) { npcGetUpLogs++; Plugin.L.LogInfo($"[NPC] горожанин {c.humanID}: поднял из лежачего положения ({why})"); }
+        }
+
         static void ApplyNpcState(NpcTarget t)
         {
             var c = t.c;
@@ -141,6 +153,7 @@ namespace SodCoop
                     {
                         try { if (c.ai != null) c.ai.SetKO(koNow, Vector3.zero, Vector3.zero, true, 0f); Plugin.L.LogInfo($"[NPC] горожанин {c.humanID}: {(koNow ? "оглушён" : "пришёл в себя")} (по данным хоста)"); }
                         catch (Exception __e) { Err.Swallow(__e); }
+                        if (!koNow) NpcGetUp(t, "по данным хоста");
                     }
                 }
                 if (old < 0 || ((old ^ mask) & 32) != 0) { try { ac.SetCarryingItem((t.flags & 32) != 0); } catch (Exception __e) { Err.Swallow(__e); } }
@@ -154,6 +167,13 @@ namespace SodCoop
                     catch (Exception) { try { ac.SetRestrained(rs); } catch (Exception __e) { Err.Swallow(__e); } }
                     finally { applyingRestrain = false; }
                 }
+            }
+            if (!dead && (t.flags & 2) == 0 && Time.unscaledTime - t.getUpCheckAt > 1f)
+            {
+                t.getUpCheckAt = Time.unscaledTime;
+                bool lying = false;
+                try { var ai = c.ai; lying = ai != null && (ai.ko || ai.isRagdoll); } catch (Exception __e) { Err.Swallow(__e); }
+                if (lying) NpcGetUp(t, "лежал, хотя у хоста стоит");
             }
             if (t.outfit != 255 && t.apOutfit != t.outfit && Time.unscaledTime - t.outfitTry > 1f)
             {

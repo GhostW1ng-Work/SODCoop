@@ -39,6 +39,7 @@ namespace SodCoop
             public int apIdle = -1, apArms = -1, apCarry = -1, apCombat = -1;
             public float atkUntil, combatHoldUntil; public bool atkHeld; public int curCombat = -1;
             public int rev, doneRev = -1; public bool settled; public int slot;
+            public float getUpCheckAt;
         }
 
         static int npcFrame;
