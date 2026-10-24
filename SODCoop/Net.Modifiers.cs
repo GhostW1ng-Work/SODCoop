@@ -524,7 +524,7 @@ namespace SodCoop
             }
         }
 
-        static void RestoreDebts(List<ProfDebt> debts, bool fresh)
+        static void RestoreDebts(List<ProfDebt> debts, bool fresh, ProfileData moneyTarget)
         {
             var gc = GameplayController.Instance;
             if (gc == null) return;
@@ -538,7 +538,7 @@ namespace SodCoop
             if (fresh && ModOn("mod_gamblingDebt"))
             {
                 var c = GamblingCompany();
-                if (c != null) { gc.AddNewDebt(c, 10000, 0, 1000); extra = $", долг за азартные игры {c.name} 10000"; }
+                if (c != null) { gc.AddNewDebt(c, 10000, 0, 1000); if (moneyTarget != null && moneyTarget.money >= 0) moneyTarget.money += 10000; extra = $", долг за азартные игры {c.name} 10000, деньги +10000"; }
                 else extra = ", компания для долга не найдена";
             }
             Plugin.L.LogInfo($"[MODS] долги: были от сейва хоста {had}, мои {(debts != null ? debts.Count : 0)}{extra}");

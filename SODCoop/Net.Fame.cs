@@ -11,10 +11,12 @@ namespace SodCoop
         const byte MsgTalk = 43;
         static readonly Dictionary<long, float> fameRolled = new Dictionary<long, float>();
         static readonly Dictionary<int, int> talkPending = new Dictionary<int, int>();
+        static readonly Dictionary<int, int> talkConvo = new Dictionary<int, int>();
+        static bool debtUnpaidOnReturn;
         static bool applyingTalk;
         static AIActionPreset fameToPuppet;
         static float fameTickAt;
-        sealed class FameWalk { public Human h; public int pid; public float until; }
+        sealed class FameWalk { public Human h; public int pid; public float until; public int convo = (int)InteractionController.ConversationType.fameAndFortune; }
         static readonly List<FameWalk> fameWalks = new List<FameWalk>();
 
         static AIActionPreset FamePresetForPuppet(AIActionPreset orig)
@@ -48,13 +50,14 @@ namespace SodCoop
                 if (d > 2.5f) continue;
                 fameWalks.RemoveAt(i);
                 try { var act = f.h.ai.currentAction; if (act != null && act.preset == fameToPuppet) act.Remove(0f); } catch (Exception __e) { Err.Swallow(__e); }
-                SendTalk(f.h, rp, (int)InteractionController.ConversationType.fameAndFortune, "дошёл до игрока");
+                SendTalk(f.h, rp, f.convo, "дошёл до игрока");
             }
         }
 
         static void SendTalk(Human h, RP rp, int convoType, string why)
         {
             talkPending[h.humanID] = rp.pid;
+            talkConvo[h.humanID] = convoType;
             for (int i = fameWalks.Count - 1; i >= 0; i--) if (fameWalks[i].h == h) fameWalks.RemoveAt(i);
             var w = new NetDataWriter(); w.Put(MsgTalk); w.Put((byte)1); w.Put(h.humanID); w.Put(convoType);
             try { rp.peer.Send(w, DeliveryMethod.ReliableOrdered); } catch (Exception __e) { Err.Swallow(__e); }
@@ -128,17 +131,24 @@ namespace SodCoop
             try { var act = ai.currentAction; if (act != null) rp = PuppetRpOfInteractable(act.passedInteractable); } catch (Exception __e) { Err.Swallow(__e); }
             var h = ai.human;
             if (h == null) return true;
-            if (rp == null) { foreach (var f in fameWalks) if (f.h == h) { rp = RpByPid(f.pid); break; } }
+            foreach (var f in fameWalks) if (f.h == h) { if (rp == null) rp = RpByPid(f.pid); convoType = f.convo; break; }
             if (rp == null || rp.peer == null) return true;
             SendTalk(h, rp, convoType, "игра");
             return false;
+        }
+
+        internal static void OnClientTalkReturnPre(NewAIController ai)
+        {
+            debtUnpaidOnReturn = false;
+            if (IsHost || ai == null || ai.human == null) return;
+            try { var ic = InteractionController.Instance; debtUnpaidOnReturn = ic != null && ic.debtCollector != null && ic.debtCollector.Pointer == ai.human.Pointer; } catch (Exception __e) { Err.Swallow(__e); }
         }
 
         internal static void OnClientTalkReturn(NewAIController ai)
         {
             if (IsHost || applyingTalk || ai == null || manager == null || manager.ConnectedPeersCount == 0) return;
             var h = ai.human; if (h == null) return;
-            var w = new NetDataWriter(); w.Put(MsgTalk); w.Put((byte)2); w.Put(h.humanID); w.Put(0);
+            var w = new NetDataWriter(); w.Put(MsgTalk); w.Put((byte)2); w.Put(h.humanID); w.Put(debtUnpaidOnReturn ? 1 : 0);
             manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
         }
 
@@ -151,7 +161,13 @@ namespace SodCoop
             if (op == 1 && !IsHost)
             {
                 applyingTalk = true;
-                try { h.ai.TalkTo((InteractionController.ConversationType)convo); Plugin.L.LogInfo($"[FAME] со мной заговорил горожанин {hid} ({h.citizenName}), разговор {convo}"); }
+                try
+                {
+                    var p = Player.Instance;
+                    if (convo == ConvoDebt && p != null && ActionController.Instance != null) ActionController.Instance.DebtCollection(p.interactable, p.currentNode, h);
+                    else h.ai.TalkTo((InteractionController.ConversationType)convo);
+                    Plugin.L.LogInfo($"[FAME] со мной заговорил горожанин {hid} ({h.citizenName}), разговор {convo}");
+                }
                 catch (Exception e) { Plugin.L.LogWarning("[FAME] разговор: " + e.Message); }
                 finally { applyingTalk = false; }
             }
@@ -160,8 +176,20 @@ namespace SodCoop
                 int pid;
                 if (!talkPending.TryGetValue(hid, out pid) || pid != rp.pid) return;
                 talkPending.Remove(hid);
+                int was; talkConvo.TryGetValue(hid, out was); talkConvo.Remove(hid);
                 var mc = ModifiersController.Instance;
                 var c = PuppetOf(rp);
+                if (was == ConvoDebt)
+                {
+                    if ((object)c == null || c == null) return;
+                    if (convo != 0)
+                    {
+                        try { h.ai.SetPersue(c, false, 2, true, 1f); Plugin.L.LogInfo($"[DEBT] игрок {rp.pid} не заплатил - коллектор {hid} ({h.citizenName}) нападает"); }
+                        catch (Exception e) { Plugin.L.LogWarning("[DEBT] нападение: " + e.Message); }
+                    }
+                    else Plugin.L.LogInfo($"[DEBT] игрок {rp.pid} заплатил коллектору {hid}");
+                    return;
+                }
                 if (mc == null || (object)c == null || c == null) return;
                 if (UnityEngine.Random.value <= mc.fameAndFortuneCombatChance)
                 {

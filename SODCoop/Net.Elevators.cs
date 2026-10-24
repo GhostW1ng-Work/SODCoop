@@ -387,6 +387,10 @@ namespace SodCoop
             {
                 OnPermaDeadMsg(rp, reader);
             }
+            else if (type == MsgDebt)
+            {
+                OnDebtMsg(rp, reader);
+            }
             else if (type == MsgTalk)
             {
                 OnTalkMsg(rp, reader);

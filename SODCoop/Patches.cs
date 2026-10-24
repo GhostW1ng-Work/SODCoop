@@ -592,6 +592,9 @@ namespace SodCoop
     [HarmonyPatch(typeof(NewAIController), "OnReturnFromTalkTo")]
     public static class FameTalkReturnPatch
     {
+        [HarmonyPrefix]
+        public static void Prefix(NewAIController __instance) { try { Net.OnClientTalkReturnPre(__instance); } catch (Exception __e) { Err.Swallow(__e); } }
+
         [HarmonyPostfix]
         public static void Postfix(NewAIController __instance) { try { Net.OnClientTalkReturn(__instance); } catch (Exception __e) { Err.Swallow(__e); } }
     }

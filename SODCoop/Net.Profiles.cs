@@ -590,7 +590,7 @@ namespace SodCoop
             try { RestoreCodes(pd); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] коды: " + e.Message); }
             try { RestoreDisks(pd.disks); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] синк-диски: " + e.Message); }
             try { RestorePosition(p, pd); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] позиция: " + e.Message); }
-            try { RestoreDebts(pd.debts, !pd.debtsSet); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] долги: " + e.Message); }
+            try { RestoreDebts(pd.debts, !pd.debtsSet, pd); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] долги: " + e.Message); }
             if (pd.hasBoards && pd.boards.Count > 0)
             {
                 boardsPending = new System.Collections.Generic.List<ProfBoard>(pd.boards);
@@ -777,7 +777,7 @@ namespace SodCoop
                         profTarget = nt; profVerifyAt = Time.realtimeSinceStartup + 2f; profVerifyEnd = Time.realtimeSinceStartup + 25f;
                     }
                     if (pd != null && pd.apts.Count > 0) { profileApplying = true; try { RestoreResidence(pd.apts, pd.residence); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] квартира: " + e.Message); } finally { profileApplying = false; } }
-                    try { RestoreDebts(null, true); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] долги: " + e.Message); }
+                    try { RestoreDebts(null, true, profTarget); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] долги: " + e.Message); }
                     Plugin.L.LogInfo("[PROFILE] профиля ещё нет, это новый игрок" + (Rules.NewPlayerClean ? ": чистый старт" : ""));
                 }
             }

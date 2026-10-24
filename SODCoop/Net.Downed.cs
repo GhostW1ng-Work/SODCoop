@@ -63,10 +63,19 @@ namespace SodCoop
             catch (Exception) { return "?"; }
         }
 
+        static bool koSeen;
+
         static void KoTick(Player p, float dt)
         {
-            if (!Plugin.CfgKoNoTimeSkip.Value || p == null) return;
+            if (p == null) return;
             bool ko = p.playerKOInProgress, rec = p.KORecovery;
+            if (ko) koSeen = true;
+            else if (koSeen)
+            {
+                koSeen = false;
+                if (fxLastSent == 2 && !downed && !GhostMe) { SendBodyFx(3, Vector3.zero); Plugin.L.LogInfo("[KO] игра подняла меня без восстановления в больнице - сообщаю другим, что я встал"); }
+            }
+            if (!Plugin.CfgKoNoTimeSkip.Value) return;
             float now = Time.realtimeSinceStartup;
             var sd = SessionData.Instance;
             if (!ko)

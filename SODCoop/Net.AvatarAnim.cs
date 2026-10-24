@@ -139,6 +139,7 @@ namespace SodCoop
         }
 
         static bool fxDead; static float fxDeadUntil, fxHitAt; static int fxLog;
+        static byte fxLastSent;
         static int[] fxStandHash = new int[0];
         static float fxTripFallAt, fxTripUpAt, fxTripUntil;
 
@@ -157,6 +158,7 @@ namespace SodCoop
                 }
                 var w = new NetDataWriter(); w.Put(MsgBodyFx); w.Put(kind); w.Put(hx); w.Put(hy);
                 manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+                if (kind != 1) fxLastSent = kind;
                 if (fxLog++ < 12) Plugin.Dbg($"[FX] отправил: {(kind == 1 ? "меня ударили" : kind == 6 ? "я поскользнулся" : kind == 2 ? "я упал" : kind == 3 ? "я встал" : "я умер")}");
             }
             catch (Exception __e) { Err.Swallow(__e); }
