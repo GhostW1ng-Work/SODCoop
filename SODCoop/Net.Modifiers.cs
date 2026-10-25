@@ -11,7 +11,7 @@ namespace SodCoop
         const byte MsgPermaDead = 40;
         const byte MsgSnail = 41;
 
-        static readonly string[] ModIds = { "mod_filmNoir", "mod_shortSighted", "mod_gamblingDebt", "mod_houseArrest", "mod_fameAndFortune", "mod_snailNemesis", "mod_ratDetective", "mod_ironman", "permaDeath" };
+        internal static readonly string[] ModIds = { "mod_filmNoir", "mod_shortSighted", "mod_gamblingDebt", "mod_houseArrest", "mod_fameAndFortune", "mod_snailNemesis", "mod_ratDetective", "mod_ironman", "permaDeath" };
         static readonly Dictionary<string, int> hostMods = new Dictionary<string, int>();
         static readonly Dictionary<string, int> modOrig = new Dictionary<string, int>();
         static bool keepModsOnce;
@@ -57,6 +57,62 @@ namespace SodCoop
             hostMods.Clear();
             foreach (var kv in got) hostMods[kv.Key] = kv.Value;
             ApplyHostModifiers();
+        }
+
+        static Dictionary<string, int> HostModPicks()
+        {
+            var d = new Dictionary<string, int>();
+            foreach (var part in (Plugin.CfgModifiers.Value ?? "").Split(';'))
+            {
+                int eq = part.IndexOf('='); int v;
+                if (eq > 0 && int.TryParse(part.Substring(eq + 1), out v)) d[part.Substring(0, eq).Trim()] = v;
+            }
+            return d;
+        }
+
+        internal static bool HostModPick(string id)
+        {
+            int v;
+            return HostModPicks().TryGetValue(id, out v) ? v != 0 : LocalSetting(id) != 0;
+        }
+
+        internal static void SetHostModPick(string id, bool on)
+        {
+            var d = HostModPicks();
+            foreach (var m in ModIds) if (!d.ContainsKey(m)) d[m] = LocalSetting(m) != 0 ? 1 : 0;
+            d[id] = on ? 1 : 0;
+            var parts = new List<string>();
+            foreach (var m in ModIds) parts.Add(m + "=" + d[m]);
+            Plugin.CfgModifiers.Value = string.Join(";", parts);
+        }
+
+        internal static void ApplyHostModPicks()
+        {
+            var d = HostModPicks();
+            if (d.Count == 0) return;
+            var pp = PlayerPrefsController.Instance;
+            if (pp == null || pp.gameSettingControls == null) { Plugin.L.LogWarning("[MODS] настройки игры ещё не готовы - модификаторы сервера не применены"); return; }
+            modLeakChecked = true;
+            try { if (System.IO.File.Exists(ModRestorePath)) System.IO.File.Delete(ModRestorePath); } catch (Exception __e) { Err.Swallow(__e); }
+            var changed = new List<string>(); var on = new List<string>();
+            foreach (var id in ModIds)
+            {
+                int want;
+                if (!d.TryGetValue(id, out want)) continue;
+                if (want != 0) on.Add(id);
+                if (LocalSetting(id) == want) continue;
+                foreach (var s in pp.gameSettingControls)
+                {
+                    if (s == null || s.identifier != id) continue;
+                    s.intValue = want;
+                    PlayerPrefs.SetInt(id, want);
+                    try { pp.OnToggleChanged(id, false, null); } catch (Exception e) { Plugin.L.LogWarning($"[MODS] {id}: {e.Message}"); }
+                    changed.Add(id + "=" + want);
+                    break;
+                }
+            }
+            PlayerPrefs.Save();
+            Plugin.L.LogInfo($"[MODS] модификаторы сервера: {(on.Count > 0 ? string.Join(", ", on) : "нет")}; изменил в настройках игры: {(changed.Count > 0 ? string.Join(", ", changed) : "ничего")}");
         }
 
         static string ModRestorePath { get { return System.IO.Path.Combine(BepInEx.Paths.ConfigPath, "SodCoop_modrestore.txt"); } }

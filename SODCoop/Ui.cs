@@ -1124,15 +1124,35 @@ namespace SodCoop
             else { Plugin.L.LogWarning("[MENU] автозагрузка: загрузка не началась"); ManualLoad(Path.GetFileName(autoPath)); }
         }
 
+        static int newStage;
+        static float newAt, newUntil;
+
         internal static void NewGame()
         {
-            Notice = "HOST: start a New Game. The server starts when the city has loaded.";
-            Plugin.L.LogInfo("[MENU] ручная новая игра");
+            autoStage = 0;
+            newStage = 1; newAt = Time.realtimeSinceStartup + 0.3f; newUntil = newAt + 30f;
+            Notice = "HOST: pick a city or generate a new one. The server starts when the city has loaded.";
+            Plugin.L.LogInfo("[MENU] новая игра: открываю выбор города в песочнице");
+        }
+
+        static void NewGameTick(float now)
+        {
+            if (newStage == 0 || now < newAt) return;
+            var mm = MainMenuController.Instance;
+            if (mm == null || !mm.mainMenuActive)
+            {
+                if (now > newUntil) { newStage = 0; Notice = "HOST: start a New Game. The server starts when the city has loaded."; Plugin.L.LogWarning("[MENU] новая игра: главное меню так и не открылось"); }
+                return;
+            }
+            newStage = 0;
+            try { mm.NewGameTypeButton(true); Plugin.L.LogInfo("[MENU] новая игра: открыт выбор города (песочница)"); }
+            catch (Exception e) { Notice = "HOST: start a New Game. The server starts when the city has loaded."; Plugin.L.LogWarning("[MENU] новая игра: " + e.Message); }
         }
 
         internal static void Tick()
         {
             try { AutoLoadTick(Time.realtimeSinceStartup); } catch (Exception e) { autoStage = 0; Plugin.L.LogWarning("[MENU] автозагрузка: " + e.Message); }
+            try { NewGameTick(Time.realtimeSinceStartup); } catch (Exception e) { newStage = 0; Plugin.L.LogWarning("[MENU] новая игра: " + e.Message); }
             if (Notice != lastNotice) { lastNotice = Notice; noticeAt = Time.realtimeSinceStartup; }
             if (Notice != "" && Time.realtimeSinceStartup - noticeAt > 120f) { Notice = ""; lastNotice = ""; }
         }
@@ -1662,13 +1682,14 @@ namespace SodCoop
             var c = win.Content; UiKit.Clear(c); UiKit.Clear(win.Buttons);
             inName = inPass = inPort = inAddr = inAPort = inAPass = null;
             inRDown = inRHold = inRHealth = inRHosp = inRMoney = inRPicks = null;
-            win.Title.text = page == 4 ? UiKit.T("Server rules", "Правила сервера") : page == 1 ? UiKit.T("Host a game", "Создать игру") : page == 2 ? UiKit.T("Direct connect", "Подключение по адресу") : page == 3 ? UiKit.T("Password", "Пароль") : UiKit.T("Multiplayer", "Мультиплеер");
+            win.Title.text = page == 5 ? UiKit.T("Game modifiers", "Модификаторы игры") : page == 4 ? UiKit.T("Server rules", "Правила сервера") : page == 1 ? UiKit.T("Host a game", "Создать игру") : page == 2 ? UiKit.T("Direct connect", "Подключение по адресу") : page == 3 ? UiKit.T("Password", "Пароль") : UiKit.T("Multiplayer", "Мультиплеер");
             float W = c.rect.width, H = c.rect.height;
             if (W < 100f) { W = 1372f; H = 604f; }
             if (page == 0) UiList(c, W);
             else if (page == 1) UiHost(c, W);
             else if (page == 2) UiDirect(c);
             else if (page == 3) UiPass(c);
+            else if (page == 5) UiMods(c, W);
             else UiRules(c, W);
             uiMsg = UiKit.Label(c, msg ?? "", 24f, H - 84f, W - 48f, 36f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, UiKit.HeadColor);
             uiStatus = UiKit.Label(c, "", 24f, H - 48f, W - 48f, 36f, 20f);
@@ -1773,6 +1794,38 @@ namespace SodCoop
             UiKit.BarButton(win, UiKit.T("Back", "Назад"), 260f, () => { Harvest(); page = 1; msg = ""; });
         }
 
+        static readonly string[][] ModNames =
+        {
+            new[] { "mod_filmNoir", "Film Noir", "Нуар" },
+            new[] { "mod_shortSighted", "Short-Sighted", "Близорукость" },
+            new[] { "mod_gamblingDebt", "Gambling Debt", "Долг за азартные игры" },
+            new[] { "mod_houseArrest", "House Arrest", "Домашний арест" },
+            new[] { "mod_fameAndFortune", "Fame & Fortune", "Слава и богатство" },
+            new[] { "mod_snailNemesis", "Snail Nemesis", "Улитка-немезида" },
+            new[] { "mod_ratDetective", "Rat Detective", "Крысиный детектив" },
+            new[] { "mod_ironman", "Ironman", "Железный человек" },
+            new[] { "permaDeath", "Permadeath", "Перманентная смерть" },
+        };
+
+        static void UiMods(Transform c, float W)
+        {
+            float x = 36f, y = 16f, bw = (W - 108f) / 2f;
+            UiKit.Label(c, UiKit.T("These modifiers are set in the game settings when the server starts, for a new game and for a loaded save. Every player gets the host's modifiers.",
+                "Эти модификаторы ставятся в настройки игры при запуске сервера - и для новой игры, и для загрузки сейва. У всех игроков будут модификаторы хоста."), x, y, W - 72f, 70f, 20f, TMPro.TextAlignmentOptions.TopLeft); y += 80f;
+            float y0 = y;
+            for (int i = 0; i < ModNames.Length; i++)
+            {
+                string id = ModNames[i][0];
+                bool on = Net.HostModPick(id);
+                float cx = i < 5 ? x : x + bw + 36f;
+                if (i == 5) y = y0;
+                var b = UiKit.Button(c, UiKit.T(ModNames[i][1], ModNames[i][2]) + ": " + (on ? UiKit.T("on", "вкл") : UiKit.T("off", "выкл")), cx, y, bw, 46f, () => { Harvest(); Net.SetHostModPick(id, !on); builtSig = ""; }, 20f);
+                UiKit.SetSelected(b, on);
+                y += 52f;
+            }
+            UiKit.BarButton(win, UiKit.T("Back", "Назад"), 260f, () => { Harvest(); page = 1; msg = ""; });
+        }
+
         static void ConnectTo(Lan.Server sv)
         {
             if (sv == null) return;
@@ -1809,10 +1862,11 @@ namespace SodCoop
                 UiKit.Button(c, UiKit.T("Up", "Выше"), lx, ly, 160f, 44f, () => hostTop -= per);
                 UiKit.Button(c, UiKit.T("Down", "Ниже"), lx + 172f, ly, 160f, 44f, () => hostTop += per);
             }
-            UiKit.BarButton(win, UiKit.T("Server rules...", "Правила сервера..."), 300f, () => { Harvest(); page = 4; msg = ""; });
-            UiKit.BarButton(win, UiKit.T("Host: load save", "Загрузить сейв"), 300f, () => { Harvest(); StartHost(false); }, hostSaves.Count > 0);
-            UiKit.BarButton(win, UiKit.T("Host: new game", "Новая игра"), 300f, () => { Harvest(); StartHost(true); });
-            UiKit.BarButton(win, UiKit.T("Back", "Назад"), 240f, () => { Harvest(); page = 0; msg = ""; });
+            UiKit.BarButton(win, UiKit.T("Server rules...", "Правила сервера..."), 260f, () => { Harvest(); page = 4; msg = ""; });
+            UiKit.BarButton(win, UiKit.T("Modifiers...", "Модификаторы..."), 250f, () => { Harvest(); page = 5; msg = ""; });
+            UiKit.BarButton(win, UiKit.T("Host: load save", "Загрузить сейв"), 270f, () => { Harvest(); StartHost(false); }, hostSaves.Count > 0);
+            UiKit.BarButton(win, UiKit.T("Host: new game", "Новая игра"), 250f, () => { Harvest(); StartHost(true); });
+            UiKit.BarButton(win, UiKit.T("Back", "Назад"), 200f, () => { Harvest(); page = 0; msg = ""; });
         }
 
         static void UiDirect(Transform c)
@@ -2018,6 +2072,7 @@ namespace SodCoop
             if (string.IsNullOrWhiteSpace(fName)) { msg = "Enter a server name."; return; }
             if (!Port(fPort, out p)) { msg = "Port must be a number from 1024 to 65535."; return; }
             Net.ApplyHost(fName.Trim(), fPass ?? "", p);
+            Net.ApplyHostModPicks();
             CloseMenu();
             if (newGame) MenuAuto.NewGame();
             else MenuAuto.LoadSave(hostSel >= 0 && hostSel < hostSaves.Count ? hostSaves[hostSel] : "");

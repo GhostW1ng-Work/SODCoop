@@ -23,7 +23,7 @@ namespace SodCoop
     [BepInPlugin("com.flyingfrogs.sodcoop", "SodCoop", Plugin.ModVersion)]
     public class Plugin : BasePlugin
     {
-        internal const string ModVersion = "0.14.1";
+        internal const string ModVersion = "0.15.0";
         internal static ManualLogSource L;
         internal static void Dbg(string m) { try { if (CfgDebugLog != null && CfgDebugLog.Value) L.LogInfo(m); } catch (System.Exception) { } }
         internal static ConfigEntry<NetMode> CfgMode;
@@ -38,6 +38,7 @@ namespace SodCoop
         internal static ConfigEntry<float> CfgAvatarScale, CfgAvatarHeight;
         internal static ConfigEntry<int> CfgMaxPlayers;
         internal static ConfigEntry<bool> CfgProfiles, CfgNewPlayerClean;
+        internal static ConfigEntry<string> CfgModifiers;
         internal static ConfigEntry<float> CfgProfileInterval;
         internal static ConfigEntry<int> CfgNewPlayerMoney;
         internal static ConfigEntry<int> CfgNewPlayerLockpicks;
@@ -292,6 +293,7 @@ namespace SodCoop
             CfgUpdateRepo = Config.Bind("Update", "Repo", "GhostW1ng-Work/SODCoop", "GitHub repository (owner/name) whose latest release is checked");
             CfgClientCheats = Config.Bind("Rules", "ClientCheats", true, "Host: other players may use the cheat menu on this server");
             CfgRewardOnlyHandIn = Config.Bind("Rules", "RewardOnlyHandIn", false, "Host: only the player who handed in a case gets its money, social credit and reward item (false = everyone gets the reward)");
+            CfgModifiers = Config.Bind("Rules", "Modifiers", "", "Host: game modifiers picked in the multiplayer menu (id=0/1;...), applied to the game settings when hosting starts. Empty = keep the game settings");
             CfgCheatKeys = Config.Bind("Cheats", "Hotkeys", false,
                 "Cheat menu: MenuKey (F2 by default) opens a window with all cheats while you play");
             CfgCheatMenuKey = Config.Bind("Cheats", "MenuKey", "F2", "Key that opens the cheat menu (name from UnityEngine.KeyCode) when Hotkeys = true");

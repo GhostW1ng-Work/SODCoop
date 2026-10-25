@@ -1,4 +1,4 @@
-# SodCoop: co-op multiplayer for Shadows of Doubt
+﻿# SodCoop: co-op multiplayer for Shadows of Doubt
 
 **English** · [Русский](#русский)
 
@@ -27,9 +27,10 @@ Play Shadows of Doubt together with friends: one city, one clock, the same citiz
 - Each player has their own inventory, money and keys on every server.
 - A downed player can be revived by a teammate (hold **H**).
 - Player markers on the map.
+- Invite other players to live in your apartment: stand inside it and press **F7**. Only the owner can invite and evict roommates.
 
 **Game modifiers**
-- The host's game modifiers apply to every player.
+- The host's game modifiers apply to every player. The host picks them in **Modifiers...** when creating the server.
 - Film Noir and Short-Sighted.
 - Gambling Debt: every player has their own debt, and debt collectors come for every player who misses a payment.
 - House Arrest.
@@ -40,6 +41,7 @@ Play Shadows of Doubt together with friends: one city, one clock, the same citiz
 
 **Hosting**
 - Configurable server rules.
+- **New game** opens the sandbox city selection right away.
 - LAN discovery, optional password, direct connect by IP.
 - Joining players download the host's save automatically.
 
@@ -113,9 +115,10 @@ MIT, see [LICENSE.txt](LICENSE.txt).
 - У каждого игрока на каждом сервере свой инвентарь, деньги, ключи.
 - Раненого игрока может поднять напарник (держать **H**);
 - Отметки игроков на карте.
+- Можно пригласить других игроков жить в своей квартире: зайди в неё и нажми **F7**. Приглашать и выселять жильцов может только хозяин.
 
 **Модификаторы игры**
-- Модификаторы хоста действуют на всех игроков.
+- Модификаторы хоста действуют на всех игроков. Хост выбирает их в **Модификаторы...** при создании сервера.
 - «Нуар» и «Близорукость»
 - «Долг за азартные игры»: у каждого игрока свой долг, и коллекторы приходят к каждому, кто пропустил платёж.
 - «Домашний арест»
@@ -126,6 +129,7 @@ MIT, see [LICENSE.txt](LICENSE.txt).
 
 **Сервер**
 - Настраиваемые параметры сервера
+- **Новая игра** сразу открывает выбор города в песочнице.
 - Поиск серверов в локальной сети, пароль, прямое подключение по IP.
 - Подключившийся игрок сам скачивает сохранение хоста.
 
