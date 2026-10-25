@@ -96,7 +96,7 @@ namespace SodCoop
             foreach (var f in xfFiles)
             {
                 string ext = Path.GetExtension(f.Name).ToLowerInvariant();
-                bool okExt = ext == ".sodb" || ext == ".citb" || ext == ".txt";
+                bool okExt = ext == ".sodb" || ext == ".sod" || ext == ".citb" || ext == ".txt";
                 f.Dest = Path.Combine(f.Kind == 0 ? SaveDir() : CityDir(), f.Name);
                 bool have = f.Kind == 1 && File.Exists(f.Dest) && new FileInfo(f.Dest).Length == f.Size;
                 f.Need = okExt && !have;

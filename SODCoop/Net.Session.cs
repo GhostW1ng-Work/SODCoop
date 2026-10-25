@@ -102,6 +102,8 @@ namespace SodCoop
             return string.CompareOrdinal(a, b);
         }
 
+        internal static void ShowMainMenu() { OpenMenuForLoad(); }
+
         static void OpenMenuForLoad()
         {
             try
@@ -195,16 +197,18 @@ namespace SodCoop
                     {
                         Plugin.L.LogWarning("[XFER] снимок не получился ни одним способом, беру самое новое сохранение с диска. Задача: " + TaskInfo(snapTask));
                         DateTime best = DateTime.MinValue;
-                        foreach (var f in Directory.GetFiles(SaveDir(), "*.sodb")) { var t = File.GetLastWriteTimeUtc(f); if (t > best) { best = t; use = f; } }
+                        foreach (var f in Directory.GetFiles(SaveDir())) { string fe = Path.GetExtension(f).ToLowerInvariant(); if (fe != ".sod" && fe != ".sodb") continue; var t = File.GetLastWriteTimeUtc(f); if (t > best) { best = t; use = f; } }
                     }
                     if (use == null) { HostFail("the host has no save to send"); return; }
-                    if (!use.EndsWith(".sodb", StringComparison.OrdinalIgnoreCase) || (Path.GetFileName(use).StartsWith("SodCoop_sync") && Path.GetFileName(use) != SyncName))
+                    string syncName = use.EndsWith(".sod", StringComparison.OrdinalIgnoreCase) ? Path.ChangeExtension(SyncName, ".sod") : SyncName;
+                    string useExt = Path.GetExtension(use).ToLowerInvariant();
+                    if ((useExt != ".sod" && useExt != ".sodb") || (Path.GetFileName(use).StartsWith("SodCoop_sync") && Path.GetFileName(use) != syncName))
                     {
                         try
                         {
-                            string norm = Path.Combine(SaveDir(), SyncName);
+                            string norm = Path.Combine(SaveDir(), syncName);
                             File.Copy(use, norm, true);
-                            Plugin.L.LogInfo("[XFER] имя снимка исправлено: " + Path.GetFileName(use) + " -> " + SyncName);
+                            Plugin.L.LogInfo("[XFER] имя снимка исправлено: " + Path.GetFileName(use) + " -> " + syncName);
                             use = norm;
                         }
                         catch (Exception e) { HostFail("cannot rename snapshot: " + e.Message); return; }

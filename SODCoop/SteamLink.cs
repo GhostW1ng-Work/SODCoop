@@ -1,9 +1,10 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Threading;
+using Il2CppInterop.Runtime.Injection;
 using UnityEngine;
 
 namespace SodCoop
@@ -31,6 +32,9 @@ namespace SodCoop
         [DllImport(Api)] static extern IntPtr SteamAPI_SteamNetworkingUtils_SteamAPI_v004();
         [DllImport(Api)] static extern void SteamAPI_ISteamNetworkingUtils_InitRelayNetworkAccess(IntPtr self);
         [DllImport(Api)] [return: MarshalAs(UnmanagedType.I1)] static extern bool SteamAPI_ISteamNetworkingUtils_SetGlobalConfigValuePtr(IntPtr self, int key, IntPtr value);
+        [DllImport(Api)] static extern void SteamAPI_ISteamFriends_ActivateGameOverlayInviteDialogConnectString(IntPtr self, byte[] connect);
+        [DllImport(Api)] static extern IntPtr SteamAPI_SteamUtils_v010();
+        [DllImport(Api)] [return: MarshalAs(UnmanagedType.I1)] static extern bool SteamAPI_ISteamUtils_IsOverlayEnabled(IntPtr self);
         [DllImport("winmm")] static extern uint timeBeginPeriod(uint ms);
         [DllImport("winmm")] static extern uint timeEndPeriod(uint ms);
 
@@ -40,9 +44,9 @@ namespace SodCoop
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         delegate void SessionRequestFn(IntPtr req);
 
-        const string PresenceKey = "sodcoop", JoinKey = "sodcoop_join";
+        const string PresenceKey = "sodcoop", JoinKey = "sodcoop_join", ConnectArg = "+sodcoop_connect";
         const int ChData = 0, ChHello = 1, SendFlags = 1 | 32, FriendFlagImmediate = 4;
-        static readonly byte[] PresenceKeyB = Utf8(PresenceKey), JoinKeyB = Utf8(JoinKey);
+        static readonly byte[] PresenceKeyB = Utf8(PresenceKey), JoinKeyB = Utf8(JoinKey), ConnectKeyB = Utf8("connect");
 
         static bool probed, ok;
         static IntPtr user, friends, msgs, utils;
@@ -87,13 +91,109 @@ namespace SodCoop
                     sessionCbPtr = Marshal.GetFunctionPointerForDelegate(sessionCb);
                     bool cb = SteamAPI_ISteamNetworkingUtils_SetGlobalConfigValuePtr(utils, 204, sessionCbPtr);
                     Plugin.L.LogInfo($"[STEAM] relay готов, мой SteamID {me}, приём подключений через обработчик: {(cb ? "да" : "нет")}");
-                    return ok = true;
+                    ok = true;
+                    RegisterJoin();
+                    return true;
                 }
                 catch (Exception e) { Plugin.L.LogInfo("[STEAM] Steam API недоступен: " + e.Message); return ok = false; }
             }
         }
 
         internal static ulong MyId { get { return Ready ? me : 0; } }
+
+        static SteamJoinCallback joinCb;
+        static bool joinTried;
+
+        static void RegisterJoin()
+        {
+            if (joinCb != null || joinTried) return;
+            try
+            {
+                var dict = Steamworks.CallbackDispatcher.m_registeredCallbacks;
+                if (dict == null) { Plugin.L.LogInfo("[STEAM] обработчик Steam ещё не готов - приглашения подключу позже"); return; }
+                joinTried = true;
+                ClassInjector.RegisterTypeInIl2Cpp<SteamJoinCallback>();
+                var cb = new SteamJoinCallback();
+                if (!dict.ContainsKey(SteamJoinCallback.Id)) dict[SteamJoinCallback.Id] = new Il2CppSystem.Collections.Generic.List<Steamworks.Callback>();
+                dict[SteamJoinCallback.Id].Add(cb);
+                joinCb = cb;
+                Plugin.L.LogInfo("[STEAM] приглашения и «Присоединиться» из Steam подключены");
+            }
+            catch (Exception e) { joinTried = true; Plugin.L.LogWarning("[STEAM] не удалось подключить приглашения Steam: " + e.Message); }
+        }
+
+        static ulong pendingJoin;
+        static float pendingUntil;
+        static bool argsChecked;
+
+        static ulong ParseConnect(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return 0;
+            int i = s.IndexOf(ConnectArg, StringComparison.Ordinal);
+            if (i < 0) return 0;
+            var rest = s.Substring(i + ConnectArg.Length).Trim().Split(' ', '"');
+            ulong id;
+            return rest.Length > 0 && ulong.TryParse(rest[0], out id) ? id : 0;
+        }
+
+        internal static void OnJoinRequest(ulong friend, string connect)
+        {
+            ulong id = ParseConnect(connect);
+            Plugin.L.LogInfo($"[STEAM] запрос из Steam присоединиться к {friend}: «{connect}»");
+            if (id == 0) id = friend;
+            QueueJoin(id);
+        }
+
+        static void QueueJoin(ulong id)
+        {
+            pendingJoin = id; pendingUntil = Time.realtimeSinceStartup + 20f;
+            if (ok && friends != IntPtr.Zero) { try { SteamAPI_ISteamFriends_RequestFriendRichPresence(friends, id); } catch (Exception __e) { Err.Swallow(__e); } }
+        }
+
+        static void JoinTick(float now)
+        {
+            if (!argsChecked)
+            {
+                argsChecked = true;
+                try
+                {
+                    ulong id = ParseConnect(string.Join(" ", Environment.GetCommandLineArgs()));
+                    if (id != 0) { Plugin.L.LogInfo($"[STEAM] игра запущена по приглашению Steam: хост {id}"); QueueJoin(id); pendingUntil = now + 120f; }
+                }
+                catch (Exception __e) { Err.Swallow(__e); }
+            }
+            if (!Ready) return;
+            if (joinCb == null && !joinTried) RegisterJoin();
+            if (pendingJoin == 0) return;
+            bool menu = false, loading = false;
+            try { var mm = MainMenuController.Instance; menu = mm != null && mm.mainMenuActive; loading = menu && mm.currentComponent != null && mm.currentComponent.component == MainMenuController.Component.loadingCity; } catch (Exception __e) { Err.Swallow(__e); }
+            if (loading || (!menu && Player.Instance == null)) return;
+            var sv = PresenceServer(pendingJoin, now);
+            if (sv == null && now < pendingUntil) return;
+            ulong host = pendingJoin; pendingJoin = 0;
+            if (sv == null)
+            {
+                sv = new Lan.Server { Ip = "steam:" + host, Port = 0, Version = Plugin.ModVersion, Seen = now, Name = FriendName("steam:" + host) };
+                Plugin.L.LogWarning($"[STEAM] не вижу сервер у {host} в статусе Steam - пробую подключиться всё равно");
+            }
+            NetMenu.JoinSteam(sv);
+        }
+
+        internal static void InviteFriends()
+        {
+            if (!Ready || !hosting || udpTest) { Net.Toast(UiKit.T("Host a game first: invites work while your server is running.", "Сначала создай сервер: приглашать можно, пока он запущен.")); return; }
+            bool overlay = false;
+            try { var u = SteamAPI_SteamUtils_v010(); overlay = u != IntPtr.Zero && SteamAPI_ISteamUtils_IsOverlayEnabled(u); } catch (Exception __e) { Err.Swallow(__e); }
+            if (!overlay)
+            {
+                Net.Toast(UiKit.T("The Steam overlay is off. Invite from the Steam friends list: right-click a friend > Invite to game.", "Оверлей Steam выключен. Пригласи через список друзей Steam: ПКМ по другу > Пригласить в игру."));
+                return;
+            }
+            try { SteamAPI_ISteamFriends_ActivateGameOverlayInviteDialogConnectString(friends, Utf8(ConnectArg + " " + me)); Plugin.L.LogInfo("[STEAM] открыл окно приглашения Steam"); }
+            catch (Exception e) { Plugin.L.LogWarning("[STEAM] окно приглашения: " + e.Message); }
+        }
+
+        internal static bool HostingViaSteam { get { return hosting && !udpTest && ok; } }
 
         static void OnSessionRequest(IntPtr req)
         {
@@ -386,6 +486,7 @@ namespace SodCoop
                 if (want != presenceNow && (want != "" || presenceNow != "") && Ready)
                 {
                     SetPresence(PresenceKeyB, want);
+                    SetPresence(ConnectKeyB, want != "" ? ConnectArg + " " + me : "");
                     if ((want == "") != (presenceNow == "")) Plugin.L.LogInfo(want != "" ? "[STEAM] статус для друзей выставлен: сервер виден друзьям в Steam" : "[STEAM] статус для друзей снят");
                     presenceNow = want;
                 }
@@ -395,6 +496,7 @@ namespace SodCoop
                 helloAt = now + 2f;
                 try { HelloJoiners(now); } catch (Exception e) { Plugin.L.LogWarning("[STEAM] друзья: " + e.Message); }
             }
+            try { JoinTick(now); } catch (Exception e) { pendingJoin = 0; Plugin.L.LogWarning("[STEAM] вход по приглашению: " + e.Message); }
             if (menuOpen && now >= friendsAt && Ready)
             {
                 friendsAt = now + 3f;
@@ -436,19 +538,26 @@ namespace SodCoop
             foreach (ulong id in FriendsInGame())
             {
                 if (req) SteamAPI_ISteamFriends_RequestFriendRichPresence(friends, id);
-                string v = FromUtf8(SteamAPI_ISteamFriends_GetFriendRichPresence(friends, id, PresenceKeyB));
-                if (v == "") continue;
-                var p = v.Split(new[] { '|' }, 7);
-                if (p.Length < 7 || p[0] != "1") continue;
-                var sv = new Lan.Server();
-                sv.Version = p[1]; sv.Pw = p[2] == "1";
-                int x; if (int.TryParse(p[3], out x)) sv.Players = x; if (int.TryParse(p[4], out x)) sv.Max = x;
-                sv.Seed = p[5];
-                sv.Name = p[6] + "  (Steam: " + FromUtf8(SteamAPI_ISteamFriends_GetFriendPersonaName(friends, id)) + ")";
-                sv.Ip = "steam:" + id; sv.Port = 0; sv.Seen = now;
+                var sv = PresenceServer(id, now);
+                if (sv == null) continue;
                 int idx = Lan.Servers.FindIndex(s => s.Ip == sv.Ip);
                 if (idx >= 0) Lan.Servers[idx] = sv; else Lan.Servers.Add(sv);
             }
+        }
+
+        static Lan.Server PresenceServer(ulong id, float now)
+        {
+            string v = FromUtf8(SteamAPI_ISteamFriends_GetFriendRichPresence(friends, id, PresenceKeyB));
+            if (v == "") return null;
+            var p = v.Split(new[] { '|' }, 7);
+            if (p.Length < 7 || p[0] != "1") return null;
+            var sv = new Lan.Server();
+            sv.Version = p[1]; sv.Pw = p[2] == "1";
+            int x; if (int.TryParse(p[3], out x)) sv.Players = x; if (int.TryParse(p[4], out x)) sv.Max = x;
+            sv.Seed = p[5];
+            sv.Name = p[6] + "  (Steam: " + FromUtf8(SteamAPI_ISteamFriends_GetFriendPersonaName(friends, id)) + ")";
+            sv.Ip = "steam:" + id; sv.Port = 0; sv.Seen = now;
+            return sv;
         }
 
         internal static string FriendName(string addr)
