@@ -77,14 +77,17 @@ namespace SodCoop
         {
             get
             {
-                if (probed) return ok;
-                probed = true;
+                if (ok) return true;
+                float now = Time.realtimeSinceStartup;
+                if (probed && now < probeAt) return false;
+                probed = true; probeAt = now + 5f;
+                EnsureResolver();
                 try
                 {
-                    if (SteamAPI_GetHSteamUser() == 0) { Plugin.L.LogInfo("[STEAM] Steam не запущен - подключение через Steam недоступно"); return ok = false; }
+                    if (SteamAPI_GetHSteamUser() == 0) { ProbeLog("[STEAM] Steam ещё не запущен игрой - проверю позже"); return ok = false; }
                     user = SteamAPI_SteamUser_v023(); friends = SteamAPI_SteamFriends_v017();
                     msgs = SteamAPI_SteamNetworkingMessages_SteamAPI_v002(); utils = SteamAPI_SteamNetworkingUtils_SteamAPI_v004();
-                    if (user == IntPtr.Zero || friends == IntPtr.Zero || msgs == IntPtr.Zero || utils == IntPtr.Zero) { Plugin.L.LogWarning("[STEAM] интерфейсы Steam не найдены"); return ok = false; }
+                    if (user == IntPtr.Zero || friends == IntPtr.Zero || msgs == IntPtr.Zero || utils == IntPtr.Zero) { ProbeLog("[STEAM] интерфейсы Steam не найдены - проверю позже"); return ok = false; }
                     me = SteamAPI_ISteamUser_GetSteamID(user);
                     try { SteamAPI_ISteamNetworkingUtils_InitRelayNetworkAccess(utils); } catch (Exception e) { Plugin.L.LogWarning("[STEAM] relay: " + e.Message); }
                     sessionCb = OnSessionRequest;
@@ -95,11 +98,43 @@ namespace SodCoop
                     RegisterJoin();
                     return true;
                 }
-                catch (Exception e) { Plugin.L.LogInfo("[STEAM] Steam API недоступен: " + e.Message); return ok = false; }
+                catch (Exception e) { ProbeLog("[STEAM] Steam API недоступен: " + e.Message); return ok = false; }
             }
         }
 
         internal static ulong MyId { get { return Ready ? me : 0; } }
+
+        static float probeAt;
+        static string probeMsg = "";
+        static bool resolverSet;
+
+        static void ProbeLog(string m) { if (m != probeMsg) { probeMsg = m; Plugin.L.LogInfo(m); } }
+
+        static void EnsureResolver()
+        {
+            if (resolverSet) return;
+            resolverSet = true;
+            try
+            {
+                NativeLibrary.SetDllImportResolver(typeof(SteamLink).Assembly, (name, asm, path) =>
+                {
+                    if (name != Api) return IntPtr.Zero;
+                    try
+                    {
+                        string exe = Environment.ProcessPath ?? "";
+                        string data = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(exe) ?? "", System.IO.Path.GetFileNameWithoutExtension(exe) + "_Data", "Plugins");
+                        foreach (var f in new[] { System.IO.Path.Combine(data, "x86_64", Api + ".dll"), System.IO.Path.Combine(data, Api + ".dll") })
+                        {
+                            IntPtr h;
+                            if (System.IO.File.Exists(f) && NativeLibrary.TryLoad(f, out h)) return h;
+                        }
+                    }
+                    catch (Exception __e) { Err.Swallow(__e); }
+                    return IntPtr.Zero;
+                });
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[STEAM] поиск steam_api64: " + e.Message); }
+        }
 
         static SteamJoinCallback joinCb;
         static bool joinTried;

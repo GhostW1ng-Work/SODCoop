@@ -1863,8 +1863,19 @@ namespace SodCoop
             inName = UiKit.Input(c, x, y, 560f, 46f, fName, 32, false); y += 62f;
             UiKit.Label(c, UiKit.T("Password (empty = no password)", "Пароль (пусто = без пароля)"), x, y, 560f, 32f); y += 34f;
             inPass = UiKit.Input(c, x, y, 560f, 46f, fPass, 32, true); y += 62f;
-            UiKit.Label(c, UiKit.T("Port", "Порт"), x, y, 560f, 32f); y += 34f;
-            inPort = UiKit.Input(c, x, y, 200f, 46f, fPort, 5, false); y += 62f;
+            UiKit.Label(c, UiKit.T("Port", "Порт"), x, y, 200f, 32f);
+            UiKit.Label(c, UiKit.T("Players connect via", "Как подключаться"), x + 220f, y, 380f, 32f); y += 34f;
+            inPort = UiKit.Input(c, x, y, 200f, 46f, fPort, 5, false);
+            bool steamOk = SteamLink.Ready, viaSteam = steamOk && Plugin.CfgSteam.Value;
+            var bSteam = UiKit.Button(c, "Steam", x + 220f, y, 185f, 46f, () =>
+            {
+                Harvest();
+                if (!SteamLink.Ready) { msg = UiKit.T("Steam is not running: start the game through Steam.", "Steam не запущен: запусти игру через Steam."); return; }
+                Plugin.CfgSteam.Value = true; builtSig = "";
+            }, 20f);
+            var bLan = UiKit.Button(c, UiKit.T("LAN / IP", "LAN / IP"), x + 415f, y, 185f, 46f, () => { Harvest(); Plugin.CfgSteam.Value = false; builtSig = ""; }, 20f);
+            UiKit.SetSelected(bSteam, viaSteam); UiKit.SetSelected(bLan, !viaSteam);
+            y += 62f;
             UiKit.Label(c, UiKit.T("Max players: ", "Игроков максимум: ") + Mathf.Clamp(Plugin.CfgMaxPlayers.Value, 2, 4) + UiKit.T(". Rules: ", ". Правила: ") + Rules.Summary(), x, y, 600f, 64f, 18f, TMPro.TextAlignmentOptions.TopLeft); y += 66f;
             UiKit.Label(c, UiKit.T("Load save starts the selected save at once. New game: set it up yourself. The server starts when the city has loaded.",
                 "«Загрузить сейв» сразу запускает выбранный сейв. «Новая игра» - настрой её сам. Сервер запустится, когда город загрузится."), x, y, 600f, 90f, 20f, TMPro.TextAlignmentOptions.TopLeft);

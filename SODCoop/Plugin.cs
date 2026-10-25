@@ -23,7 +23,7 @@ namespace SodCoop
     [BepInPlugin("com.flyingfrogs.sodcoop", "SodCoop", Plugin.ModVersion)]
     public class Plugin : BasePlugin
     {
-        internal const string ModVersion = "0.16.1";
+        internal const string ModVersion = "0.16.2";
         internal static ManualLogSource L;
         internal static void Dbg(string m) { try { if (CfgDebugLog != null && CfgDebugLog.Value) L.LogInfo(m); } catch (System.Exception) { } }
         internal static ConfigEntry<NetMode> CfgMode;
