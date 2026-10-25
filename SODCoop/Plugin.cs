@@ -23,12 +23,13 @@ namespace SodCoop
     [BepInPlugin("com.flyingfrogs.sodcoop", "SodCoop", Plugin.ModVersion)]
     public class Plugin : BasePlugin
     {
-        internal const string ModVersion = "0.15.0";
+        internal const string ModVersion = "0.16.0";
         internal static ManualLogSource L;
         internal static void Dbg(string m) { try { if (CfgDebugLog != null && CfgDebugLog.Value) L.LogInfo(m); } catch (System.Exception) { } }
         internal static ConfigEntry<NetMode> CfgMode;
         internal static ConfigEntry<string> CfgAddress;
         internal static ConfigEntry<int> CfgPort;
+        internal static ConfigEntry<bool> CfgSteam, CfgSteamTestUdp;
         internal static ConfigEntry<string> CfgPassword, CfgServerName;
         internal static ConfigEntry<bool> CfgDebugAvatar;
         internal static ConfigEntry<bool> CfgDumpCitizen;
@@ -144,6 +145,8 @@ namespace SodCoop
             CfgMode = Config.Bind("Network", "Mode", NetMode.Off, "Off, Host or Client");
             CfgAddress = Config.Bind("Network", "Address", "127.0.0.1", "Host IP address (used by Client)");
             CfgPort = Config.Bind("Network", "Port", 9050, "UDP port");
+            CfgSteam = Config.Bind("Network", "Steam", true, "Host: Steam friends see the server in the Multiplayer list and connect through Steam (no port forwarding needed)");
+            CfgSteamTestUdp = Config.Bind("Network", "SteamTestUdp", false, "Test the Steam bridge without Steam: the host listens on Port+1, a client connects by typing steamtest:<host IP> in Direct connect");
             CfgPassword = Config.Bind("Network", "Password", "", "Server password (empty = no password)");
             CfgServerName = Config.Bind("Network", "ServerName", "SodCoop server", "Server name shown in the LAN list");
 

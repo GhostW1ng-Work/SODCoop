@@ -474,6 +474,7 @@ namespace SodCoop
                     manager.Start(RtPort);
                     Plugin.L.LogInfo($"[NET] Хост запущен, UDP-порт {RtPort}. {Describe()}");
                     Lan.StartAdvertise();
+                    try { SteamLink.StartHost(RtPort); } catch (Exception e) { Plugin.L.LogWarning("[STEAM] " + e.Message); }
                     try { ProfilesHostInit(); } catch (Exception e) { Plugin.L.LogWarning("[PROFILE] " + e.Message); }
                 }
                 else
@@ -501,10 +502,16 @@ namespace SodCoop
                 if (!IsHost && serverPeer == null && !connecting && !connectRejected &&
                     Time.realtimeSinceStartup >= nextAttempt)
                 {
+                    string ca = RtAddress; int cp = RtPort;
+                    if (SteamLink.IsSteamAddress(RtAddress))
+                    {
+                        cp = SteamLink.StartClient(RtAddress, RtPort); ca = "127.0.0.1";
+                        if (cp < 0) { nextAttempt = Time.realtimeSinceStartup + 5f; return; }
+                    }
                     connecting = true;
                     var cw = new NetDataWriter();
                     cw.Put(Key); cw.Put(RtPassword ?? ""); cw.Put(Plugin.ModVersion);
-                    manager.Connect(RtAddress, RtPort, cw);
+                    manager.Connect(ca, cp, cw);
                 }
             }
             catch (Exception e)

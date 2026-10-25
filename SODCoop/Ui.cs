@@ -993,6 +993,7 @@ namespace SodCoop
 
         internal static void Tick()
         {
+            try { SteamLink.Tick(NetMenu.Open); } catch (Exception e) { Plugin.L.LogWarning("[STEAM] " + e.Message); }
             try
             {
                 if (hostSock != null)
@@ -1718,7 +1719,7 @@ namespace SodCoop
                 if (!sv.Compatible) nm += "  (" + UiKit.T("mod ", "мод ") + (sv.Version != "" ? sv.Version : UiKit.T("older than 0.12.0", "старее 0.12.0")) + UiKit.T(", incompatible)", ", несовместим)");
                 UiKit.Label(row.transform, nm, 12f, 0f, 510f, 50f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, sv.Compatible ? Color.white : UiKit.HeadColor);
                 UiKit.Label(row.transform, sv.Players + " / " + sv.Max, 536f, 0f, 160f, 50f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, Color.white);
-                UiKit.Label(row.transform, sv.Ip + ":" + sv.Port, 716f, 0f, 300f, 50f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, Color.white);
+                UiKit.Label(row.transform, sv.Port == 0 ? "Steam" : sv.Ip + ":" + sv.Port, 716f, 0f, 300f, 50f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, Color.white);
                 UiKit.Label(row.transform, sv.Seed, 1036f, 0f, W - 1100f, 50f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, Color.white);
                 y += 56f;
             }
@@ -1893,7 +1894,7 @@ namespace SodCoop
             Lan.Server sv = null;
             foreach (var x in Lan.Servers) if (x.Ip == selIp && x.Port == selPort) sv = x;
             float px = 36f, y = 16f;
-            UiKit.Label(c, sv != null ? UiKit.T("Server: ", "Сервер: ") + sv.Name + "  (" + sv.Ip + ":" + sv.Port + ")" : UiKit.T("Server is gone", "Сервер пропал"), px, y, 900f, 32f); y += 50f;
+            UiKit.Label(c, sv != null ? UiKit.T("Server: ", "Сервер: ") + sv.Name + (sv.Port == 0 ? "" : "  (" + sv.Ip + ":" + sv.Port + ")") : UiKit.T("Server is gone", "Сервер пропал"), px, y, 900f, 32f); y += 50f;
             UiKit.Label(c, UiKit.T("Password", "Пароль"), px, y, 560f, 32f); y += 34f;
             inAPass = UiKit.Input(c, px, y, 560f, 46f, fAPass, 32, true);
             UiKit.BarButton(win, UiKit.T("Connect", "Подключиться"), 300f, () =>

@@ -43,6 +43,7 @@ Play Shadows of Doubt together with friends: one city, one clock, the same citiz
 - Configurable server rules.
 - **New game** opens the sandbox city selection right away.
 - LAN discovery, optional password, direct connect by IP.
+- Connect through Steam: Steam friends who host appear in the Multiplayer list, no port forwarding needed.
 - Joining players download the host's save automatically.
 
 **Convenience**
@@ -131,6 +132,7 @@ MIT, see [LICENSE.txt](LICENSE.txt).
 - Настраиваемые параметры сервера
 - **Новая игра** сразу открывает выбор города в песочнице.
 - Поиск серверов в локальной сети, пароль, прямое подключение по IP.
+- Подключение через Steam: друзья из Steam, которые создали сервер, видны в списке «Мультиплеер», открывать порты не нужно.
 - Подключившийся игрок сам скачивает сохранение хоста.
 
 **Удобства**

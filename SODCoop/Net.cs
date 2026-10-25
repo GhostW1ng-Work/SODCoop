@@ -781,8 +781,13 @@ namespace SodCoop
             Toast("Multiplayer is off. Use the MULTIPLAYER button in the main menu to start again.");
         }
 
+        internal static bool HostingNow { get { return IsHost && manager != null; } }
+
+        static string ShownAddr() { return SteamLink.IsSteamAddress(RtAddress) ? SteamLink.FriendName(RtAddress) : RtAddress + ":" + RtPort; }
+
         internal static void Shutdown()
         {
+            try { SteamLink.Stop(); } catch (Exception e) { Plugin.L.LogWarning("[STEAM] " + e.Message); }
             try { PermaOnShutdown(); } catch (Exception e) { Plugin.L.LogWarning("[MODS] " + e.Message); }
             try { ModifiersRestore(); } catch (Exception e) { Plugin.L.LogWarning("[MODS] " + e.Message); }
             Rules.Clear();
@@ -824,10 +829,10 @@ namespace SodCoop
             if (RtMode == NetMode.Off) return "";
             if (RtMode == NetMode.Host && sendStage != 0) return UiKit.T("HOSTING: sending the save to a player...", "ХОСТ: отправляю сейв игроку...");
             if (RtMode == NetMode.Host) return (manager != null ? UiKit.T("HOSTING", "ХОСТ") : UiKit.T("HOST (starts when the city has loaded)", "ХОСТ (запустится, когда город загрузится)")) + ": " + RtName + " : " + RtPort + (manager != null ? "   [" + (players.Count + 1) + "/" + Mathf.Clamp(Plugin.CfgMaxPlayers.Value, 2, 4) + UiKit.T(" players", " игроков") + (players.Count == 0 ? UiKit.T(", waiting", ", жду") : "") + "]   " + UiKit.T("(End = stop)", "(End - остановить)") : "");
-            if (connectRejected) return UiKit.T("REJECTED by ", "ОТКАЗ от ") + RtAddress + ":" + RtPort + UiKit.T(" (wrong password?)", " (неверный пароль?)");
-            if (serverPeer != null) return UiKit.T("CONNECTED to ", "ПОДКЛЮЧЁН к ") + RtAddress + ":" + RtPort + "   " + UiKit.T("(End = leave multiplayer)", "(End - выйти из мультиплеера)");
-            if (lostAt >= 0f && manager != null) return UiKit.T("CONNECTION LOST, reconnecting to ", "СВЯЗЬ ПОТЕРЯНА, переподключаюсь к ") + RtAddress + ":" + RtPort + " ...   " + UiKit.T("(End = leave multiplayer)", "(End - выйти из мультиплеера)");
-            return (manager != null ? UiKit.T("CONNECTING", "ПОДКЛЮЧАЮСЬ") : UiKit.T("CLIENT (connects when the city has loaded; load the same save as the host)", "КЛИЕНТ (подключусь, когда город загрузится; загрузи тот же сейв, что у хоста)")) + ": " + RtAddress + ":" + RtPort;
+            if (connectRejected) return UiKit.T("REJECTED by ", "ОТКАЗ от ") + ShownAddr() + UiKit.T(" (wrong password?)", " (неверный пароль?)");
+            if (serverPeer != null) return UiKit.T("CONNECTED to ", "ПОДКЛЮЧЁН к ") + ShownAddr() + "   " + UiKit.T("(End = leave multiplayer)", "(End - выйти из мультиплеера)");
+            if (lostAt >= 0f && manager != null) return UiKit.T("CONNECTION LOST, reconnecting to ", "СВЯЗЬ ПОТЕРЯНА, переподключаюсь к ") + ShownAddr() + " ...   " + UiKit.T("(End = leave multiplayer)", "(End - выйти из мультиплеера)");
+            return (manager != null ? UiKit.T("CONNECTING", "ПОДКЛЮЧАЮСЬ") : UiKit.T("CLIENT (connects when the city has loaded; load the same save as the host)", "КЛИЕНТ (подключусь, когда город загрузится; загрузи тот же сейв, что у хоста)")) + ": " + ShownAddr();
         }
 
         static Appearance remoteApp;
