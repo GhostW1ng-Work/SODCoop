@@ -48,6 +48,7 @@ namespace SodCoop
         internal static ConfigEntry<bool> CfgJobSync;
         internal static ConfigEntry<bool> CfgJobHostAuthority;
         internal static ConfigEntry<string> CfgShareEvidenceKey;
+        internal static ConfigEntry<string> CfgInviteKey;
         internal static ConfigEntry<float> CfgTripFall, CfgTripGetUp;
         internal static ConfigEntry<float> CfgDownedSeconds, CfgReviveHoldSeconds, CfgReviveDistance, CfgReviveHealth, CfgDownedHitPenalty;
         internal static ConfigEntry<string> CfgReviveKey;
@@ -175,6 +176,8 @@ namespace SodCoop
                 "Only the host runs the job logic (phases, objectives, items, calls); clients follow the host. Off = every player runs his own copy of the job (old behaviour)");
             CfgJobSync = Config.Bind("Jobs", "Sync", true,
                 "Job board: only the host creates jobs and sends them (with their items) to the clients; a job taken by one player is taken by all (each gets his own case), and everybody gets the reward when it is handed in");
+            CfgInviteKey = Config.Bind("Apartment", "InviteKey", "F7",
+                "Key to invite another player to live in the apartment you are standing in (name from UnityEngine.KeyCode)");
             CfgShareEvidenceKey = Config.Bind("Jobs", "ShareEvidenceHotkey", "",
                 "Optional key that shares the item selected on your case board (empty = off; use the right-click menu item 'Share with players' instead)");
             CfgDowned = Config.Bind("Downed", "Enabled", true,

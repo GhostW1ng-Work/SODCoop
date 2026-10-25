@@ -59,6 +59,53 @@ namespace SodCoop
             ApplyHostModifiers();
         }
 
+        static string ModRestorePath { get { return System.IO.Path.Combine(BepInEx.Paths.ConfigPath, "SodCoop_modrestore.txt"); } }
+        static bool modLeakChecked;
+
+        static void WriteModRestore()
+        {
+            try
+            {
+                if (modOrig.Count == 0) { if (System.IO.File.Exists(ModRestorePath)) System.IO.File.Delete(ModRestorePath); return; }
+                var lines = new List<string>();
+                foreach (var kv in modOrig) lines.Add(kv.Key + "=" + kv.Value);
+                System.IO.File.WriteAllLines(ModRestorePath, lines);
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[MODS] файл возврата модификаторов: " + e.Message); }
+        }
+
+        internal static void ModLeakCheck()
+        {
+            if (modLeakChecked || manager != null) return;
+            var pp = PlayerPrefsController.Instance;
+            if (pp == null || pp.gameSettingControls == null || pp.gameSettingControls.Count == 0) return;
+            modLeakChecked = true;
+            if (!System.IO.File.Exists(ModRestorePath)) return;
+            var back = new List<string>();
+            try
+            {
+                foreach (var line in System.IO.File.ReadAllLines(ModRestorePath))
+                {
+                    int eq = line.IndexOf('='); int v;
+                    if (eq <= 0 || !int.TryParse(line.Substring(eq + 1), out v)) continue;
+                    string id = line.Substring(0, eq);
+                    foreach (var s in pp.gameSettingControls)
+                    {
+                        if (s == null || s.identifier != id) continue;
+                        s.intValue = v;
+                        PlayerPrefs.SetInt(id, v);
+                        try { pp.OnToggleChanged(id, false, null); } catch (Exception __e) { Err.Swallow(__e); }
+                        back.Add(id + "=" + v);
+                        break;
+                    }
+                }
+                PlayerPrefs.Save();
+                System.IO.File.Delete(ModRestorePath);
+            }
+            catch (Exception e) { Plugin.L.LogWarning("[MODS] возврат модификаторов после прошлой игры: " + e.Message); }
+            Plugin.L.LogInfo("[MODS] прошлая игра закончилась с модификаторами хоста - вернул свои: " + string.Join(", ", back));
+        }
+
         static bool SetSetting(string id, int v)
         {
             var pp = PlayerPrefsController.Instance;
@@ -88,7 +135,7 @@ namespace SodCoop
                 }
                 int cur = LocalSetting(id);
                 if (cur == want) continue;
-                if (!modOrig.ContainsKey(id)) modOrig[id] = cur;
+                if (!modOrig.ContainsKey(id)) { modOrig[id] = cur; WriteModRestore(); }
                 try { if (SetSetting(id, want)) changed.Add(id + "=" + want); else Plugin.L.LogWarning($"[MODS] настройка '{id}' не найдена"); }
                 catch (Exception e) { Plugin.L.LogWarning($"[MODS] {id}: {e.Message}"); }
             }
@@ -139,6 +186,7 @@ namespace SodCoop
                 try { if (SetSetting(kv.Key, kv.Value)) back.Add(kv.Key + "=" + kv.Value); } catch (Exception e) { Plugin.L.LogWarning($"[MODS] вернуть {kv.Key}: {e.Message}"); }
             }
             modOrig.Clear();
+            WriteModRestore();
             SyncLocalSnail();
             Plugin.L.LogInfo("[MODS] вернул свои модификаторы: " + string.Join(", ", back));
         }

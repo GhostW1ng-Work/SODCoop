@@ -226,7 +226,7 @@ namespace SodCoop
 
         static bool IsRelayed(byte t)
         {
-            return t == MsgPos || t == MsgAction || t == MsgItem || t == MsgHeld || t == MsgObj || t == MsgItemEv || t == MsgDoor || t == MsgBodyFx || t == MsgShot || t == MsgWeapon || t == MsgSound || t == MsgDown || t == MsgRevive || t == MsgElevator || t == MsgKnock || t == MsgJob || t == MsgMurder || t == MsgCorpse || t == MsgSnail || t == MsgPermaDead;
+            return t == MsgPos || t == MsgAction || t == MsgItem || t == MsgHeld || t == MsgObj || t == MsgItemEv || t == MsgDoor || t == MsgBodyFx || t == MsgShot || t == MsgWeapon || t == MsgSound || t == MsgDown || t == MsgRevive || t == MsgElevator || t == MsgKnock || t == MsgJob || t == MsgMurder || t == MsgCorpse || t == MsgSnail || t == MsgPermaDead || t == MsgInvite;
         }
 
         static bool NeedsCtx(byte t)
@@ -387,6 +387,10 @@ namespace SodCoop
             else if (type == MsgPermaDead)
             {
                 OnPermaDeadMsg(rp, reader);
+            }
+            else if (type == MsgInvite)
+            {
+                OnInviteMsg(reader);
             }
             else if (type == MsgDebt)
             {

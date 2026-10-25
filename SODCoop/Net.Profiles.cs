@@ -40,7 +40,7 @@ namespace SodCoop
             public bool hasState; public float val, cs;
             public System.Collections.Generic.List<ProfPv> pv = new System.Collections.Generic.List<ProfPv>();
         }
-        public sealed class ProfApt { public int id; public System.Collections.Generic.List<int[]> rems = new System.Collections.Generic.List<int[]>(); }
+        public sealed class ProfApt { public int id; public bool guest; public System.Collections.Generic.List<int[]> rems = new System.Collections.Generic.List<int[]>(); }
         public sealed class ProfCode { public int type, id; public System.Collections.Generic.List<int> digits = new System.Collections.Generic.List<int>(); }
         public sealed class ProfDebt { public int company, debt, payments, missed; public float due, check; }
         public sealed class ProfDisk { public string upgrade = ""; public int state, list, level, objId, uninstallCost; }
@@ -901,13 +901,13 @@ namespace SodCoop
             Plugin.L.LogInfo($"[PROFILE] игра сохранена: профили игроков ({profiles.Count}) записаны в {Path.GetFileName(snapPath)}");
         }
 
-        static void ProfileNoteApt(RP rp, int id, System.Collections.Generic.List<int[]> rems)
+        static void ProfileNoteApt(RP rp, int id, System.Collections.Generic.List<int[]> rems, bool guest = false)
         {
             if (!Plugin.CfgProfiles.Value || rp == null || string.IsNullOrEmpty(rp.profileId)) return;
             ProfileData pd;
             if (!profiles.TryGetValue(rp.profileId, out pd)) { pd = new ProfileData(); pd.id = rp.profileId; profiles[rp.profileId] = pd; }
             pd.apts.RemoveAll(a => a.id == id);
-            var pa = new ProfApt(); pa.id = id; pa.rems = rems ?? new System.Collections.Generic.List<int[]>();
+            var pa = new ProfApt(); pa.id = id; pa.guest = guest; pa.rems = rems ?? new System.Collections.Generic.List<int[]>();
             pd.apts.Add(pa);
             profDirty = true;
             Plugin.L.LogInfo($"[PROFILE] квартира (адрес {id}) записана игроку {rp.pid}");

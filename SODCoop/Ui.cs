@@ -1215,6 +1215,7 @@ namespace SodCoop
         {
             bool vis = false;
             try { var mm = MainMenuController.Instance; vis = mm != null && mm.mainMenuActive; } catch (Exception __e) { Err.Swallow(__e); }
+            try { Net.InviteUiTick(); } catch (Exception e) { Plugin.L.LogWarning("[UI] приглашение: " + e.Message); }
             if (!vis && !NetMenu.Open && !CharEditor.Open && !Net.CheatMenuOpen) return;
             if (!Init()) return;
             if (mpBtn == null || chBtn == null) AddMainButtons();
@@ -1233,6 +1234,7 @@ namespace SodCoop
             try { Updater.Start(); Updater.Tick(); } catch (Exception e) { Plugin.L.LogWarning("[UPDATE] " + e.Message); }
             try { MessageTick(); } catch (Exception e) { Plugin.L.LogWarning("[UI] сообщение: " + e.Message); }
             try { Net.CheatMenuUiTick(); } catch (Exception e) { Plugin.L.LogWarning("[UI] читы: " + e.Message); }
+            try { Net.ModLeakCheck(); } catch (Exception e) { Plugin.L.LogWarning("[MODS] " + e.Message); }
             try { NetMenu.UiTick(); } catch (Exception e) { Plugin.L.LogWarning("[UI] мультиплеер: " + e.Message); }
             try { CharEditor.UiTick(); } catch (Exception e) { Plugin.L.LogWarning("[UI] персонаж: " + e.Message); }
         }
