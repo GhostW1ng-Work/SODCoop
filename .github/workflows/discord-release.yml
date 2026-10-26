@@ -1,0 +1,51 @@
+name: Post release to Discord
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to post (empty = latest release)"
+        required: false
+        default: ""
+
+jobs:
+  discord:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get release
+        id: rel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_RELEASE: ${{ toJSON(github.event.release) }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            printf '%s' "$EVENT_RELEASE" > release.json
+          elif [ -n "$TAG" ]; then
+            gh api "repos/${{ github.repository }}/releases/tags/$TAG" > release.json
+          else
+            gh api "repos/${{ github.repository }}/releases/latest" > release.json
+          fi
+          jq -r '.tag_name' release.json
+
+      - name: Send release to Discord
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+          THREAD_NAME: ${{ vars.DISCORD_THREAD_NAME }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then echo "DISCORD_RELEASE_WEBHOOK is not set"; exit 1; fi
+          NAME=$(jq -r '.name // ""' release.json)
+          TAG=$(jq -r '.tag_name' release.json)
+          URL=$(jq -r '.html_url' release.json)
+          TITLE="SodCoop ${NAME:-$TAG}"
+          DESC=$(jq -r '.body // ""' release.json | head -c 3900)
+          jq -n --arg title "$TITLE" --arg url "$URL" --arg desc "$DESC" --arg thread "$THREAD_NAME" '
+            {
+              content: ("**" + $title + "** is out: " + $url),
+              embeds: [{ title: $title, url: $url, description: $desc, color: 13382451 }]
+            }
+            + (if $thread != "" then { thread_name: ($thread | gsub("\\{title\\}"; $title)) } else {} end)
+          ' > payload.json
+          curl -sS --fail-with-body -H "Content-Type: application/json" -d @payload.json "$WEBHOOK"
