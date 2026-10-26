@@ -81,6 +81,9 @@ namespace SodCoop
                 float now = Time.realtimeSinceStartup;
                 if (probed && now < probeAt) return false;
                 probed = true; probeAt = now + 5f;
+                bool gameSteam = false;
+                try { var sm = SteamManager.s_instance; gameSteam = sm != null && sm.m_bInitialized; } catch (Exception __e) { Err.Swallow(__e); }
+                if (!gameSteam) { ProbeLog("[STEAM] игра не запустила Steam - подключение через Steam недоступно"); return false; }
                 EnsureResolver();
                 try
                 {
