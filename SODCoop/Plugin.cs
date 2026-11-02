@@ -142,6 +142,7 @@ namespace SodCoop
         public override void Load()
         {
             L = Log;
+            Config.SaveOnConfigSet = false;
             CfgMode = Config.Bind("Network", "Mode", NetMode.Off, "Off, Host or Client");
             CfgAddress = Config.Bind("Network", "Address", "127.0.0.1", "Host IP address (used by Client)");
             CfgPort = Config.Bind("Network", "Port", 9050, "UDP port");
@@ -398,6 +399,8 @@ namespace SodCoop
             }
             catch (Exception e) { L.LogWarning("[DRV] не удалось запустить драйвер: " + e.Message); }
             CfgProbeKey = Config.Bind("Debug", "ProbeKey", "", "Клавиша разведки для редактора персонажа, пусто = выключено (имя из UnityEngine.KeyCode, например F4, Backslash, Keypad0)");
+            Config.SaveOnConfigSet = true;
+            try { Config.Save(); } catch (Exception e) { L.LogWarning("[CFG] не удалось записать настройки (файл занят другой копией игры?): " + e.Message); }
             Harmony.CreateAndPatchAll(typeof(PlayerPatch));
             Harmony.CreateAndPatchAll(typeof(MeleePatch));
             Harmony.CreateAndPatchAll(typeof(BlockPatch));

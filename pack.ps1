@@ -45,9 +45,15 @@ foreach ($f in "winhttp.dll", "doorstop_config.ini", ".doorstop_version") { Copy
 Copy-Item (Join-Path $BepInExFrom "dotnet") (Join-Path $stage "dotnet") -Recurse
 New-Item -ItemType Directory -Force -Path (Join-Path $stage "BepInEx\plugins"), (Join-Path $stage "BepInEx\config") | Out-Null
 Copy-Item (Join-Path $BepInExFrom "BepInEx\core") (Join-Path $stage "BepInEx\core") -Recurse
-# базовые библиотеки Unity: без них BepInEx при первом запуске скачивает их из интернета
+# базовые библиотеки Unity, уже распакованные: без них BepInEx при первом запуске скачивает их из интернета, и у части
+# игроков это скачивание роняет игру. Zip с теми же библиотеками не кладём: вложенный архив отправляет файл на карантин Nexus,
+# а с пустым UnityBaseLibrariesSource (см. BepInEx.cfg ниже) BepInEx берёт распакованные dll и ничего не качает.
 $unityLibs = Join-Path $BepInExFrom "BepInEx\unity-libs"
-if (Test-Path $unityLibs) { Copy-Item $unityLibs (Join-Path $stage "BepInEx\unity-libs") -Recurse }
+if (Test-Path $unityLibs) {
+    Copy-Item $unityLibs (Join-Path $stage "BepInEx\unity-libs") -Recurse
+    Get-ChildItem (Join-Path $stage "BepInEx\unity-libs") -Filter *.zip | Remove-Item -Force
+}
+if (-not (Test-Path (Join-Path $stage "BepInEx\unity-libs\UnityEngine.CoreModule.dll"))) { throw "missing unpacked Unity base libraries in $unityLibs" }
 
 Copy-Item (Join-Path $bin "SODCoop.dll"), (Join-Path $bin "LiteNetLib.dll") (Join-Path $stage "BepInEx\plugins")
 
@@ -58,6 +64,9 @@ Enabled = false
 
 [Logging.Disk]
 InstantFlushing = true
+
+[IL2CPP]
+UnityBaseLibrariesSource =
 "@ | Set-Content -Path (Join-Path $stage "BepInEx\config\BepInEx.cfg") -Encoding UTF8
 
 # настройки мода: читы выключены в самом моде по умолчанию; для тестеров (-Cheats) включаем (остальное мод допишет сам)
