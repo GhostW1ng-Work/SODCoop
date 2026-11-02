@@ -1664,10 +1664,33 @@ namespace SodCoop
             return sb.ToString();
         }
 
+        static bool voiceBind;
+        static KeyCode[] allKeys;
+
+        static void VoiceBindTick()
+        {
+            if (!voiceBind) return;
+            if (page != 0) { voiceBind = false; return; }
+            if (allKeys == null) allKeys = (KeyCode[])Enum.GetValues(typeof(KeyCode));
+            foreach (var k in allKeys)
+            {
+                if (k == KeyCode.None || k == KeyCode.Mouse0 || k == KeyCode.Mouse1) continue;
+                bool down = false;
+                try { down = Net.KeyDown(k); } catch (Exception __e) { Err.Swallow(__e); }
+                if (!down) continue;
+                voiceBind = false; builtSig = "";
+                if (k == KeyCode.Escape) return;
+                Plugin.CfgVoiceKey.Value = k.ToString();
+                Plugin.L.LogInfo("[VOICE] клавиша голоса: " + k);
+                return;
+            }
+        }
+
         internal static void UiTick()
         {
             if (!Open || !UiOn) return;
             if (UiKit.MainPanelShown) { CloseMenu(); return; }
+            try { VoiceBindTick(); } catch (Exception e) { voiceBind = false; Plugin.L.LogWarning("[VOICE] " + e.Message); }
             string sig = Sig();
             if (sig != builtSig) { Harvest(); Rebuild(); builtSig = sig; }
             if (Time.realtimeSinceStartup >= uiAt)
@@ -1710,7 +1733,7 @@ namespace SodCoop
             if (list.Count == 0)
                 UiKit.Label(c, UiKit.T("No servers found yet. The host must have loaded a city. Use Direct connect to type an address.",
                     "Серверов пока нет. Хост должен загрузить город. Можно подключиться по адресу."), 36f, y + 6f, W - 72f, 40f, 22f);
-            for (int i = 0; i < list.Count && i < 8; i++)
+            for (int i = 0; i < list.Count && i < 7; i++)
             {
                 var sv = list[i];
                 string ip = sv.Ip; int port = sv.Port;
@@ -1724,6 +1747,10 @@ namespace SodCoop
                 UiKit.Label(row.transform, sv.Seed, 1036f, 0f, W - 1100f, 50f, 22f, TMPro.TextAlignmentOptions.MidlineLeft, Color.white);
                 y += 56f;
             }
+            var crt = win.Content; float H = crt.rect.height > 100f ? crt.rect.height : 604f;
+            var vb = UiKit.Button(c, voiceBind ? UiKit.T("Press a key for voice... (Esc = cancel)", "Нажми клавишу для голоса... (Esc - отмена)") : UiKit.T("Push-to-talk key: ", "Клавиша голоса: ") + Net.VoiceKey(),
+                24f, H - 132f, 520f, 42f, () => { voiceBind = !voiceBind; builtSig = ""; }, 20f);
+            UiKit.SetSelected(vb, voiceBind);
             Lan.Server sel = null;
             foreach (var x in list) if (x.Ip == selIp && x.Port == selPort) sel = x;
             UiKit.BarButton(win, UiKit.T("Host", "Создать"), 160f, () => { page = 1; msg = ""; hostSaves = MenuAuto.SaveNames(); hostSel = 0; hostTop = 0; });

@@ -502,6 +502,7 @@ namespace SodCoop
                 manager.PollEvents();
                 XferTick();
                 if (manager == null) return;
+                try { VoiceTick(); } catch (Exception e) { Plugin.L.LogWarning("[VOICE] " + e.Message); }
 
                 if (!IsHost && serverPeer == null && !connecting && !connectRejected &&
                     Time.realtimeSinceStartup >= nextAttempt)

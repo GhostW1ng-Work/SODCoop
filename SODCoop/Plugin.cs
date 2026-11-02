@@ -23,7 +23,7 @@ namespace SodCoop
     [BepInPlugin("com.flyingfrogs.sodcoop", "SodCoop", Plugin.ModVersion)]
     public class Plugin : BasePlugin
     {
-        internal const string ModVersion = "0.16.3";
+        internal const string ModVersion = "0.16.4";
         internal static ManualLogSource L;
         internal static void Dbg(string m) { try { if (CfgDebugLog != null && CfgDebugLog.Value) L.LogInfo(m); } catch (System.Exception) { } }
         internal static ConfigEntry<NetMode> CfgMode;
@@ -54,6 +54,9 @@ namespace SodCoop
         internal static ConfigEntry<float> CfgTripFall, CfgTripGetUp;
         internal static ConfigEntry<float> CfgDownedSeconds, CfgReviveHoldSeconds, CfgReviveDistance, CfgReviveHealth, CfgDownedHitPenalty;
         internal static ConfigEntry<string> CfgReviveKey;
+        internal static ConfigEntry<bool> CfgVoice;
+        internal static ConfigEntry<string> CfgVoiceKey;
+        internal static ConfigEntry<float> CfgVoiceVolume, CfgVoiceRange;
         internal static ConfigEntry<float> CfgAvatarYawOffset;
         internal static ConfigEntry<float> CfgMaxSpeed;
         internal static ConfigEntry<int> CfgArmsState;
@@ -191,6 +194,10 @@ namespace SodCoop
                 "How long (real seconds) a downed player waits for help. The timer stops while someone is reviving him");
             CfgReviveKey = Config.Bind("Downed", "ReviveKey", "H",
                 "Key to hold near a downed player to revive him (name from UnityEngine.KeyCode)");
+            CfgVoice = Config.Bind("Voice", "Enabled", true, "Proximity voice chat: hold the voice key to talk, players nearby hear you");
+            CfgVoiceKey = Config.Bind("Voice", "Key", "V", "Push-to-talk key (name from UnityEngine.KeyCode). Can also be changed in the Multiplayer window");
+            CfgVoiceVolume = Config.Bind("Voice", "Volume", 1f, "Volume of other players' voices (0-3)");
+            CfgVoiceRange = Config.Bind("Voice", "Range", 25f, "Distance in meters at which other players' voices fade out completely");
             CfgReviveHoldSeconds = Config.Bind("Downed", "ReviveHoldSeconds", 3f,
                 "How long (seconds) the key must be held to revive");
             CfgReviveDistance = Config.Bind("Downed", "ReviveDistance", 2f,

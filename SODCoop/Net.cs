@@ -753,6 +753,7 @@ namespace SodCoop
                     GUI.Label(new Rect(21f, y + 1f, 1400f, 30f), t.Key, hudShadow);
                     GUI.Label(new Rect(20f, y, 1400f, 30f), t.Key, hudStyle); y += 28f;
                 }
+                try { DrawVoiceHud(hudStyle, hudShadow); } catch (Exception __e) { Err.Swallow(__e); }
                 GUI.matrix = old;
                 DrawDownHud();
             }
@@ -787,6 +788,7 @@ namespace SodCoop
 
         internal static void Shutdown()
         {
+            try { VoiceShutdown(); } catch (Exception e) { Plugin.L.LogWarning("[VOICE] " + e.Message); }
             try { SteamLink.Stop(); } catch (Exception e) { Plugin.L.LogWarning("[STEAM] " + e.Message); }
             try { PermaOnShutdown(); } catch (Exception e) { Plugin.L.LogWarning("[MODS] " + e.Message); }
             try { ModifiersRestore(); } catch (Exception e) { Plugin.L.LogWarning("[MODS] " + e.Message); }

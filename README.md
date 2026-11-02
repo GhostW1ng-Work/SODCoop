@@ -27,6 +27,7 @@ Play Shadows of Doubt together with friends: one city, one clock, the same citiz
 - Each player has their own inventory, money and keys on every server.
 - A downed player can be revived by a teammate (hold **H**).
 - Player markers on the map.
+- Proximity voice chat: hold **V** to talk, players nearby hear you, and voices fade with distance. The key can be changed in the **Multiplayer** window.
 - Invite other players to live in your apartment: stand inside it and press **F7**. Only the owner can invite and evict roommates.
 
 **Game modifiers**
@@ -116,6 +117,7 @@ MIT, see [LICENSE.txt](LICENSE.txt).
 - У каждого игрока на каждом сервере свой инвентарь, деньги, ключи.
 - Раненого игрока может поднять напарник (держать **H**);
 - Отметки игроков на карте.
+- Голосовой чат по расстоянию: держи **V**, чтобы говорить. Тебя слышат игроки рядом, и чем дальше, тем тише. Клавишу можно поменять в окне **Мультиплеер**.
 - Можно пригласить других игроков жить в своей квартире: зайди в неё и нажми **F7**. Приглашать и выселять жильцов может только хозяин.
 
 **Модификаторы игры**
