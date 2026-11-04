@@ -1302,6 +1302,16 @@ namespace SodCoop
         public static void Postfix() { Net.NoteBlock(); Net.SendAction(2); }
     }
 
+    [HarmonyPatch(typeof(UnityEngine.UI.Image), nameof(UnityEngine.UI.Image.alphaHitTestMinimumThreshold), MethodType.Setter)]
+    public static class ImageHitTestPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(UnityEngine.UI.Image __instance)
+        {
+            try { return !Net.SkipImageHitTest(__instance); } catch (Exception __e) { Err.Swallow(__e); return true; }
+        }
+    }
+
     [HarmonyPatch(typeof(Player), "Update")]
     public static class PlayerPatch
     {

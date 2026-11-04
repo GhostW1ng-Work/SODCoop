@@ -173,9 +173,48 @@ namespace SodCoop
             }
         }
 
+        static bool imageHitLogged;
+        static int eofStuck;
+        static bool eofProbePending;
+        static Il2CppSystem.Action eofProbe;
+
+        internal static bool SkipImageHitTest(UnityEngine.UI.Image img)
+        {
+            var sp = img != null ? img.sprite : null;
+            var t = sp != null ? sp.texture : null;
+            if (t == null || t.isReadable || t.format.ToString().Contains("Crunched")) return false;
+            if (!imageHitLogged) { imageHitLogged = true; Plugin.L.LogInfo($"[EOF] пропускаю alphaHitTest у '{img.name}': текстура недоступна для чтения, игра упала бы здесь с ошибкой"); }
+            return true;
+        }
+
+        static void EndOfFrameWatch()
+        {
+            var tb = Toolbox.Instance;
+            if (tb == null || tb.invokeEndOfFrame == null || tb.debugInvokeEndOfFrame == null) return;
+            if (!eofProbePending)
+            {
+                if (eofProbe == null) eofProbe = Il2CppInterop.Runtime.DelegateSupport.ConvertDelegate<Il2CppSystem.Action>(new Action(() => { eofProbePending = false; }));
+                eofProbePending = true; eofStuck = 0;
+                tb.InvokeEndOfFrame(eofProbe, "SodCoop probe");
+                return;
+            }
+            if (++eofStuck < 3) return;
+            eofStuck = 0;
+            if (!tb.endOfFrameInvoke) { tb.invokeEndOfFrame.Remove(eofProbe); tb.debugInvokeEndOfFrame.Remove("SodCoop probe"); eofProbePending = false; return; }
+            string first = tb.debugInvokeEndOfFrame.Count > 0 ? tb.debugInvokeEndOfFrame[0] : "?";
+            Il2CppSystem.Action stuck = null;
+            foreach (var a in tb.invokeEndOfFrame) { stuck = a; break; }
+            Plugin.L.LogWarning($"[EOF] очередь конца кадра стоит на '{first}', заданий {tb.invokeEndOfFrame.Count}: убираю его и запускаю очередь заново");
+            if (stuck != null) tb.invokeEndOfFrame.Remove(stuck);
+            if (tb.debugInvokeEndOfFrame.Count > 0) tb.debugInvokeEndOfFrame.RemoveAt(0);
+            tb.endOfFrameInvoke = false;
+            tb.InvokeEndOfFrame(Il2CppInterop.Runtime.DelegateSupport.ConvertDelegate<Il2CppSystem.Action>(new Action(() => { })), "SodCoop restart");
+        }
+
         internal static void LoadDiagTick(Player p)
         {
             if (p == null) return;
+            try { EndOfFrameWatch(); } catch (Exception e) { Plugin.L.LogWarning("[EOF] " + e.Message); }
             if (p.currentRoom != null) { try { LoadFixRoom(p.currentRoom); } catch (Exception e) { Plugin.L.LogWarning("[LOADFIX] " + e.Message); } }
             NewRoom room = p.currentRoom;
             if (room == null) { loadDiagRoom = IntPtr.Zero; loadDiagStuck = 0; loadDiagStage = 0; loadDiagFarStuck = 0; return; }
