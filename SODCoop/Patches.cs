@@ -1319,10 +1319,13 @@ namespace SodCoop
             Net.Poll();
             Net.Tick(__instance);
             Net.CheatKeys();
+            try { Net.LoadSnapKey(__instance); } catch (Exception e) { Plugin.L.LogWarning("[SNAP] " + e.Message); }
 
             timer += Time.unscaledDeltaTime;
             if (timer < 1f) return;
             timer = 0f;
+
+            try { Net.LoadDiagTick(__instance); } catch (Exception e) { Plugin.L.LogWarning("[LOADDIAG] " + e.Message); }
 
             Application.runInBackground = true;
 
