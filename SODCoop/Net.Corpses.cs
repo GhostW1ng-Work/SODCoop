@@ -111,8 +111,9 @@ namespace SodCoop
         {
             var c = t.c; if (c == null) return;
             var ai = c.ai; var ac = c.animationController;
-            try { if (ai != null) { if (ai.ko) ai.SetKO(false, Vector3.zero, Vector3.zero, true, 0f); ai.ko = false; ai.isRagdoll = false; } } catch (Exception __e) { Err.Swallow(__e); }
+            try { if (ai != null && ai.ko) ai.SetKO(false, Vector3.zero, Vector3.zero, true, 0f); } catch (Exception __e) { Err.Swallow(__e); }
             try { if (ac != null) { ac.SetRagdoll(false, false); ac.SetPauseAnimation(false); } } catch (Exception __e) { Err.Swallow(__e); }
+            try { if (ai != null) { ai.ko = false; ai.isRagdoll = false; } } catch (Exception __e) { Err.Swallow(__e); }
             t.snap = true; t.settled = false;
             if (npcGetUpLogs < 30) { npcGetUpLogs++; Plugin.L.LogInfo($"[NPC] горожанин {c.humanID}: поднял из лежачего положения ({why})"); }
         }
@@ -151,7 +152,7 @@ namespace SodCoop
                     bool first = t.apKo < 0; t.apKo = koNow ? 1 : 0;
                     if (!(first && !koNow))
                     {
-                        try { if (c.ai != null) c.ai.SetKO(koNow, Vector3.zero, Vector3.zero, true, 0f); Plugin.L.LogInfo($"[NPC] горожанин {c.humanID}: {(koNow ? "оглушён" : "пришёл в себя")} (по данным хоста)"); }
+                        try { if (c.ai != null) c.ai.SetKO(koNow, Vector3.zero, Vector3.zero, true, 0f); Plugin.Dbg($"[NPC] горожанин {c.humanID}: {(koNow ? "оглушён" : "пришёл в себя")} (по данным хоста)"); }
                         catch (Exception __e) { Err.Swallow(__e); }
                         if (!koNow) NpcGetUp(t, "по данным хоста");
                     }

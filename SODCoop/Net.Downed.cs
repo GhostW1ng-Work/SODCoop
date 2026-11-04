@@ -109,7 +109,7 @@ namespace SodCoop
             if (now >= koLogAt && sd != null)
             {
                 koLogAt = now + 5f;
-                Plugin.L.LogInfo($"[KO] {(rec ? "подъём" : "больница")} {el:F0}/{total + 3f:F0} с: KOTimePassed={p.KOTimePassed:F3} KOTime={p.KOTime:F3} hp={p.currentHealth:F2}/{p.maximumHealth:F2} скорость={sd.currentTimeSpeed} x{sd.currentTimeMultiplier:F2} timeScale={Time.timeScale:F2} время +{(sd.gameTime - koLogGt) * 60f:F1} игр. мин | затемнение={p.playerKOFadeOut} полоска={KoBar()}");
+                Plugin.Dbg($"[KO] {(rec ? "подъём" : "больница")} {el:F0}/{total + 3f:F0} с: KOTimePassed={p.KOTimePassed:F3} KOTime={p.KOTime:F3} hp={p.currentHealth:F2}/{p.maximumHealth:F2} скорость={sd.currentTimeSpeed} x{sd.currentTimeMultiplier:F2} timeScale={Time.timeScale:F2} время +{(sd.gameTime - koLogGt) * 60f:F1} игр. мин | затемнение={p.playerKOFadeOut} полоска={KoBar()}");
                 koLogGt = sd.gameTime;
             }
             float max = p.maximumHealth;

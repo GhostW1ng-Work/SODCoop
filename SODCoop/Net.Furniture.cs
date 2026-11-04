@@ -445,7 +445,7 @@ namespace SodCoop
                 if (!timeLogged || Time.unscaledTime - lastTimeLog > 30f)
                 {
                     timeLogged = true; lastTimeLog = Time.unscaledTime;
-                    Plugin.L.LogInfo($"[TIME] хост gameTime={gt:F4} у меня={mine:F4} скорость={spd}/{(int)sd.currentTimeSpeed} дождь={rain:F2} ветер={wind:F2} снег={snow:F2} молнии={lit:F2} туман={fog:F2}");
+                    Plugin.Dbg($"[TIME] хост gameTime={gt:F4} у меня={mine:F4} скорость={spd}/{(int)sd.currentTimeSpeed} дождь={rain:F2} ветер={wind:F2} снег={snow:F2} молнии={lit:F2} туман={fog:F2}");
                 }
                 if (spd != (int)sd.currentTimeSpeed && !LocalKo())
                 {

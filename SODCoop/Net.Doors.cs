@@ -187,7 +187,7 @@ namespace SodCoop
             c = FindMoveCtl(NameHash(PresetNameOf(lev)), lev.wPos, out d);
             try { if (c != null && c.interactable != null && c.interactable.Pointer != lev.Pointer) c = null; } catch (Exception) { c = null; }
             leverCtl[lev.id] = c;
-            Plugin.L.LogInfo($"[SWITCH] рычаг '{PresetNameOf(lev)}' id={lev.id}: {(c != null ? "двигается как дверца (" + c.GetIl2CppType().Name + "), isOpen=" + c.isOpen : "своего механизма нет")}");
+            Plugin.Dbg($"[SWITCH] рычаг '{PresetNameOf(lev)}' id={lev.id}: {(c != null ? "двигается как дверца (" + c.GetIl2CppType().Name + "), isOpen=" + c.isOpen : "своего механизма нет")}");
             return c;
         }
 
@@ -205,7 +205,7 @@ namespace SodCoop
             catch (Exception e) { Plugin.L.LogWarning("[SWITCH] рычаг: " + e.Message); }
             finally { applyingDoor = false; }
             float ev = -1f; try { ev = lev.GetExtraStateValue(); } catch (Exception __e) { Err.Swallow(__e); }
-            Plugin.L.LogInfo($"[SWITCH] {why}: рычаг '{PresetNameOf(lev)}' -> {val}: sw0 {b0}->{lev.sw0}" + (c != null ? $", дверца {o0}->{c.isOpen}" : "") + $", extra={ev:F2}, кадр {Time.frameCount}");
+            Plugin.Dbg($"[SWITCH] {why}: рычаг '{PresetNameOf(lev)}' -> {val}: sw0 {b0}->{lev.sw0}" + (c != null ? $", дверца {o0}->{c.isOpen}" : "") + $", extra={ev:F2}, кадр {Time.frameCount}");
         }
 
         static void HoldLever(Interactable it, bool val)
@@ -434,12 +434,12 @@ namespace SodCoop
                             lw.fixAt = Time.realtimeSinceStartup + 0.1f;
                             DoorMovementController c0; leverCtl.TryGetValue(it.id, out c0);
                             float ev0 = -1f; try { ev0 = it.GetExtraStateValue(); } catch (Exception __e) { Err.Swallow(__e); }
-                            Plugin.L.LogInfo($"[SWITCH] игра ставит рычаг {val} (кадр {Time.frameCount}), extra={ev0:F2}" + (c0 != null ? $", дверца isOpen={c0.isOpen}" : ""));
+                            Plugin.Dbg($"[SWITCH] игра ставит рычаг {val} (кадр {Time.frameCount}), extra={ev0:F2}" + (c0 != null ? $", дверца isOpen={c0.isOpen}" : ""));
                         }
                     }
                     if (!applyingDoor && IsPlayerActor(interactor)) { leverMineUntil[it.id] = Time.realtimeSinceStartup + 4f; alarmSnapAt = 0f; }
                 }
-                if (it != null && IsSecuritySwitch(it)) Plugin.L.LogInfo($"[SWITCH] '{PresetNameOf(it)}' id={it.id} sw{idx} -> {val}, кто: {(interactor == null ? "нет" : IsPlayerActor(interactor) ? "я" : "житель")}{(applyingDoor ? " (от другого игрока)" : "")}");
+                if (it != null && IsSecuritySwitch(it)) Plugin.Dbg($"[SWITCH] '{PresetNameOf(it)}' id={it.id} sw{idx} -> {val}, кто: {(interactor == null ? "нет" : IsPlayerActor(interactor) ? "я" : "житель")}{(applyingDoor ? " (от другого игрока)" : "")}");
                 if (applyingDoor || it == null || !Plugin.CfgDoorSync.Value || manager == null || manager.ConnectedPeersCount == 0) return;
                 string name = PresetNameOf(it);
                 bool placed = false;
@@ -475,7 +475,6 @@ namespace SodCoop
                 w.Put(MsgDoor); w.Put((byte)7); w.Put(it.id); w.Put(NameHash(name)); w.Put(val);
                 w.Put(wp.x); w.Put(wp.y); w.Put(wp.z); w.Put((byte)idx);
                 SendDoor(w);
-                if (IsSecuritySwitch(it)) Plugin.L.LogInfo($"[SWITCH] отправил '{name}' sw{idx} -> {val}");
                 Plugin.Dbg($"[SWITCH] я {(val ? "включил" : "выключил")} '{name}' sw{idx} id={it.id} (актёр: {(player ? "игрок" : "нет")}{(placed ? ", моя мебель" : "")})");
             }
             catch (Exception __e) { Err.Swallow(__e); }
@@ -530,7 +529,6 @@ namespace SodCoop
             }
             catch (Exception e) { Plugin.L.LogWarning($"[SWITCH] SetState: {e.Message}"); }
             finally { applyingDoor = false; }
-            if (IsSecuritySwitch(it)) Plugin.L.LogInfo($"[SWITCH] второй игрок переключил '{PresetNameOf(it)}' sw{idx}: {before} -> {SwGet(it, idx)} ({dist:F3} м)");
             Plugin.Dbg($"[SWITCH] второй игрок {(val ? "включил" : "выключил")} '{PresetNameOf(it)}' sw{idx} ({dist:F3} м), {before} -> {SwGet(it, idx)}");
         }
 

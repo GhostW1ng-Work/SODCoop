@@ -529,6 +529,16 @@ namespace SodCoop
         }
     }
 
+    [HarmonyPatch(typeof(MurderController), "TriggerKidnappingCase")]
+    public static class KidnapCasePatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix()
+        {
+            try { Net.OnKidnapCase(); } catch (Exception e) { Plugin.L.LogWarning("[MURDER] похищение: " + e.Message); }
+        }
+    }
+
     [HarmonyPatch(typeof(GameplayController), "NewMurderCaseNotify")]
     public static class MurderCaseNotifyPatch
     {
@@ -1329,6 +1339,7 @@ namespace SodCoop
             Net.Poll();
             Net.Tick(__instance);
             Net.CheatKeys();
+            FrameProf.Tick();
             try { Net.LoadSnapKey(__instance); } catch (Exception e) { Plugin.L.LogWarning("[SNAP] " + e.Message); }
 
             timer += Time.unscaledDeltaTime;

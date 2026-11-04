@@ -26,13 +26,17 @@ namespace SodCoop
 
         internal static bool CheatsActive
         {
-            get { return Plugin.CfgCheatKeys.Value && !(ClientOfHost && !Rules.ClientCheats); }
+            get
+            {
+                if (ClientOfHost) return Rules.ClientCheats;
+                return Plugin.CfgCheatKeys.Value || (IsHost && Plugin.CfgClientCheats.Value);
+            }
         }
 
         internal static void CheatKeys()
         {
-            if (cheatKeysBroken || !Plugin.CfgCheatKeys.Value) return;
-            if (ClientOfHost && !Rules.ClientCheats) { if (cheatOpen) CloseCheatMenu(); return; }
+            if (cheatKeysBroken) return;
+            if (!CheatsActive) { if (cheatOpen) CloseCheatMenu(); return; }
             try
             {
                 KeyCode mk;

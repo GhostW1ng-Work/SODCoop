@@ -207,7 +207,7 @@ namespace SodCoop
                 foreach (var r in list) if (r != null && r.lastCaptureAt > sd.gameTime + 0.05f) { r.lastCaptureAt = back; fixedN++; }
                 Plugin.L.LogInfo($"[CCTV] у {fixedN} камер последний снимок «из будущего» ({oldest:F2}..{newest:F2} при времени {sd.gameTime:F2}) - они ждали его и не снимали. Сбросил");
             }
-            Plugin.L.LogInfo($"[CCTV] за минуту: камеры пробовали снять {cctvCalls} раз, сняли {cctvShots}; камер {recs}, кадров в памяти {stored} (у одной до {maxCap}); " +
+            Plugin.Dbg($"[CCTV] за минуту: камеры пробовали снять {cctvCalls} раз, сняли {cctvShots}; камер {recs}, кадров в памяти {stored} (у одной до {maxCap}); " +
                 $"время игры {(sd != null ? sd.gameTime : 0f):F2}, последние снимки камер от {(recs > 0 ? oldest : 0f):F2} до {newest:F2}");
             cctvCalls = cctvShots = 0;
         }
@@ -234,7 +234,7 @@ namespace SodCoop
                 }
                 catch (Exception __e) { Err.Swallow(__e); }
             }
-            if ((up > 0 || back > 0) && tickRaiseLogN++ % 20 == 0) Plugin.L.LogInfo($"[NPC] хост: жителей возле других игроков ускорил {up}, вернул игре {back}, всего ускорено {tickRaised.Count}");
+            if ((up > 0 || back > 0) && tickRaiseLogN++ % 20 == 0) Plugin.Dbg($"[NPC] хост: жителей возле других игроков ускорил {up}, вернул игре {back}, всего ускорено {tickRaised.Count}");
         }
 
         static void NpcTick(float dt)
@@ -358,7 +358,7 @@ namespace SodCoop
             if (now - npcLogAt > 15f)
             {
                 npcLogAt = now;
-                Plugin.L.LogInfo($"[NPC] хост: за 15 с отправлено записей: {npcSentCount} (~{npcBytes / 15 / 1024f:F1} КБ/с), пропущено как неизменных/далёких: {npcSkipped}, горожан: {all.Count}");
+                Plugin.Dbg($"[NPC] хост: за 15 с отправлено записей: {npcSentCount} (~{npcBytes / 15 / 1024f:F1} КБ/с), пропущено как неизменных/далёких: {npcSkipped}, горожан: {all.Count}");
                 npcSentCount = 0; npcBytes = 0; npcSkipped = 0;
             }
         }

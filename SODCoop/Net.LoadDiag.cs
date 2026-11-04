@@ -169,7 +169,7 @@ namespace SodCoop
             if (on > 0 && loadFixLines < 100)
             {
                 loadFixLines++;
-                Plugin.L.LogInfo($"[LOADFIX] игра не включила мебель в диапазоне: комната '{room.name}' id={room.roomID}, предметов {items}, рендереров {on}; ждут проверки {pool.furnitureCheckingPool.Count}, за кадр {pool.maximumRangeCheckingPerFrame}, к/с {1f / Mathf.Max(Time.unscaledDeltaTime, 0.001f):F0}");
+                Plugin.Dbg($"[LOADFIX] игра не включила мебель в диапазоне: комната '{room.name}' id={room.roomID}, предметов {items}, рендереров {on}; ждут проверки {pool.furnitureCheckingPool.Count}, за кадр {pool.maximumRangeCheckingPerFrame}, к/с {1f / Mathf.Max(Time.unscaledDeltaTime, 0.001f):F0}");
             }
         }
 

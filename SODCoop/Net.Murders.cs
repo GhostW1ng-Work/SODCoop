@@ -63,6 +63,32 @@ namespace SodCoop
             if (loc != null) SendMurderCase(loc); else { int mid = CurrentMurderId(); if (mid >= 0) murderCaseSeen.Add(mid); }
         }
 
+        internal static void OnKidnapCase()
+        {
+            if (applyingMurderCase || !IsHost || manager == null || manager.ConnectedPeersCount == 0) return;
+            var mc = MurderController.Instance;
+            var m = mc != null ? mc.GetCurrentMurder() : null;
+            if (m != null && SendMurder(m, true, null)) murderSentSig[m.murderID] = MurderSig(m, true);
+            SendKidnapCase(null);
+            Plugin.L.LogInfo($"[MURDER] новое дело о похищении '{MurderCaseName()}' - сообщаю другим");
+        }
+
+        static void SendKidnapCase(NetPeer peer)
+        {
+            var w = new NetDataWriter(); w.Put(MsgMurder); w.Put((byte)4); w.Put(MurderCaseName());
+            if (peer != null) peer.Send(w, DeliveryMethod.ReliableOrdered); else manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+        }
+
+        static void EnsureMurderCase(string caseName)
+        {
+            if (MurderCaseOnBoard()) return;
+            var mc = MurderController.Instance; var cp = CasePanelController.Instance;
+            Plugin.L.LogInfo($"[MURDER] дела на доске нет (у убийцы дело: {(mc != null && mc.currentActiveCase != null ? mc.currentActiveCase.name : "нет")}) - завожу сам");
+            var nc = cp.CreateNewCase(Case.CaseType.murder, (Case.CaseStatus)0, true, string.IsNullOrEmpty(caseName) ? "Murder" : caseName);
+            if (nc != null) mc.AssignActiveCase(nc);
+            Plugin.L.LogInfo($"[MURDER] дело заведено: {(nc != null ? nc.name : "не вышло")}, на доске: {MurderCaseOnBoard()}");
+        }
+
         static void SendMurderCase(NewGameLocation loc)
         {
             int mid = CurrentMurderId();
@@ -159,7 +185,8 @@ namespace SodCoop
             {
                 var mc = MurderController.Instance;
                 var cm = mc != null ? mc.GetCurrentMurder() : null;
-                if (mc != null && mc.currentActiveCase != null && cm != null && cm.location != null)
+                if (mc != null && mc.currentActiveCase != null && cm != null && cm.ransomAmount > 0) SendKidnapCase(peer);
+                else if (mc != null && mc.currentActiveCase != null && cm != null && cm.location != null)
                 {
                     byte kind; int lid;
                     if (MurderLocKey(cm.location, out kind, out lid))
@@ -198,17 +225,18 @@ namespace SodCoop
                 applyingMurderCase = true;
                 try { GameplayController.Instance.NewMurderCaseNotify(loc); Plugin.L.LogInfo($"[MURDER] новое дело об убийстве: {loc.name}"); }
                 catch (Exception e) { Plugin.L.LogWarning("[MURDER] новое дело: " + e.Message); }
-                try
-                {
-                    if (!MurderCaseOnBoard())
-                    {
-                        var mc1 = MurderController.Instance; var cp1 = CasePanelController.Instance;
-                        Plugin.L.LogInfo($"[MURDER] дела на доске нет (у убийцы дело: {(mc1 != null && mc1.currentActiveCase != null ? mc1.currentActiveCase.name : "нет")}) - завожу сам");
-                        var nc = cp1.CreateNewCase(Case.CaseType.murder, (Case.CaseStatus)0, true, string.IsNullOrEmpty(caseName) ? "Murder" : caseName);
-                        if (nc != null) mc1.AssignActiveCase(nc);
-                        Plugin.L.LogInfo($"[MURDER] дело заведено: {(nc != null ? nc.name : "не вышло")}, на доске: {MurderCaseOnBoard()}");
-                    }
-                }
+                try { EnsureMurderCase(caseName); }
+                catch (Exception e) { Plugin.L.LogWarning("[MURDER] завести дело: " + e.Message); }
+                finally { applyingMurderCase = false; }
+            }
+            else if (op == 4)
+            {
+                string caseName = r.AvailableBytes > 0 ? r.GetString() : "";
+                if (MurderCaseOnBoard()) return;
+                applyingMurderCase = true;
+                try { MurderController.Instance.TriggerKidnappingCase(); Plugin.L.LogInfo($"[MURDER] новое дело о похищении от хоста: {MurderCaseName()}, на доске: {MurderCaseOnBoard()}"); }
+                catch (Exception e) { Plugin.L.LogWarning("[MURDER] дело о похищении: " + e.Message); }
+                try { EnsureMurderCase(caseName); }
                 catch (Exception e) { Plugin.L.LogWarning("[MURDER] завести дело: " + e.Message); }
                 finally { applyingMurderCase = false; }
             }

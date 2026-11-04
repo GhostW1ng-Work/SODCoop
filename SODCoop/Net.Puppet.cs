@@ -469,7 +469,7 @@ namespace SodCoop
                 int k = key.GetHashCode();
                 if (puppetSeenLog.TryGetValue(k, out last) && Time.unscaledTime - last < 20f) return;
                 puppetSeenLog[k] = Time.unscaledTime;
-                Plugin.L.LogInfo($"[PUPPET] горожанин {id} ({(h != null ? h.citizenName : "?")}): {what} второго игрока");
+                Plugin.Dbg($"[PUPPET] горожанин {id} ({(h != null ? h.citizenName : "?")}): {what} второго игрока");
             }
             catch (Exception __e) { Err.Swallow(__e); }
         }
