@@ -83,8 +83,8 @@ namespace SodCoop
                 step >>= 1;
                 if (diff >= step) { code |= 1; delta += step; }
                 pred += (code & 8) != 0 ? -delta : delta;
-                pred = Mathf.Clamp(pred, -32768, 32767);
-                idx = Mathf.Clamp(idx + AdpcmIndex[code], 0, 88);
+                pred = Math.Clamp(pred, -32768, 32767);
+                idx = Math.Clamp(idx + AdpcmIndex[code], 0, 88);
                 int b = 3 + (i - 1) / 2;
                 if (((i - 1) & 1) == 0) o[b] = (byte)code; else o[b] |= (byte)(code << 4);
             }
@@ -95,7 +95,7 @@ namespace SodCoop
         {
             if (len < 3) return null;
             var o = new short[VoiceFrame];
-            int pred = (short)(d[off] | (d[off + 1] << 8)), idx = Mathf.Clamp(d[off + 2], 0, 88);
+            int pred = (short)(d[off] | (d[off + 1] << 8)), idx = Math.Clamp((int)d[off + 2], 0, 88);
             o[0] = (short)pred;
             for (int i = 1; i < VoiceFrame; i++)
             {
@@ -107,8 +107,8 @@ namespace SodCoop
                 if ((code & 2) != 0) delta += step >> 1;
                 if ((code & 1) != 0) delta += step >> 2;
                 pred += (code & 8) != 0 ? -delta : delta;
-                pred = Mathf.Clamp(pred, -32768, 32767);
-                idx = Mathf.Clamp(idx + AdpcmIndex[code], 0, 88);
+                pred = Math.Clamp(pred, -32768, 32767);
+                idx = Math.Clamp(idx + AdpcmIndex[code], 0, 88);
                 o[i] = (short)pred;
             }
             return o;
@@ -234,7 +234,7 @@ namespace SodCoop
                             for (int i = 0; i < VoiceFrame; i++) { mix[i * 2] += (int)(f[i] * gl); mix[i * 2 + 1] += (int)(f[i] * gr); }
                         }
                     }
-                    for (int i = 0; i < mix.Length; i++) outBuf[i] = (short)Mathf.Clamp(mix[i], -32768, 32767);
+                    for (int i = 0; i < mix.Length; i++) outBuf[i] = (short)Math.Clamp(mix[i], -32768, 32767);
                     Marshal.Copy(outBuf, 0, Marshal.ReadIntPtr(hd, 0), outBuf.Length);
                     Marshal.WriteInt32(hd, HdrFlags, Marshal.ReadInt32(hd, HdrFlags) & ~WhdrDone);
                     waveOutWrite(h, hd, HdrSize);

@@ -529,6 +529,16 @@ namespace SodCoop
         }
     }
 
+    [HarmonyPatch(typeof(SaveStateController), "LoadSaveState")]
+    public static class SaveRepairPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(StateSaveData __0)
+        {
+            try { Net.RepairSaveItemIds(__0); } catch (Exception e) { Plugin.L.LogWarning("[SAVE] проверка номеров предметов: " + e.Message); }
+        }
+    }
+
     [HarmonyPatch(typeof(MurderController), "TriggerKidnappingCase")]
     public static class KidnapCasePatch
     {

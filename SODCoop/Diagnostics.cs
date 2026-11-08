@@ -381,11 +381,29 @@ namespace SodCoop
                 file.WriteLine($"=== {DateTime.Now:yyyy-MM-dd HH:mm:ss} запуск, {Paths.GameRootPath}");
                 BepInEx.Logging.Logger.Listeners.Add(new CrashLog());
                 AppDomain.CurrentDomain.UnhandledException += (s, e) => Write("FATAL", "домен", e.ExceptionObject?.ToString() ?? "");
+                try { Application.add_logMessageReceived(Il2CppInterop.Runtime.DelegateSupport.ConvertDelegate<Application.LogCallback>(new Action<string, string, LogType>(OnUnityLog))); }
+                catch (Exception e) { Plugin.L.LogWarning("[CRASH] стек ошибок Unity недоступен: " + e.Message); }
                 var t = new System.Threading.Thread(Watch) { IsBackground = true, Name = "SODCoop hang watch" };
                 t.Start();
                 Plugin.L.LogInfo("[CRASH] ошибки Unity пишу в " + path + ", сторож зависаний запущен");
             }
             catch (Exception e) { Plugin.L.LogWarning("[CRASH] журнал ошибок: " + e.Message); }
+        }
+
+        static readonly HashSet<string> stackSeen = new HashSet<string>();
+
+        static void OnUnityLog(string cond, string stack, LogType type)
+        {
+            try
+            {
+                if (type != LogType.Error && type != LogType.Exception && type != LogType.Assert) return;
+                if (string.IsNullOrEmpty(stack) || stackSeen.Count >= 200) return;
+                string key = cond ?? "";
+                if (key.Length > 200) key = key.Substring(0, 200);
+                if (!stackSeen.Add(key)) return;
+                Write("STACK", "Unity", (cond ?? "") + "\n" + stack.TrimEnd());
+            }
+            catch (Exception) { }
         }
 
         static void Write(string level, string src, string msg)

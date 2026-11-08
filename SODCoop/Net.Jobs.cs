@@ -384,11 +384,53 @@ namespace SodCoop
             return false;
         }
 
-        static int localItemId = 1900000000;
+        const int LocalItemIdStart = 1900000000;
+        static int localItemId = LocalItemIdStart;
+        static readonly System.Collections.Generic.HashSet<int> localIdsTaken = new System.Collections.Generic.HashSet<int>();
+        static IntPtr localIdsFor;
+        static int localIdsCount;
+
+        internal static void RepairSaveItemIds(StateSaveData load)
+        {
+            var list = load != null ? load.interactables : null;
+            if (list == null || list.Count == 0) return;
+            var all = new System.Collections.Generic.HashSet<int>();
+            var dupIdx = new System.Collections.Generic.List<int>();
+            for (int i = 0; i < list.Count; i++)
+            {
+                var it = list[i]; if (it == null) continue;
+                if (!all.Add(it.id)) dupIdx.Add(i);
+            }
+            if (dupIdx.Count == 0) return;
+            int next = LocalItemIdStart;
+            foreach (int i in dupIdx)
+            {
+                var it = list[i];
+                while (all.Contains(next)) next++;
+                int old = it.id;
+                it.id = next; all.Add(next);
+                Plugin.L.LogWarning($"[SAVE] в сейве два предмета с номером {old}: '{it.p}' получил новый номер {next}");
+                next++;
+            }
+            Plugin.L.LogWarning($"[SAVE] починено предметов с повторным номером: {dupIdx.Count}");
+        }
+
         static int FreeLocalItemId()
         {
-            var dict = CityData.Instance.savableInteractableDictionary;
-            while (dict != null && dict.ContainsKey(localItemId)) localItemId++;
+            var cd = CityData.Instance;
+            var dict = cd.savableInteractableDictionary;
+            var dir = cd.interactableDirectory;
+            IntPtr p = dir != null ? dir.Pointer : IntPtr.Zero;
+            int cnt = dir != null ? dir.Count : 0;
+            if (p != localIdsFor || cnt < localIdsCount)
+            {
+                localIdsTaken.Clear(); localItemId = LocalItemIdStart; localIdsFor = p;
+                for (int i = 0; i < cnt; i++) { var x = dir[i]; if (x != null && x.id >= LocalItemIdStart) localIdsTaken.Add(x.id); }
+                Plugin.L.LogInfo($"[JOB] номера для копий предметов: уже занято {localIdsTaken.Count}");
+            }
+            localIdsCount = cnt;
+            while (localIdsTaken.Contains(localItemId) || (dict != null && dict.ContainsKey(localItemId))) localItemId++;
+            localIdsTaken.Add(localItemId);
             return localItemId++;
         }
 
