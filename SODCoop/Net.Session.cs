@@ -513,6 +513,7 @@ namespace SodCoop
                         cp = SteamLink.StartClient(RtAddress, RtPort); ca = "127.0.0.1";
                         if (cp < 0) { nextAttempt = Time.realtimeSinceStartup + 5f; return; }
                     }
+                    manager.MaxConnectAttempts = SteamLink.IsSteamAddress(RtAddress) ? 60 : 10;
                     connecting = true;
                     var cw = new NetDataWriter();
                     cw.Put(Key); cw.Put(RtPassword ?? ""); cw.Put(Plugin.ModVersion);

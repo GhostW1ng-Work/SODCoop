@@ -531,7 +531,7 @@ namespace SodCoop
             }
             if (hosting && !udpTest && ok && now >= helloAt)
             {
-                helloAt = now + 2f;
+                helloAt = now + 1f;
                 try { HelloJoiners(now); } catch (Exception e) { Plugin.L.LogWarning("[STEAM] друзья: " + e.Message); }
             }
             try { JoinTick(now); } catch (Exception e) { pendingJoin = 0; Plugin.L.LogWarning("[STEAM] вход по приглашению: " + e.Message); }
@@ -555,17 +555,23 @@ namespace SodCoop
             }
         }
 
+        static float hostPresenceAt;
+        static readonly HashSet<ulong> helloLogged = new HashSet<ulong>();
+
         static void HelloJoiners(float now)
         {
+            bool req = now >= hostPresenceAt;
+            if (req) hostPresenceAt = now + 4f;
             foreach (ulong id in FriendsInGame())
             {
+                if (req) SteamAPI_ISteamFriends_RequestFriendRichPresence(friends, id);
                 if (FromUtf8(SteamAPI_ISteamFriends_GetFriendRichPresence(friends, id, JoinKeyB)) != me.ToString()) continue;
                 float at;
                 if (helloSent.TryGetValue(id, out at) && now - at < 5f) continue;
                 helloSent[id] = now;
                 var w = Who(id); var b = new byte[] { 1 };
                 SteamAPI_ISteamNetworkingMessages_SendMessageToUser(msgs, ref w, b, 1, SendFlags, ChHello);
-                Plugin.Dbg($"[STEAM] друг {id} подключается ко мне - открываю ему связь");
+                if (helloLogged.Add(id)) Plugin.L.LogInfo($"[STEAM] друг {id} ({FromUtf8(SteamAPI_ISteamFriends_GetFriendPersonaName(friends, id))}) подключается ко мне - открываю ему связь");
             }
         }
 

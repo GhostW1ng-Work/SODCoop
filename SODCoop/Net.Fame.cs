@@ -152,12 +152,122 @@ namespace SodCoop
             manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
         }
 
+        static int clientTalkHid = -1;
+        static float clientTalkSentAt;
+        sealed class TalkHold { public int pid; public float until; }
+        static readonly Dictionary<int, TalkHold> talkHolds = new Dictionary<int, TalkHold>();
+
+        static void ClientTalkTick()
+        {
+            if (IsHost || manager == null || manager.ConnectedPeersCount == 0) { clientTalkHid = -1; return; }
+            int hid = -1;
+            try
+            {
+                var ic = InteractionController.Instance;
+                var it = ic != null && ic.dialogMode ? ic.talkingTo : null;
+                var h = it != null && it.isActor != null ? it.isActor.TryCast<Human>() : null;
+                if (h != null && !h.isPlayer && !IsPuppetId(h.humanID)) hid = h.humanID;
+            }
+            catch (Exception __e) { Err.Swallow(__e); }
+            float now = Time.unscaledTime;
+            if (hid == clientTalkHid && (hid < 0 || now - clientTalkSentAt < 10f)) return;
+            if (clientTalkHid >= 0 && hid != clientTalkHid) SendTalkHold(clientTalkHid, false);
+            if (hid >= 0) SendTalkHold(hid, true);
+            if (hid != clientTalkHid) Plugin.L.LogInfo(hid >= 0 ? $"[TALK] говорю с горожанином {hid} - прошу хоста остановить его" : $"[TALK] разговор с горожанином {clientTalkHid} закончен");
+            clientTalkHid = hid; clientTalkSentAt = now;
+        }
+
+        static void SendTalkHold(int hid, bool on)
+        {
+            var w = new NetDataWriter(); w.Put(MsgTalk); w.Put((byte)3); w.Put(hid); w.Put(on ? 1 : 0);
+            manager.SendToAll(w, DeliveryMethod.ReliableOrdered);
+        }
+
+        static void HostTalkHold(RP rp, Human h, bool on)
+        {
+            int hid = h.humanID;
+            var c = PuppetOf(rp);
+            if (on)
+            {
+                bool was = talkHolds.ContainsKey(hid);
+                talkHolds[hid] = new TalkHold { pid = rp.pid, until = Time.unscaledTime + 25f };
+                try { if ((object)c != null && c != null && c.interactable != null) h.SetInteracting(c.interactable); } catch (Exception e) { Plugin.L.LogWarning("[TALK] остановить горожанина: " + e.Message); }
+                try { if ((object)c != null && c != null) h.ai.SetFacingPosition(c.transform.position); } catch (Exception __e) { Err.Swallow(__e); }
+                if (!was) Plugin.L.LogInfo($"[TALK] игрок {rp.pid} говорит с горожанином {hid} ({h.citizenName}) - держу его на месте");
+            }
+            else
+            {
+                TalkHold th;
+                if (!talkHolds.TryGetValue(hid, out th) || th.pid != rp.pid) return;
+                ReleaseTalkHold(hid, h, "разговор закончен");
+            }
+        }
+
+        static void ReleaseTalkHold(int hid, Human h, string why)
+        {
+            talkHolds.Remove(hid);
+            try { if (h != null) h.SetInteracting(null); } catch (Exception __e) { Err.Swallow(__e); }
+            Plugin.L.LogInfo($"[TALK] горожанин {hid} отпущен: {why}");
+        }
+
+        static void FaceLocalPlayer(Transform tr, float dt)
+        {
+            var p = Player.Instance; if (p == null) return;
+            Vector3 d = p.transform.position - tr.position; d.y = 0f;
+            if (d.sqrMagnitude < 0.0001f) return;
+            var want = Quaternion.LookRotation(d.normalized, Vector3.up);
+            tr.rotation = Quaternion.RotateTowards(tr.rotation, want, 360f * dt);
+        }
+
+        static float talkFaceAt;
+
+        static void HostTalkHoldTick()
+        {
+            if (talkHolds.Count == 0) return;
+            float now = Time.unscaledTime;
+            if (now >= talkFaceAt)
+            {
+                talkFaceAt = now + 0.5f;
+                foreach (var kv in talkHolds)
+                {
+                    try
+                    {
+                        var rp = RpByPid(kv.Value.pid); var c = rp != null ? PuppetOf(rp) : null;
+                        Human h = null; CityData.Instance.GetHuman(kv.Key, out h, false);
+                        if (h == null || (object)c == null || c == null) continue;
+                        h.ai.SetFacingPosition(c.transform.position);
+                        Vector3 d = c.transform.position - h.transform.position; d.y = 0f;
+                        if (d.sqrMagnitude > 0.0001f) h.transform.rotation = Quaternion.LookRotation(d.normalized, Vector3.up);
+                    }
+                    catch (Exception __e) { Err.Swallow(__e); }
+                }
+            }
+            List<int> done = null;
+            foreach (var kv in talkHolds)
+            {
+                bool gone = RpByPid(kv.Value.pid) == null;
+                if (gone || now > kv.Value.until) (done ??= new List<int>()).Add(kv.Key);
+            }
+            if (done == null) return;
+            foreach (int hid in done)
+            {
+                Human h = null;
+                try { CityData.Instance.GetHuman(hid, out h, false); } catch (Exception __e) { Err.Swallow(__e); }
+                ReleaseTalkHold(hid, h, "игрок ушёл или не отвечает");
+            }
+        }
+
         static void OnTalkMsg(RP rp, NetDataReader r)
         {
             byte op = r.GetByte(); int hid = r.GetInt(); int convo = r.GetInt();
             Human h = null;
             try { CityData.Instance.GetHuman(hid, out h, false); } catch (Exception __e) { Err.Swallow(__e); }
             if (h == null || h.ai == null) { Plugin.L.LogWarning($"[FAME] горожанин {hid} не найден"); return; }
+            if (op == 3)
+            {
+                if (IsHost && rp != null) HostTalkHold(rp, h, convo != 0);
+                return;
+            }
             if (op == 1 && !IsHost)
             {
                 applyingTalk = true;

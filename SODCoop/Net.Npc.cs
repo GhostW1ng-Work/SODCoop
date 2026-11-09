@@ -249,6 +249,7 @@ namespace SodCoop
             Perf.Add("жители: тела", tq); tq = Perf.T();
             try { CctvTick(); } catch (Exception __e) { Err.Swallow(__e); }
             Perf.Add("жители: камеры", tq);
+            try { if (IsHost) HostTalkHoldTick(); else ClientTalkTick(); } catch (Exception __e) { Err.Swallow(__e); }
             if (!IsHost) { tq = Perf.T(); NpcClientTick(dt); Perf.Add("жители: движение у клиента", tq); return; }
             if (IsHost) { NpcSendTick(); try { TickRateTick(); } catch (Exception e) { if (!npcErrLogged) { npcErrLogged = true; Plugin.L.LogWarning("[NPC] частота: " + e.Message); } } }
             else NpcClientTick(dt);
@@ -421,10 +422,11 @@ namespace SodCoop
                     var tr = c.transform;
                     if (tr == null) continue;
                     bool talking = false;
-                    try { talking = c.inConversation; } catch (Exception __e) { Err.Swallow(__e); }
+                    try { talking = c.inConversation || kv.Key == clientTalkHid; } catch (Exception __e) { Err.Swallow(__e); }
                     if (talking)
                     {
                         if (!t.wasTalking) { t.wasTalking = true; Plugin.L.LogInfo($"[NPC] разговор с горожанином {kv.Key}: моя y={tr.position.y:F2}, у хоста y={t.pos.y:F2}; позицию не трогаю"); }
+                        if (kv.Key == clientTalkHid) FaceLocalPlayer(tr, dt);
                         ApplyNpcState(t);
                         continue;
                     }
